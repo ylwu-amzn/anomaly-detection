@@ -27,6 +27,8 @@ import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultRequest;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultResponse;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultTransportAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.StopDetectorAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.StopDetectorRequest;
 import com.amazon.opendistroforelasticsearch.ad.transport.handler.AnomalyResultHandler;
 import com.amazon.opendistroforelasticsearch.ad.util.ClientUtil;
 import com.amazon.opendistroforelasticsearch.jobscheduler.spi.JobExecutionContext;
@@ -393,6 +395,18 @@ public class AnomalyDetectorJobRunner implements ScheduledJobRunner {
                                             log.warn("Failed to disable AD job for " + detectorId);
                                         }
                                     }, exception -> log.error("JobRunner failed to update AD job as disabled for " + detectorId, exception))
+                                );
+                            clientUtil
+                                .execute(
+                                    StopDetectorAction.INSTANCE,
+                                    new StopDetectorRequest(detectorId),
+                                    ActionListener
+                                        .wrap(
+                                            stopDetectorResponse -> {
+                                                log.info("Stopped detector {}, success: {}", detectorId, stopDetectorResponse.success());
+                                            },
+                                            exception -> { log.error("Failed to stop detector {}", detectorId); }
+                                        )
                                 );
                         }
                     } catch (IOException e) {
