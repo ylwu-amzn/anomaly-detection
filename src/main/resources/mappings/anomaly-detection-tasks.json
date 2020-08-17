@@ -8,27 +8,41 @@
       "type": "integer"
     },
     "name": {
+      "type": "text",
+      "fields": {
+        "keyword": {
+          "type": "keyword",
+          "ignore_above": 256
+        }
+      }
+    },
+    "description": {
+      "type": "text"
+    },
+    "detector_id": {
       "type": "keyword"
     },
-    "schedule": {
+    "checkpoint_id": {
+      "type": "keyword"
+    },
+    "model_parameters": {
       "properties": {
-        "interval": {
+        "rcf": {
           "properties": {
-            "start_time": {
-              "type": "date",
-              "format": "strict_date_time||epoch_millis"
-            },
-            "period": {
+            "tree_number": {
               "type": "integer"
             },
-            "unit": {
-              "type": "keyword"
+            "tree_size": {
+              "type": "integer"
+            },
+            "shingle_size": {
+              "type": "integer"
             }
           }
         }
       }
     },
-    "window_delay": {
+    "schedule": {
       "properties": {
         "period": {
           "properties": {
@@ -42,9 +56,6 @@
         }
       }
     },
-    "enabled": {
-      "type": "boolean"
-    },
     "data_start_time": {
       "type": "date",
       "format": "strict_date_time||epoch_millis"
@@ -53,11 +64,7 @@
       "type": "date",
       "format": "strict_date_time||epoch_millis"
     },
-    "enabled_time": {
-      "type": "date",
-      "format": "strict_date_time||epoch_millis"
-    },
-    "disabled_time": {
+    "run_at": {
       "type": "date",
       "format": "strict_date_time||epoch_millis"
     },
@@ -65,8 +72,9 @@
       "type": "date",
       "format": "strict_date_time||epoch_millis"
     },
-    "lock_duration_seconds": {
-      "type": "long"
+    "ui_metadata": {
+      "type": "object",
+      "enabled": false
     }
   }
 }

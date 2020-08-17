@@ -48,7 +48,9 @@ public final class RestHandlerUtils {
     public static final String IF_PRIMARY_TERM = "if_primary_term";
     public static final String REFRESH = "refresh";
     public static final String DETECTOR_ID = "detectorID";
+    public static final String TASK_ID = "taskID";
     public static final String ANOMALY_DETECTOR = "anomaly_detector";
+    public static final String ANOMALY_DETECTION_TASK = "anomaly_detection_task";
     public static final String ANOMALY_DETECTOR_JOB = "anomaly_detector_job";
     public static final String RUN = "_run";
     public static final String PREVIEW = "_preview";

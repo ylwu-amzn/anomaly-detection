@@ -120,7 +120,6 @@ public class FeatureManager {
      * @param listener onResponse is called with unprocessed features and processed features for the current data point
      */
     public void getCurrentFeatures(AnomalyDetector detector, long startTime, long endTime, ActionListener<SinglePointFeatures> listener) {
-
         Deque<Entry<Long, double[]>> shingle = detectorIdsToTimeShingles
             .computeIfAbsent(detector.getDetectorId(), id -> new ArrayDeque<Entry<Long, double[]>>(shingleSize));
         if (shingle.isEmpty() || shingle.getLast().getKey() < endTime) {
@@ -134,6 +133,33 @@ public class FeatureManager {
                 );
         } else {
             getProcessedFeatures(shingle, detector, endTime, listener);
+        }
+    }
+
+    public void getFeatures(AnomalyDetector detector, long startTime, long endTime,
+                            ActionListener<List<SinglePointFeatures>> listener) {
+        try {
+            List<double[]> features = new ArrayList<>();
+            long interval = ((IntervalTimeConfiguration) detector.getDetectionInterval()).toDuration().toMillis();
+            searchFeatureDao.getFeaturesForPeriod2(detector, startTime, endTime, ActionListener.wrap(points -> {
+                for (int i = 0; i < points.size(); i++) { // TODO: process missing values, by default missing values will not returned.
+                    Optional<double[]> point = points.get(i);
+                    features.add(point.get());
+                }
+                logger.info("features size: {}", features.size());
+                Optional<double[][]> featureData = batchShingle(features, shingleSize);
+                List<SinglePointFeatures> featureList = new ArrayList<>();
+                for (int i=0; i<featureData.get().length; i++) {
+                    SinglePointFeatures
+                            feature =
+                            new SinglePointFeatures(points.get(i + shingleSize - 1), Optional.ofNullable(featureData.get()[i]),
+                                    Instant.ofEpochMilli(startTime + (i + shingleSize - 1) * interval), Instant.ofEpochMilli(startTime + (i + shingleSize) * interval));
+                    featureList.add(feature);
+                }
+                listener.onResponse(featureList);
+            }, listener::onFailure));
+        } catch (Exception e) {
+            logger.error("Failed to get features for " + detector.getDetectorId());
         }
     }
 
@@ -161,14 +187,12 @@ public class FeatureManager {
         long endTime,
         ActionListener<SinglePointFeatures> listener
     ) {
-
         double[][] currentPoints = filterAndFill(shingle, endTime, detector);
         Optional<double[]> currentPoint = Optional.ofNullable(shingle.peekLast()).map(Entry::getValue);
         listener
             .onResponse(
-                Optional
-                    .ofNullable(currentPoints)
-                    .map(points -> new SinglePointFeatures(currentPoint, Optional.of(batchShingle(points, shingleSize)[0])))
+                Optional.ofNullable(currentPoints)
+                    .map(points -> new SinglePointFeatures(currentPoint, Optional.ofNullable(batchShingle(points, shingleSize)[0])))
                     .orElse(new SinglePointFeatures(currentPoint, Optional.empty()))
             );
     }
@@ -189,6 +213,7 @@ public class FeatureManager {
                     .map(Entry::getValue)
                     .orElse(null);
             }).filter(d -> d != null).toArray(double[][]::new);
+            logger.info("result size {}", result.length);
             if (result.length < shingleSize) {
                 result = null;
             }
@@ -265,6 +290,13 @@ public class FeatureManager {
                     )
                     .map(points -> batchShingle(points, shingleSize))
             );
+    }
+
+    private Optional<double[][]> batchShingle(List<double[]> points, int shingleSize) {
+        return Optional
+            .ofNullable(points)
+            .filter(p -> p.size() >= shingleSize)
+            .map(p -> batchShingle(p.toArray(new double[0][0]), shingleSize));
     }
 
     /**

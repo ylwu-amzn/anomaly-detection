@@ -15,6 +15,7 @@
 
 package com.amazon.opendistroforelasticsearch.ad.feature;
 
+import java.time.Instant;
 import java.util.Optional;
 
 /**
@@ -27,6 +28,9 @@ public class SinglePointFeatures {
     private final Optional<double[]> unprocessedFeatures;
     private final Optional<double[]> processedFeatures;
 
+    private Instant dataStartTime;
+    private Instant dataEndTime;
+
     /**
      * Constructor.
      *
@@ -36,6 +40,14 @@ public class SinglePointFeatures {
     public SinglePointFeatures(Optional<double[]> unprocessedFeatures, Optional<double[]> processedFeatures) {
         this.unprocessedFeatures = unprocessedFeatures;
         this.processedFeatures = processedFeatures;
+    }
+
+    public SinglePointFeatures(Optional<double[]> unprocessedFeatures, Optional<double[]> processedFeatures,
+                               Instant dataStartTime, Instant dataEndTime) {
+        this.unprocessedFeatures = unprocessedFeatures;
+        this.processedFeatures = processedFeatures;
+        this.dataStartTime = dataStartTime;
+        this.dataEndTime = dataEndTime;
     }
 
     /**
@@ -54,5 +66,13 @@ public class SinglePointFeatures {
      */
     public Optional<double[]> getProcessedFeatures() {
         return this.processedFeatures;
+    }
+
+    public Instant getDataStartTime() {
+        return dataStartTime;
+    }
+
+    public Instant getDataEndTime() {
+        return dataEndTime;
     }
 }

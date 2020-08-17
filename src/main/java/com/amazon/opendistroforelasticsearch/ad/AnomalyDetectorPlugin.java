@@ -31,6 +31,13 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask;
+import com.amazon.opendistroforelasticsearch.ad.rest.RestDeleteAnomalyDetectionTaskAction;
+import com.amazon.opendistroforelasticsearch.ad.rest.RestExecuteAnomalyDetectionTaskAction;
+import com.amazon.opendistroforelasticsearch.ad.rest.RestGetAnomalyDetectionTaskAction;
+import com.amazon.opendistroforelasticsearch.ad.rest.RestIndexAnomalyDetectionTaskAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultBatchAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultBatchTransportAction;
 import org.elasticsearch.SpecialPermission;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
@@ -138,7 +145,9 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
 
     public static final String AD_BASE_URI = "/_opendistro/_anomaly_detection";
     public static final String AD_BASE_DETECTORS_URI = AD_BASE_URI + "/detectors";
+    public static final String AD_BASE_DETECTION_TASKS_URI = AD_BASE_URI + "/tasks";
     public static final String AD_THREAD_POOL_NAME = "ad-threadpool";
+    public static final String AD_BATCh_TASK_THREAD_POOL_NAME = "ad-batch-task-threadpool";
     public static final String AD_JOB_TYPE = "opendistro_anomaly_detector";
     private static Gson gson;
     private AnomalyDetectionIndices anomalyDetectionIndices;
@@ -194,7 +203,13 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             Calendar.getInstance(TimeZone.getTimeZone("UTC"))
         );
         RestGetAnomalyDetectorAction restGetAnomalyDetectorAction = new RestGetAnomalyDetectorAction(profileRunner);
+        RestGetAnomalyDetectionTaskAction restGetAnomalyDetectionTaskAction = new RestGetAnomalyDetectionTaskAction();
         RestIndexAnomalyDetectorAction restIndexAnomalyDetectorAction = new RestIndexAnomalyDetectorAction(
+            settings,
+            clusterService,
+            anomalyDetectionIndices
+        );
+        RestIndexAnomalyDetectionTaskAction restIndexAnomalyDetectionTaskAction = new RestIndexAnomalyDetectionTaskAction(
             settings,
             clusterService,
             anomalyDetectionIndices
@@ -202,10 +217,14 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
         RestSearchAnomalyDetectorAction searchAnomalyDetectorAction = new RestSearchAnomalyDetectorAction();
         RestSearchAnomalyResultAction searchAnomalyResultAction = new RestSearchAnomalyResultAction();
         RestDeleteAnomalyDetectorAction deleteAnomalyDetectorAction = new RestDeleteAnomalyDetectorAction(clusterService);
+        RestDeleteAnomalyDetectionTaskAction deleteAnomalyDetectionTaskAction = new RestDeleteAnomalyDetectionTaskAction(clusterService);
         RestExecuteAnomalyDetectorAction executeAnomalyDetectorAction = new RestExecuteAnomalyDetectorAction(
             settings,
             clusterService,
             anomalyDetectorRunner
+        );
+        RestExecuteAnomalyDetectionTaskAction executeAnomalyDetectionTaskAction = new RestExecuteAnomalyDetectionTaskAction(
+                client, threadPool, anomalyDetectionIndices
         );
         RestStatsAnomalyDetectorAction statsAnomalyDetectorAction = new RestStatsAnomalyDetectorAction(
             adStats,
@@ -222,10 +241,14 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             .of(
                 restGetAnomalyDetectorAction,
                 restIndexAnomalyDetectorAction,
+                restGetAnomalyDetectionTaskAction,
+                restIndexAnomalyDetectionTaskAction,
                 searchAnomalyDetectorAction,
                 searchAnomalyResultAction,
                 deleteAnomalyDetectorAction,
+                deleteAnomalyDetectionTaskAction,
                 executeAnomalyDetectorAction,
+                executeAnomalyDetectionTaskAction,
                 anomalyDetectorJobAction,
                 statsAnomalyDetectorAction
             );
@@ -349,6 +372,15 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
         adStats = new ADStats(indexUtils, modelManager, stats);
         ADCircuitBreakerService adCircuitBreakerService = new ADCircuitBreakerService(jvmService).init();
 
+        AnomalyResultHandler anomalyResultHandler = new AnomalyResultHandler(
+                client,
+                settings,
+                clusterService,
+                indexNameExpressionResolver,
+                anomalyDetectionIndices,
+                threadPool
+        );
+
         return ImmutableList
             .of(
                 anomalyDetectionIndices,
@@ -363,6 +395,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 modelManager,
                 clock,
                 stateManager,
+                anomalyResultHandler,
                 runner,
                 new ADClusterEventListener(clusterService, hashRing, modelManager, nodeFilter),
                 adCircuitBreakerService,
@@ -374,14 +407,20 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
 
     @Override
     public List<ExecutorBuilder<?>> getExecutorBuilders(Settings settings) {
-        return Collections
-            .singletonList(
+        return Arrays.asList(
                 new FixedExecutorBuilder(
                     settings,
                     AD_THREAD_POOL_NAME,
                     Math.max(1, EsExecutors.allocatedProcessors(settings) / 4),
                     AnomalyDetectorSettings.AD_THEAD_POOL_QUEUE_SIZE,
                     "opendistro.ad." + AD_THREAD_POOL_NAME
+                ),
+                new FixedExecutorBuilder(
+                        settings,
+                        AD_BATCh_TASK_THREAD_POOL_NAME,
+                        Math.max(1, EsExecutors.allocatedProcessors(settings) / 4),
+                        AnomalyDetectorSettings.AD_THEAD_POOL_QUEUE_SIZE,
+                        "opendistro.ad." + AD_BATCh_TASK_THREAD_POOL_NAME
                 )
             );
     }
@@ -413,7 +452,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
 
     @Override
     public List<NamedXContentRegistry.Entry> getNamedXContent() {
-        return ImmutableList.of(AnomalyDetector.XCONTENT_REGISTRY, AnomalyResult.XCONTENT_REGISTRY);
+        return ImmutableList.of(AnomalyDetector.XCONTENT_REGISTRY, AnomalyResult.XCONTENT_REGISTRY, AnomalyDetectionTask.XCONTENT_REGISTRY);
     }
 
     /*
@@ -428,6 +467,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 new ActionHandler<>(RCFResultAction.INSTANCE, RCFResultTransportAction.class),
                 new ActionHandler<>(ThresholdResultAction.INSTANCE, ThresholdResultTransportAction.class),
                 new ActionHandler<>(AnomalyResultAction.INSTANCE, AnomalyResultTransportAction.class),
+                new ActionHandler<>(AnomalyResultBatchAction.INSTANCE, AnomalyResultBatchTransportAction.class),
                 new ActionHandler<>(CronAction.INSTANCE, CronTransportAction.class),
                 new ActionHandler<>(ADStatsNodesAction.INSTANCE, ADStatsNodesTransportAction.class),
                 new ActionHandler<>(ProfileAction.INSTANCE, ProfileTransportAction.class)

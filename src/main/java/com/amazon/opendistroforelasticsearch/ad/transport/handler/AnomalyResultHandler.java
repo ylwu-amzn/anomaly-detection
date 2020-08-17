@@ -18,7 +18,9 @@ package com.amazon.opendistroforelasticsearch.ad.transport.handler;
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 
 import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
+import java.util.function.Consumer;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -27,6 +29,8 @@ import org.elasticsearch.ResourceAlreadyExistsException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
 import org.elasticsearch.action.bulk.BackoffPolicy;
+import org.elasticsearch.action.bulk.BulkRequestBuilder;
+import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.support.IndicesOptions;
@@ -91,7 +95,10 @@ public class AnomalyResultHandler {
             if (!anomalyDetectionIndices.doesAnomalyResultIndexExist()) {
                 anomalyDetectionIndices
                     .initAnomalyResultIndexDirectly(
-                        ActionListener.wrap(initResponse -> onCreateAnomalyResultIndexResponse(initResponse, anomalyResult), exception -> {
+                        ActionListener.wrap(initResponse -> onCreateAnomalyResultIndexResponse(initResponse,anomalyResult.getDetectorId(),
+                                anomalyResult,
+                                result -> saveDetectorResult(result)
+                                ), exception -> {
                             if (ExceptionsHelper.unwrapCause(exception) instanceof ResourceAlreadyExistsException) {
                                 // It is possible the index has been created while we sending the create request
                                 saveDetectorResult(anomalyResult);
@@ -123,6 +130,50 @@ public class AnomalyResultHandler {
         }
     }
 
+    public void bulkIndexAnomalyResult(List<AnomalyResult> anomalyResults, ActionListener<BulkResponse> listener) {
+        try {
+            if (checkIndicesBlocked(clusterService.state(), ClusterBlockLevel.WRITE, AnomalyResult.ANOMALY_RESULT_INDEX)) {
+                LOG.warn(CANNOT_SAVE_ERR_MSG);
+                return;
+            }
+            if (!anomalyDetectionIndices.doesAnomalyResultIndexExist()) {
+                anomalyDetectionIndices
+                        .initAnomalyResultIndexDirectly(
+                                ActionListener.wrap(initResponse -> onCreateAnomalyResultIndexResponse(initResponse,
+                                        anomalyResults.get(0).getDetectorId(),
+                                        anomalyResults,
+                                        result -> bulkSaveDetectorResult(result, listener)), exception -> {
+                                    if (ExceptionsHelper.unwrapCause(exception) instanceof ResourceAlreadyExistsException) {
+                                        // It is possible the index has been created while we sending the create request
+                                        bulkSaveDetectorResult(anomalyResults, listener);
+                                    } else {
+                                        throw new AnomalyDetectionException(
+                                                anomalyResults.get(0).getDetectorId(),
+                                                "Unexpected error creating anomaly result index",
+                                                exception
+                                        );
+                                    }
+                                })
+                        );
+            } else {
+                bulkSaveDetectorResult(anomalyResults, listener);
+            }
+        } catch (Exception e) {
+            throw new AnomalyDetectionException(
+                    anomalyResults.get(0).getDetectorId(),
+                    String
+                            .format(
+                                    Locale.ROOT,
+                                    "Error in saving anomaly index for ID %s from %s to %s",
+                                    anomalyResults.get(0).getDetectorId(),
+                                    anomalyResults.get(0).getDataStartTime(),
+                                    anomalyResults.get(0).getDataEndTime()
+                            ),
+                    e
+            );
+        }
+    }
+
     /**
      * Similar to checkGlobalBlock, we check block on the indices level.
      *
@@ -139,13 +190,16 @@ public class AnomalyResultHandler {
         return state.blocks().indicesBlockedException(level, concreteIndices) != null;
     }
 
-    private void onCreateAnomalyResultIndexResponse(CreateIndexResponse response, AnomalyResult anomalyResult) {
+    private <T> void onCreateAnomalyResultIndexResponse(CreateIndexResponse response,
+                                                        String detectorId,
+                                                        T anomalyResult,
+                                                        Consumer<T> func) {
         if (response.isAcknowledged()) {
-            saveDetectorResult(anomalyResult);
+            func.accept(anomalyResult);
         } else {
             throw new AnomalyDetectionException(
-                anomalyResult.getDetectorId(),
-                "Creating anomaly result index with mappings call not acknowledged."
+                    detectorId,
+                    "Creating anomaly result index with mappings call not acknowledged."
             );
         }
     }
@@ -171,6 +225,37 @@ public class AnomalyResultHandler {
             throw new AnomalyDetectionException(anomalyResult.getDetectorId(), "Cannot save result");
         }
     }
+
+    private void bulkSaveDetectorResult(List<AnomalyResult> anomalyResults, ActionListener<BulkResponse> listener) {
+        LOG.info("Start to bulk save anomaly result...");
+        BulkRequestBuilder bulkRequestBuilder = client.prepareBulk();
+        anomalyResults.forEach(anomalyResult -> {
+            try {
+                try (XContentBuilder builder = jsonBuilder()) {
+                    IndexRequest indexRequest = new IndexRequest(AnomalyResult.ANOMALY_RESULT_INDEX)
+                            .source(anomalyResult.toXContent(builder, RestHandlerUtils.XCONTENT_WITH_TYPE));
+                    bulkRequestBuilder.add(indexRequest);
+                } catch (Exception e) {
+                    LOG.error("Failed to save anomaly result", e);
+                    throw new AnomalyDetectionException(anomalyResults.get(0).getDetectorId(), "Cannot save result");
+                }
+            } catch (Exception e) {
+                LOG.error("Failed to bulk save anomaly result", e);
+            }
+        });
+        if (anomalyResults.size() > 1) {
+            client.bulk(bulkRequestBuilder.request(), ActionListener.wrap(res -> {
+                LOG.info("bulk index ad result successfully", res.getTook().duration());
+                listener.onResponse(res);
+            }, e -> {
+                LOG.error("bulk index ad result failed", e);
+                // TODO: add error handling
+                listener.onFailure(e);
+            }));
+        }
+        LOG.info("Finish to bulk save anomaly result...");
+    }
+
 
     void saveDetectorResult(IndexRequest indexRequest, String context, Iterator<TimeValue> backoff) {
         client.index(indexRequest, ActionListener.<IndexResponse>wrap(response -> LOG.debug(SUCCESS_SAVING_MSG + context), exception -> {

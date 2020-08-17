@@ -48,6 +48,7 @@ public class AnomalyResult implements ToXContentObject {
     public static final String ANOMALY_RESULT_INDEX = ".opendistro-anomaly-results";
 
     public static final String DETECTOR_ID_FIELD = "detector_id";
+    public static final String TASK_EXECUTION_ID_FIELD = "task_execution_id";
     public static final String ANOMALY_SCORE_FIELD = "anomaly_score";
     private static final String ANOMALY_GRADE_FIELD = "anomaly_grade";
     private static final String CONFIDENCE_FIELD = "confidence";
@@ -59,6 +60,7 @@ public class AnomalyResult implements ToXContentObject {
     public static final String ERROR_FIELD = "error";
 
     private final String detectorId;
+    private final String taskExecutionId;
     private final Double anomalyScore;
     private final Double anomalyGrade;
     private final Double confidence;
@@ -81,7 +83,25 @@ public class AnomalyResult implements ToXContentObject {
         Instant executionEndTime,
         String error
     ) {
+        this(detectorId, null, anomalyScore, anomalyGrade, confidence, featureData, dataStartTime, dataEndTime,
+                executionStartTime, executionEndTime, error);
+    }
+
+    public AnomalyResult(
+            String detectorId,
+            String taskExecutionId,
+            Double anomalyScore,
+            Double anomalyGrade,
+            Double confidence,
+            List<FeatureData> featureData,
+            Instant dataStartTime,
+            Instant dataEndTime,
+            Instant executionStartTime,
+            Instant executionEndTime,
+            String error
+    ) {
         this.detectorId = detectorId;
+        this.taskExecutionId = taskExecutionId;
         this.anomalyScore = anomalyScore;
         this.anomalyGrade = anomalyGrade;
         this.confidence = confidence;
@@ -100,6 +120,10 @@ public class AnomalyResult implements ToXContentObject {
             .field(DETECTOR_ID_FIELD, detectorId)
             .field(DATA_START_TIME_FIELD, dataStartTime.toEpochMilli())
             .field(DATA_END_TIME_FIELD, dataEndTime.toEpochMilli());
+        if (taskExecutionId != null) {
+            // can be null for realtime job
+            xContentBuilder.field(TASK_EXECUTION_ID_FIELD, taskExecutionId);
+        }
         if (featureData != null) {
             // can be null during preview
             xContentBuilder.field(FEATURE_DATA_FIELD, featureData.toArray());
@@ -129,6 +153,7 @@ public class AnomalyResult implements ToXContentObject {
 
     public static AnomalyResult parse(XContentParser parser) throws IOException {
         String detectorId = null;
+        String taskExecutionId = null;
         Double anomalyScore = null;
         Double anomalyGrade = null;
         Double confidence = null;
@@ -147,6 +172,9 @@ public class AnomalyResult implements ToXContentObject {
             switch (fieldName) {
                 case DETECTOR_ID_FIELD:
                     detectorId = parser.text();
+                    break;
+                case TASK_EXECUTION_ID_FIELD:
+                    taskExecutionId = parser.text();
                     break;
                 case ANOMALY_SCORE_FIELD:
                     anomalyScore = parser.doubleValue();
@@ -185,6 +213,7 @@ public class AnomalyResult implements ToXContentObject {
         }
         return new AnomalyResult(
             detectorId,
+            taskExecutionId,
             anomalyScore,
             anomalyGrade,
             confidence,
@@ -206,6 +235,7 @@ public class AnomalyResult implements ToXContentObject {
             return false;
         AnomalyResult that = (AnomalyResult) o;
         return Objects.equal(getDetectorId(), that.getDetectorId())
+            && Objects.equal(getTaskExecutionId(), that.getTaskExecutionId())
             && Objects.equal(getAnomalyScore(), that.getAnomalyScore())
             && Objects.equal(getAnomalyGrade(), that.getAnomalyGrade())
             && Objects.equal(getConfidence(), that.getConfidence())
@@ -223,6 +253,7 @@ public class AnomalyResult implements ToXContentObject {
         return Objects
             .hashCode(
                 getDetectorId(),
+                getTaskExecutionId(),
                 getAnomalyScore(),
                 getAnomalyGrade(),
                 getConfidence(),
@@ -237,6 +268,10 @@ public class AnomalyResult implements ToXContentObject {
 
     public String getDetectorId() {
         return detectorId;
+    }
+
+    public String getTaskExecutionId() {
+        return taskExecutionId;
     }
 
     public Double getAnomalyScore() {
@@ -273,5 +308,22 @@ public class AnomalyResult implements ToXContentObject {
 
     public String getError() {
         return error;
+    }
+
+    @Override
+    public String toString() {
+        return "AnomalyResult{" +
+                "detectorId='" + detectorId + '\'' +
+                ", taskExecutionId='" + taskExecutionId + '\'' +
+                ", anomalyScore=" + anomalyScore +
+                ", anomalyGrade=" + anomalyGrade +
+                ", confidence=" + confidence +
+                ", featureData=" + featureData +
+                ", dataStartTime=" + dataStartTime +
+                ", dataEndTime=" + dataEndTime +
+                ", executionStartTime=" + executionStartTime +
+                ", executionEndTime=" + executionEndTime +
+                ", error='" + error + '\'' +
+                '}';
     }
 }

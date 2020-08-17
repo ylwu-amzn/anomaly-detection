@@ -15,11 +15,13 @@
 
 package com.amazon.opendistroforelasticsearch.ad.feature;
 
+import static com.amazon.opendistroforelasticsearch.ad.util.ParseUtils.generateFeatureQuerySearchRequest;
 import static org.apache.commons.math3.linear.MatrixUtils.createRealMatrix;
 
 import java.io.IOException;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -40,6 +42,7 @@ import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.search.aggregations.Aggregation;
 import org.elasticsearch.search.aggregations.AggregationBuilders;
 import org.elasticsearch.search.aggregations.Aggregations;
+import org.elasticsearch.search.aggregations.bucket.composite.InternalComposite;
 import org.elasticsearch.search.aggregations.bucket.range.InternalDateRange;
 import org.elasticsearch.search.aggregations.metrics.InternalTDigestPercentiles;
 import org.elasticsearch.search.aggregations.metrics.Max;
@@ -170,6 +173,36 @@ public class SearchFeatureDao {
                 ActionListener
                     .wrap(response -> listener.onResponse(parseResponse(response, detector.getEnabledFeatureIds())), listener::onFailure)
             );
+    }
+
+    public void getFeaturesForPeriod2(
+        AnomalyDetector detector,
+        long startTime,
+        long endTime,
+        ActionListener<List<Optional<double[]>>> listener) throws IOException {
+        SearchSourceBuilder searchSourceBuilder = generateFeatureQuerySearchRequest(detector, startTime, endTime, xContent);
+
+        SearchRequest searchRequest = new SearchRequest(detector.getIndices().toArray(new String[0])).source(searchSourceBuilder);
+        client.search(
+            searchRequest,
+            ActionListener.wrap(
+                response -> listener.onResponse(parseBucketAggregationResponse(response, detector.getEnabledFeatureIds())),
+                listener::onFailure));
+    }
+
+    private List<Optional<double[]>> parseBucketAggregationResponse(SearchResponse response, List<String> featureIds) {
+        List<Optional<double[]>> features = new ArrayList<>();
+        List<Aggregation> aggregations = response.getAggregations().asList();
+        logger.info("Feature aggregation result size {}", aggregations.size());
+        for (Aggregation agg : aggregations) {
+            List<InternalComposite.InternalBucket> buckets = ((InternalComposite) agg).getBuckets();
+            buckets.forEach(bucket -> {
+                Optional<double[]> featureData = parseAggregations(Optional.ofNullable(bucket.getAggregations()), featureIds);
+                features.add(featureData);
+            });
+        }
+
+        return features;
     }
 
     private Optional<double[]> parseResponse(SearchResponse response, List<String> featureIds) {
