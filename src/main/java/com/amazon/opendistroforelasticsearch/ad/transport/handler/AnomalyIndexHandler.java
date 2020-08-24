@@ -65,8 +65,8 @@ public class AnomalyIndexHandler<T extends ToXContentObject> {
     // whether save to a specific doc id or not
     private final boolean fixedDoc;
     protected final ClientUtil clientUtil;
-    private final IndexUtils indexUtils;
-    private final ClusterService clusterService;
+    protected final IndexUtils indexUtils;
+    protected final ClusterService clusterService;
 
     public AnomalyIndexHandler(
         Client client,

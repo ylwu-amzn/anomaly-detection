@@ -4,34 +4,14 @@
     "schema_version": 1
   },
   "properties": {
+    "schema_version": {
+      "type": "integer"
+    },
+    "task_id": {
+      "type": "keyword"
+    },
     "detector_id": {
       "type": "keyword"
-    },
-    "task_execution_id": {
-      "type": "keyword"
-    },
-    "is_anomaly": {
-      "type": "boolean"
-    },
-    "anomaly_score": {
-      "type": "double"
-    },
-    "anomaly_grade": {
-      "type": "double"
-    },
-    "confidence": {
-      "type": "double"
-    },
-    "feature_data": {
-      "type": "nested",
-      "properties": {
-        "feature_id": {
-          "type": "keyword"
-        },
-        "data": {
-          "type": "double"
-        }
-      }
     },
     "data_start_time": {
       "type": "date",
@@ -49,8 +29,19 @@
       "type": "date",
       "format": "strict_date_time||epoch_millis"
     },
+    "state": {
+      "type": "keyword"
+    },
     "error": {
       "type": "text"
+    },
+    "current_detection_interval": {
+      "type": "date",
+      "format": "strict_date_time||epoch_millis"
+    },
+    "last_update_time": {
+      "type": "date",
+      "format": "strict_date_time||epoch_millis"
     }
   }
 }

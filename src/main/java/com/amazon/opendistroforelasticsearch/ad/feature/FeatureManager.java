@@ -187,6 +187,37 @@ public class FeatureManager {
             .collect(Collectors.toList());
     }
 
+    public void getFeatures(AnomalyDetector detector, long startTime, long endTime, ActionListener<List<SinglePointFeatures>> listener) {
+        try {
+            int shingleSize = detector.getShingleSize();
+            List<double[]> features = new ArrayList<>();
+            long interval = ((IntervalTimeConfiguration) detector.getDetectionInterval()).toDuration().toMillis();
+            searchFeatureDao.getFeaturesForPeriodByBatch(detector, startTime, endTime, ActionListener.wrap(points -> {
+                for (int i = 0; i < points.size(); i++) { // TODO: process missing values, by default missing values will not returned.
+                    Optional<double[]> point = points.get(i);
+                    features.add(point.get());
+                }
+                logger.info("features size: {}", features.size());
+                List<SinglePointFeatures> featureList = new ArrayList<>();
+                if (features.size() > 0) {
+                    Optional<double[][]> featureData = batchShingle(features, shingleSize);
+                    for (int i = 0; i < featureData.get().length; i++) {
+                        SinglePointFeatures feature = new SinglePointFeatures(
+                            points.get(i + shingleSize - 1),
+                            Optional.ofNullable(featureData.get()[i]),
+                            Instant.ofEpochMilli(startTime + (i + shingleSize - 1) * interval),
+                            Instant.ofEpochMilli(startTime + (i + shingleSize) * interval)
+                        );
+                        featureList.add(feature);
+                    }
+                }
+                listener.onResponse(featureList);
+            }, listener::onFailure));
+        } catch (Exception e) {
+            logger.error("Failed to get features for " + detector.getDetectorId());
+        }
+    }
+
     /**
      * Updates the shingle to contain one Optional data point for each of shingleSize consecutive time intervals, ending
      * with the current interval. Each entry in the shingle contains the timestamp of the data point as the key, and the
@@ -255,6 +286,7 @@ public class FeatureManager {
                 .filter(d -> d != null)
                 .toArray(double[][]::new);
 
+            logger.info("result size {}", result.length);
             if (result.length < shingleSize) {
                 result = null;
             }
@@ -420,6 +452,13 @@ public class FeatureManager {
 
     private long getDetectionIntervalInMillis(AnomalyDetector detector) {
         return ((IntervalTimeConfiguration) detector.getDetectionInterval()).toDuration().toMillis();
+    }
+
+    private Optional<double[][]> batchShingle(List<double[]> points, int shingleSize) {
+        return Optional
+            .ofNullable(points)
+            .filter(p -> p.size() >= shingleSize)
+            .map(p -> batchShingle(p.toArray(new double[0][0]), shingleSize));
     }
 
     /**
