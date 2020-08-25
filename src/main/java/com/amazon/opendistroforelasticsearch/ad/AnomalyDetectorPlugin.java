@@ -104,6 +104,7 @@ import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.CounterSupplier;
 import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.IndexStatusSupplier;
 import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.ModelsOnNodeSupplier;
 import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.SettableSupplier;
+import com.amazon.opendistroforelasticsearch.ad.task.AnomalyDetectionTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADStatsNodesAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADStatsNodesTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultAction;
@@ -165,6 +166,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
     private DiscoveryNodeFilterer nodeFilter;
     private IndexUtils indexUtils;
     private DetectionStateHandler detectorStateHandler;
+    private AnomalyDetectionTaskManager anomalyDetectionTaskManager;
 
     static {
         SpecialPermission.check();
@@ -229,16 +231,17 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
         RestSearchAnomalyDetectorAction searchAnomalyDetectorAction = new RestSearchAnomalyDetectorAction();
         RestSearchAnomalyResultAction searchAnomalyResultAction = new RestSearchAnomalyResultAction();
         RestDeleteAnomalyDetectorAction deleteAnomalyDetectorAction = new RestDeleteAnomalyDetectorAction(clusterService);
-        RestDeleteAnomalyDetectionTaskAction deleteAnomalyDetectionTaskAction = new RestDeleteAnomalyDetectionTaskAction(clusterService);
+        RestDeleteAnomalyDetectionTaskAction deleteAnomalyDetectionTaskAction = new RestDeleteAnomalyDetectionTaskAction(
+            clusterService,
+            anomalyDetectionTaskManager
+        );
         RestExecuteAnomalyDetectorAction executeAnomalyDetectorAction = new RestExecuteAnomalyDetectorAction(
             settings,
             clusterService,
             anomalyDetectorRunner
         );
         RestExecuteAnomalyDetectionTaskAction executeAnomalyDetectionTaskAction = new RestExecuteAnomalyDetectionTaskAction(
-            client,
-            threadPool,
-            anomalyDetectionIndices
+            anomalyDetectionTaskManager
         );
         RestStatsAnomalyDetectorAction statsAnomalyDetectorAction = new RestStatsAnomalyDetectorAction(
             adStats,
@@ -412,6 +415,8 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             stateManager
         );
 
+        this.anomalyDetectionTaskManager = new AnomalyDetectionTaskManager(threadPool, client, anomalyDetectionIndices);
+
         return ImmutableList
             .of(
                 anomalyDetectionIndices,
@@ -432,7 +437,8 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 adStats,
                 new MasterEventListener(clusterService, threadPool, client, clock, clientUtil, nodeFilter),
                 nodeFilter,
-                detectorStateHandler
+                detectorStateHandler,
+                anomalyDetectionTaskManager
             );
     }
 

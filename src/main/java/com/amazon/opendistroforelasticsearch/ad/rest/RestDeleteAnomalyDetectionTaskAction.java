@@ -37,6 +37,7 @@ import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask;
 import com.amazon.opendistroforelasticsearch.ad.rest.handler.AnomalyDetectorActionHandler;
 import com.amazon.opendistroforelasticsearch.ad.settings.EnabledSetting;
+import com.amazon.opendistroforelasticsearch.ad.task.AnomalyDetectionTaskManager;
 import com.google.common.collect.ImmutableList;
 
 /**
@@ -49,9 +50,11 @@ public class RestDeleteAnomalyDetectionTaskAction extends BaseRestHandler {
     private static final Logger logger = LogManager.getLogger(RestDeleteAnomalyDetectionTaskAction.class);
     private final ClusterService clusterService;
     private final AnomalyDetectorActionHandler handler = new AnomalyDetectorActionHandler();
+    private final AnomalyDetectionTaskManager anomalyDetectionTaskManager;
 
-    public RestDeleteAnomalyDetectionTaskAction(ClusterService clusterService) {
+    public RestDeleteAnomalyDetectionTaskAction(ClusterService clusterService, AnomalyDetectionTaskManager anomalyDetectionTaskManager) {
         this.clusterService = clusterService;
+        this.anomalyDetectionTaskManager = anomalyDetectionTaskManager;
     }
 
     @Override
@@ -67,7 +70,7 @@ public class RestDeleteAnomalyDetectionTaskAction extends BaseRestHandler {
 
         String taskId = request.param(TASK_ID);
 
-        // TODO: stop running task first
+        // TODO: stop running task first, throw failure if task is still running
         return channel -> {
             logger.info("Delete anomaly detection task {}", taskId);
             handler.getDetectorJob(clusterService, client, taskId, channel, () -> deleteAnomalyDetectionTask(client, taskId, channel));

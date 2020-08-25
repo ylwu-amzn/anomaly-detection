@@ -189,7 +189,7 @@ public class SearchFeatureDao {
                 searchRequest,
                 ActionListener
                     .wrap(
-                        response -> listener.onResponse(parseBucketAggregationResponse(response, detector.getEnabledFeatureIds())),
+                        response -> { listener.onResponse(parseBucketAggregationResponse(response, detector.getEnabledFeatureIds())); },
                         listener::onFailure
                     )
             );

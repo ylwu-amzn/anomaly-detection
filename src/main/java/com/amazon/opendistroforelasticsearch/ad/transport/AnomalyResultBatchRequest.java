@@ -37,14 +37,17 @@ import org.elasticsearch.tasks.TaskAwareRequest;
 import org.elasticsearch.tasks.TaskId;
 
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
-import com.amazon.opendistroforelasticsearch.ad.constant.CommonMessageAttributes;
 
 public class AnomalyResultBatchRequest extends ActionRequest implements ToXContentObject, TaskAwareRequest {
     static final String INVALID_TIMESTAMP_ERR_MSG = "timestamp is invalid";
+    static final String DETECTOR_ID_JSON_KEY = "detectorId";
+    static final String TASK_ID_JSON_KEY = "taskId";
+    static final String TASK_EXECUTION_ID_JSON_KEY = "taskExecutionId";
     static final String START_JSON_KEY = "start";
     static final String END_JSON_KEY = "end";
 
     private String detectorId;
+    private String taskId;
     private String taskExecutionId;
     // time range start and end. Unit: epoch milliseconds
     private long start;
@@ -53,14 +56,16 @@ public class AnomalyResultBatchRequest extends ActionRequest implements ToXConte
     public AnomalyResultBatchRequest(StreamInput in) throws IOException {
         super(in);
         detectorId = in.readString();
+        taskId = in.readString();
         taskExecutionId = in.readString();
         start = in.readLong();
         end = in.readLong();
     }
 
-    public AnomalyResultBatchRequest(String detectorId, String taskExecutionId, long start, long end) {
+    public AnomalyResultBatchRequest(String detectorId, String taskId, String taskExecutionId, long start, long end) {
         super();
         this.detectorId = detectorId;
+        this.taskId = taskId;
         this.taskExecutionId = taskExecutionId;
         this.start = start;
         this.end = end;
@@ -78,6 +83,10 @@ public class AnomalyResultBatchRequest extends ActionRequest implements ToXConte
         return detectorId;
     }
 
+    public String getTaskId() {
+        return taskId;
+    }
+
     public String getTaskExecutionId() {
         return taskExecutionId;
     }
@@ -86,6 +95,7 @@ public class AnomalyResultBatchRequest extends ActionRequest implements ToXConte
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
         out.writeString(detectorId);
+        out.writeString(taskId);
         out.writeString(taskExecutionId);
         out.writeLong(start);
         out.writeLong(end);
@@ -109,7 +119,9 @@ public class AnomalyResultBatchRequest extends ActionRequest implements ToXConte
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject();
-        builder.field(CommonMessageAttributes.ID_JSON_KEY, detectorId);
+        builder.field(DETECTOR_ID_JSON_KEY, detectorId);
+        builder.field(TASK_ID_JSON_KEY, taskId);
+        builder.field(TASK_EXECUTION_ID_JSON_KEY, taskExecutionId);
         builder.field(START_JSON_KEY, start);
         builder.field(END_JSON_KEY, end);
         builder.endObject();
@@ -134,10 +146,16 @@ public class AnomalyResultBatchRequest extends ActionRequest implements ToXConte
     @Override
     public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
         StringBuilder descriptionBuilder = new StringBuilder();
+        descriptionBuilder.append("task_id[").append(this.taskId).append("], ");
         descriptionBuilder.append("task_execution_id[").append(this.taskExecutionId).append("], ");
         descriptionBuilder.append("detector_id[").append(this.detectorId).append("], ");
         descriptionBuilder.append("start_date[").append(this.start).append("], ");
         descriptionBuilder.append("end_date[").append(this.end).append("]");
         return new AnomalyDetectionBatchTask(id, type, action, descriptionBuilder.toString(), parentTaskId, headers);
+    }
+
+    @Override
+    public boolean getShouldStoreResult() {
+        return true;
     }
 }

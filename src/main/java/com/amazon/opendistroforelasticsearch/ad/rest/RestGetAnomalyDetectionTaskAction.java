@@ -49,7 +49,7 @@ import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 import com.google.common.collect.ImmutableList;
 
 /**
- * This class consists of the REST handler to retrieve an anomaly detector.
+ * This class consists of the REST handler to retrieve an anomaly detection task.
  */
 public class RestGetAnomalyDetectionTaskAction extends BaseRestHandler {
 
