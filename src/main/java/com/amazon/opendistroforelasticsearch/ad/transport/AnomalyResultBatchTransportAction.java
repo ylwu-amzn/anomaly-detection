@@ -192,7 +192,7 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
             if (!EnabledSetting.isADPluginEnabled()) {
                 throw new EndRunException(detectorId, CommonErrorMessages.DISABLED_ERR_MSG, true);
             }
-            anomalyDetectionTaskManager.indexAnomalyDetectionTaskExecution(taskExecution, taskExecutionId, ActionListener.wrap(r -> {
+            anomalyDetectionTaskManager.indexTaskExecution(taskExecution, taskExecutionId, ActionListener.wrap(r -> {
                 taskMap.put(taskExecutionId, batchTask);
                 try {
                     checkTaskCancelled(taskExecutionId);
@@ -537,7 +537,7 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
                 Instant.now()
             );
             try {
-                anomalyDetectionTaskManager.indexAnomalyDetectionTaskExecution(taskExecution, taskExecutionId, ActionListener.wrap(r -> {
+                anomalyDetectionTaskManager.indexTaskExecution(taskExecution, taskExecutionId, ActionListener.wrap(r -> {
                     getFeatureData(
                         listener,
                         taskId,
@@ -570,7 +570,7 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
                 Instant.now()
             );
             try {
-                anomalyDetectionTaskManager.indexAnomalyDetectionTaskExecution(taskExecution, taskExecutionId, ActionListener.wrap(r -> {
+                anomalyDetectionTaskManager.indexTaskExecution(taskExecution, taskExecutionId, ActionListener.wrap(r -> {
                     LOG.info("all pieces finished for task {}, detector {}", taskExecutionId, detector.getDetectorId());
                     AnomalyResultBatchResponse res = new AnomalyResultBatchResponse("task execution done");
                     taskThresholdModelMap.remove(taskExecutionId);

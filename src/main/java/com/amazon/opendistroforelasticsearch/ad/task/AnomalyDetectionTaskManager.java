@@ -16,13 +16,16 @@
 package com.amazon.opendistroforelasticsearch.ad.task;
 
 import static com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorPlugin.AD_BATCh_TASK_THREAD_POOL_NAME;
+import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask.ANOMALY_DETECTION_TASK_INDEX;
 import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTaskExecution.ANOMALY_DETECTION_TASK_EXECUTION_INDEX;
 import static com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils.XCONTENT_WITH_TYPE;
 import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang.StringUtils;
@@ -35,9 +38,12 @@ import org.elasticsearch.action.admin.cluster.node.tasks.cancel.CancelTasksReque
 import org.elasticsearch.action.admin.cluster.node.tasks.list.ListTasksAction;
 import org.elasticsearch.action.admin.cluster.node.tasks.list.ListTasksRequest;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
+import org.elasticsearch.action.delete.DeleteRequest;
+import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.get.GetRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
+import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.support.WriteRequest;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
@@ -46,6 +52,14 @@ import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.index.IndexNotFoundException;
+import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.index.reindex.BulkByScrollResponse;
+import org.elasticsearch.index.reindex.DeleteByQueryAction;
+import org.elasticsearch.index.reindex.DeleteByQueryRequest;
+import org.elasticsearch.search.SearchHit;
+import org.elasticsearch.search.builder.SearchSourceBuilder;
+import org.elasticsearch.search.sort.SortOrder;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.tasks.TaskCancelledException;
 import org.elasticsearch.tasks.TaskInfo;
@@ -75,7 +89,7 @@ public class AnomalyDetectionTaskManager {
 
     // TODO: check if task is running or not
     public void startTask(String taskId, ActionListener<String> listener) {
-        GetRequest getTaskRequest = new GetRequest(AnomalyDetectionTask.ANOMALY_DETECTION_TASK_INDEX, taskId);
+        GetRequest getTaskRequest = new GetRequest(ANOMALY_DETECTION_TASK_INDEX, taskId);
 
         // Step1 get task
         client.get(getTaskRequest, ActionListener.wrap(response -> {
@@ -102,7 +116,7 @@ public class AnomalyDetectionTaskManager {
                                 ActionListener.wrap(res -> onCreateTaskExecutionIndex(res, task, listener), e -> { listener.onFailure(e); })
                             );
                     } else {
-                        indexAnomalyDetectionTaskExecution(task, listener);
+                        indexTaskExecution(task, listener);
                     }
                 } catch (Exception e) {
                     log.error("Failed to process the request for taskId: {}.", taskId);
@@ -122,13 +136,13 @@ public class AnomalyDetectionTaskManager {
     private void onCreateTaskExecutionIndex(CreateIndexResponse response, AnomalyDetectionTask task, ActionListener<String> listener)
         throws IOException {
         if (response.isAcknowledged()) {
-            indexAnomalyDetectionTaskExecution(task, listener);
+            indexTaskExecution(task, listener);
         } else {
             listener.onFailure(new RuntimeException("Create task execution index not acknowledged"));
         }
     }
 
-    private void indexAnomalyDetectionTaskExecution(AnomalyDetectionTask task, ActionListener<String> listener) throws IOException {
+    private void indexTaskExecution(AnomalyDetectionTask task, ActionListener<String> listener) throws IOException {
         AnomalyDetectionTaskExecution taskExecution = new AnomalyDetectionTaskExecution(
             task.getTaskId(),
             task.getDetectorId(),
@@ -144,7 +158,7 @@ public class AnomalyDetectionTaskManager {
             Instant.now()
         );
 
-        indexAnomalyDetectionTaskExecution(taskExecution, null, ActionListener.wrap(response -> {
+        indexTaskExecution(taskExecution, null, ActionListener.wrap(response -> {
             if (response.getShardInfo().getSuccessful() < 1) {
                 listener.onFailure(new RuntimeException("Fail to index anomaly detection task execution"));
             }
@@ -153,7 +167,7 @@ public class AnomalyDetectionTaskManager {
         }, exception -> { listener.onFailure(exception); }));
     }
 
-    public void indexAnomalyDetectionTaskExecution(
+    public void indexTaskExecution(
         AnomalyDetectionTaskExecution taskExecution,
         String taskExecutionId,
         ActionListener<IndexResponse> listener
@@ -167,8 +181,7 @@ public class AnomalyDetectionTaskManager {
 
     private void executeTask(AnomalyDetectionTaskExecution task, String taskExecutionId, ActionListener<String> listener) {
         try {
-            Runnable runnable = () -> runAnomalyDetectionTask(task, taskExecutionId);
-            threadPool.executor(AD_BATCh_TASK_THREAD_POOL_NAME).submit(runnable);
+            threadPool.executor(AD_BATCh_TASK_THREAD_POOL_NAME).submit(taskRunnable(task, taskExecutionId));
             listener.onResponse(taskExecutionId);
         } catch (Exception e) {
             log.error("Fail to start AD batch task " + task.getTaskId(), e);
@@ -189,7 +202,7 @@ public class AnomalyDetectionTaskManager {
                 Instant.now()
             );
             try {
-                indexAnomalyDetectionTaskExecution(
+                indexTaskExecution(
                     taskExecution,
                     taskExecutionId,
                     ActionListener
@@ -201,54 +214,55 @@ public class AnomalyDetectionTaskManager {
         }
     }
 
-    private void runAnomalyDetectionTask(AnomalyDetectionTaskExecution taskExecution, String taskExecutionId) {// TODO, remove
-                                                                                                               // taskExecutionId?
-        try {
-            AnomalyResultBatchRequest request = new AnomalyResultBatchRequest(
-                taskExecution.getDetectorId(),
-                taskExecution.getTaskId(),
-                taskExecutionId,
-                taskExecution.getDataStartTime().toEpochMilli(),
-                taskExecution.getDataEndTime().toEpochMilli()
-            );
-            client
-                .execute(
-                    // which thread pool this execution will run in?
-                    AnomalyResultBatchAction.INSTANCE,
-                    request,
-                    ActionListener.wrap(response -> { log.info(response.getMessage()); }, exception -> {
-                        // TODO: make state enum
-                        String state = exception instanceof TaskCancelledException
-                            ? AnomalyDetectionTaskState.CANCELLED.name()
-                            : AnomalyDetectionTaskState.FAILED.name();
-                        // TODO: log error message in task execution
-                        AnomalyDetectionTaskExecution newTaskExecution = new AnomalyDetectionTaskExecution(
-                            taskExecution.getTaskId(),
-                            taskExecution.getDetectorId(),
-                            taskExecution.getVersion(),
-                            taskExecution.getDataStartTime(),
-                            taskExecution.getDataEndTime(),
-                            taskExecution.getExecutionStartTime(),
-                            Instant.now(),
-                            taskExecution.getCurrentDetectionInterval(),
-                            state,
-                            ExceptionUtils.getFullStackTrace(exception),
-                            taskExecution.getSchemaVersion(),
-                            Instant.now()
-                        );
-                        indexAnomalyDetectionTaskExecution(newTaskExecution, taskExecutionId);
-                        log.error("Fail to execute batch task action " + taskExecution.getTaskId(), exception);
-                    })
+    // TODO, remove taskExecutionId?
+    private Runnable taskRunnable(AnomalyDetectionTaskExecution taskExecution, String taskExecutionId) {
+        return () -> {
+            try {
+                AnomalyResultBatchRequest request = new AnomalyResultBatchRequest(
+                    taskExecution.getDetectorId(),
+                    taskExecution.getTaskId(),
+                    taskExecutionId,
+                    taskExecution.getDataStartTime().toEpochMilli(),
+                    taskExecution.getDataEndTime().toEpochMilli()
                 );
-        } catch (Exception e) {
-            // TODO: log error message in task execution
-            log.error("Failed to execute task " + taskExecution.getTaskId(), e);
-        }
+                client
+                    .execute(
+                        AnomalyResultBatchAction.INSTANCE,
+                        request,
+                        ActionListener.wrap(response -> { log.info(response.getMessage()); }, exception -> {
+                            // TODO: make state enum
+                            String state = exception instanceof TaskCancelledException
+                                ? AnomalyDetectionTaskState.CANCELLED.name()
+                                : AnomalyDetectionTaskState.FAILED.name();
+                            // TODO: log error message in task execution
+                            AnomalyDetectionTaskExecution newTaskExecution = new AnomalyDetectionTaskExecution(
+                                taskExecution.getTaskId(),
+                                taskExecution.getDetectorId(),
+                                taskExecution.getVersion(),
+                                taskExecution.getDataStartTime(),
+                                taskExecution.getDataEndTime(),
+                                taskExecution.getExecutionStartTime(),
+                                Instant.now(),
+                                taskExecution.getCurrentDetectionInterval(),
+                                state,
+                                ExceptionUtils.getFullStackTrace(exception),
+                                taskExecution.getSchemaVersion(),
+                                Instant.now()
+                            );
+                            indexTaskExecution(newTaskExecution, taskExecutionId);
+                            log.error("Fail to execute batch task action " + taskExecution.getTaskId(), exception);
+                        })
+                    );
+            } catch (Exception e) {
+                // TODO: log error message in task execution
+                log.error("Failed to execute task " + taskExecution.getTaskId(), e);
+            }
+        };
     }
 
-    public void indexAnomalyDetectionTaskExecution(AnomalyDetectionTaskExecution taskExecution, String taskExecutionId) {
+    public void indexTaskExecution(AnomalyDetectionTaskExecution taskExecution, String taskExecutionId) {
         try {
-            indexAnomalyDetectionTaskExecution(
+            indexTaskExecution(
                 taskExecution,
                 taskExecutionId,
                 ActionListener.wrap(r -> { log.info(r.status()); }, e -> { log.error("Fail to index task execution", e); })
@@ -289,7 +303,115 @@ public class AnomalyDetectionTaskManager {
             } else {
                 listener.onResponse("No running task found");
             }
-        }, exception -> { listener.onFailure(exception); }));
+        }, exception -> {
+            log.error("Fail to stop task " + taskId, exception);
+            listener.onFailure(exception);
+        }));
     }
 
+    public void deleteTask(String taskId, ActionListener<String> listener) {
+        getLatestTaskExecution(taskId, ActionListener.wrap(taskExecution -> {
+            if (StringUtils.equals(taskExecution.getState(), AnomalyDetectionTaskState.RUNNING.name())) {
+                listener.onFailure(new RuntimeException("Task is running, please stop task before deleting"));
+                return;
+            }
+            deleteTaskExecution(taskId, ActionListener.wrap(deleteResponse -> {
+                deleteTaskDoc(
+                    taskId,
+                    ActionListener
+                        .wrap(
+                            deleteTaskResponse -> { listener.onResponse("Task deleted successfully"); },
+                            deleteTaskException -> listener.onFailure(deleteTaskException)
+                        )
+                );
+                // if (deleteResponse.getStatus() == BulkByScrollTask.Status.)
+            }, deleteException -> { listener.onFailure(deleteException); }));
+        }, e -> {
+            log.error("Fail to delete task " + taskId, e);
+            listener.onFailure(e);
+        }));
+
+    }
+
+    private void getLatestTaskExecution(String taskId, ActionListener<AnomalyDetectionTaskExecution> listener) {
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        searchSourceBuilder.query(QueryBuilders.termQuery("task_id", taskId)).size(1).sort("execution_start_time", SortOrder.DESC);
+        SearchRequest searchRequest = new SearchRequest(ANOMALY_DETECTION_TASK_EXECUTION_INDEX).source(searchSourceBuilder);
+        client.search(searchRequest, ActionListener.wrap(r -> {
+            if (r.getHits().getHits().length > 0) {
+                SearchHit hit = r.getHits().getAt(0);
+                try (
+                    XContentParser parser = XContentType.JSON
+                        .xContent()
+                        .createParser(NamedXContentRegistry.EMPTY, LoggingDeprecationHandler.INSTANCE, hit.getSourceAsString())
+                ) {
+                    ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser::getTokenLocation);
+                    AnomalyDetectionTaskExecution taskExecution = AnomalyDetectionTaskExecution.parse(parser);
+                    listener.onResponse(taskExecution);
+                } catch (Exception e) {
+                    listener.onFailure(e);
+                }
+            }
+        }, e -> listener.onFailure(e)));
+    }
+
+    // TODO: add delete old task executions in hourly cron
+    private void deleteTaskExecution(String taskId, ActionListener<BulkByScrollResponse> listener) {
+        DeleteByQueryRequest deleteRequest = new DeleteByQueryRequest(ANOMALY_DETECTION_TASK_EXECUTION_INDEX);
+        deleteRequest.setQuery(QueryBuilders.termQuery("task_id", taskId));
+        client.execute(DeleteByQueryAction.INSTANCE, deleteRequest, listener);
+    }
+
+    private void deleteTaskDoc(String taskId, ActionListener<DeleteResponse> listener) {
+        DeleteRequest deleteRequest = new DeleteRequest(ANOMALY_DETECTION_TASK_INDEX)
+            .id(taskId)
+            .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
+        client.delete(deleteRequest, listener);
+    }
+
+    public void getTask(String taskId, boolean returnTaskExecution, ActionListener<Map<String, Object>> listener) {
+        Map<String, Object> result = new HashMap<>();
+        GetRequest getRequest = new GetRequest(ANOMALY_DETECTION_TASK_INDEX).id(taskId);
+        client.get(getRequest, ActionListener.wrap(getTaskResponse -> {
+            if (getTaskResponse.isExists()) {
+                result.put("getTaskResponse", getTaskResponse);
+                try (
+                    XContentParser parser = XContentType.JSON
+                        .xContent()
+                        .createParser(NamedXContentRegistry.EMPTY, LoggingDeprecationHandler.INSTANCE, getTaskResponse.getSourceAsString())
+                ) {
+                    ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser::getTokenLocation);
+                    AnomalyDetectionTask task = AnomalyDetectionTask.parse(parser);
+                    result.put("AnomalyDetectionTask", task);
+
+                } catch (Exception e) {
+                    log.error("Fail to parse anomaly detection task " + taskId, e);
+                    listener.onFailure(e);
+                }
+
+                if (returnTaskExecution) {
+                    getLatestTaskExecution(taskId, ActionListener.wrap(taskExecution -> {
+                        result.put("AnomalyDetectionTaskExecution", taskExecution);
+                        listener.onResponse(result);
+                    }, taskExecutionException -> {
+                        if (taskExecutionException instanceof IndexNotFoundException) {
+                            listener.onResponse(result);
+                        }
+                        log.error("Fail to get task execution for task " + taskId, taskExecutionException);
+                        listener.onFailure(taskExecutionException);
+                    }));
+                } else {
+                    listener.onResponse(result);
+                }
+
+            } else {
+                listener.onFailure(new RuntimeException("Task not found"));
+            }
+        }, getTaskException -> {
+            if (getTaskException instanceof IndexNotFoundException) {
+                listener.onResponse(result);
+            }
+            listener.onFailure(getTaskException);
+        }));
+    }
 }

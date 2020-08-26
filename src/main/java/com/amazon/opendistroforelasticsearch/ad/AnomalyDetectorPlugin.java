@@ -217,7 +217,9 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             AnomalyDetectorSettings.NUM_MIN_SAMPLES
         );
         RestGetAnomalyDetectorAction restGetAnomalyDetectorAction = new RestGetAnomalyDetectorAction(profileRunner);
-        RestGetAnomalyDetectionTaskAction restGetAnomalyDetectionTaskAction = new RestGetAnomalyDetectionTaskAction();
+        RestGetAnomalyDetectionTaskAction restGetAnomalyDetectionTaskAction = new RestGetAnomalyDetectionTaskAction(
+            anomalyDetectionTaskManager
+        );
         RestIndexAnomalyDetectorAction restIndexAnomalyDetectorAction = new RestIndexAnomalyDetectorAction(
             settings,
             clusterService,

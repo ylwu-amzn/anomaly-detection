@@ -15,9 +15,8 @@
 
 package com.amazon.opendistroforelasticsearch.ad.rest;
 
-import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask.ANOMALY_DETECTION_TASK_INDEX;
 import static com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils.TASK_ID;
-import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
+import static com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils.onFailure;
 
 import java.io.IOException;
 import java.util.List;
@@ -26,25 +25,19 @@ import java.util.Locale;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
-import org.elasticsearch.action.get.MultiGetItemResponse;
-import org.elasticsearch.action.get.MultiGetRequest;
-import org.elasticsearch.action.get.MultiGetResponse;
+import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.client.node.NodeClient;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.rest.BaseRestHandler;
 import org.elasticsearch.rest.BytesRestResponse;
-import org.elasticsearch.rest.RestChannel;
 import org.elasticsearch.rest.RestRequest;
-import org.elasticsearch.rest.RestResponse;
 import org.elasticsearch.rest.RestStatus;
-import org.elasticsearch.rest.action.RestActions;
-import org.elasticsearch.rest.action.RestResponseListener;
 
 import com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorPlugin;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask;
 import com.amazon.opendistroforelasticsearch.ad.settings.EnabledSetting;
+import com.amazon.opendistroforelasticsearch.ad.task.AnomalyDetectionTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 import com.google.common.collect.ImmutableList;
 
@@ -55,6 +48,11 @@ public class RestGetAnomalyDetectionTaskAction extends BaseRestHandler {
 
     private static final String GET_ANOMALY_DETECTION_TASK_ACTION = "get_anomaly_detection_task";
     private static final Logger logger = LogManager.getLogger(RestGetAnomalyDetectionTaskAction.class);
+    private final AnomalyDetectionTaskManager anomalyDetectionTaskManager;
+
+    public RestGetAnomalyDetectionTaskAction(AnomalyDetectionTaskManager anomalyDetectionTaskManager) {
+        this.anomalyDetectionTaskManager = anomalyDetectionTaskManager;
+    }
 
     @Override
     public String getName() {
@@ -67,60 +65,35 @@ public class RestGetAnomalyDetectionTaskAction extends BaseRestHandler {
             throw new IllegalStateException(CommonErrorMessages.DISABLED_ERR_MSG);
         }
         String taskId = request.param(TASK_ID);
-        MultiGetRequest.Item adItem = new MultiGetRequest.Item(ANOMALY_DETECTION_TASK_INDEX, taskId)
-            .version(RestActions.parseVersion(request));
-        MultiGetRequest multiGetRequest = new MultiGetRequest().add(adItem);
+        boolean taskExecution = request.paramAsBoolean("execution", false);
 
-        return channel -> client.multiGet(multiGetRequest, onMultiGetResponse(channel, false, taskId));
-    }
-
-    private ActionListener<MultiGetResponse> onMultiGetResponse(RestChannel channel, boolean returnJob, String taskId) {
-        return new RestResponseListener<MultiGetResponse>(channel) {
-            @Override
-            public RestResponse buildResponse(MultiGetResponse multiGetResponse) throws Exception {
-                MultiGetItemResponse[] responses = multiGetResponse.getResponses();
-                XContentBuilder builder = null;
-                AnomalyDetectionTask task = null;
-                // TODO: support get task execution info
-                for (MultiGetItemResponse response : responses) {
-                    if (ANOMALY_DETECTION_TASK_INDEX.equals(response.getIndex())) {
-                        if (response.getResponse() == null || !response.getResponse().isExists()) {
-                            return new BytesRestResponse(RestStatus.NOT_FOUND, "Can't find anomaly detection task with id: " + taskId);
-                        }
-                        builder = channel
-                            .newBuilder()
-                            .startObject()
-                            .field(RestHandlerUtils._ID, response.getId())
-                            .field(RestHandlerUtils._VERSION, response.getResponse().getVersion())
-                            .field(RestHandlerUtils._PRIMARY_TERM, response.getResponse().getPrimaryTerm())
-                            .field(RestHandlerUtils._SEQ_NO, response.getResponse().getSeqNo());
-                        if (!response.getResponse().isSourceEmpty()) {
-                            try (
-                                XContentParser parser = RestHandlerUtils
-                                    .createXContentParser(channel, response.getResponse().getSourceAsBytesRef())
-                            ) {
-                                ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser::getTokenLocation);
-                                task = parser.namedObject(AnomalyDetectionTask.class, AnomalyDetectionTask.PARSE_FIELD_NAME, null);
-                            } catch (Exception e) {
-                                return buildInternalServerErrorResponse(
-                                    e,
-                                    "Failed to parse find anomaly detection task with id: " + taskId
-                                );
-                            }
-                        }
+        return channel -> {
+            anomalyDetectionTaskManager.getTask(taskId, taskExecution, ActionListener.wrap(r -> {
+                if (r.containsKey("AnomalyDetectionTask")) {
+                    AnomalyDetectionTask task = (AnomalyDetectionTask) r.get("AnomalyDetectionTask");
+                    GetResponse response = (GetResponse) r.get("getTaskResponse");
+                    XContentBuilder builder = channel
+                        .newBuilder()
+                        .startObject()
+                        .field(RestHandlerUtils._ID, response.getId())
+                        .field(RestHandlerUtils._VERSION, response.getVersion())
+                        .field(RestHandlerUtils._PRIMARY_TERM, response.getPrimaryTerm())
+                        .field(RestHandlerUtils._SEQ_NO, response.getSeqNo())
+                        .field(RestHandlerUtils.ANOMALY_DETECTION_TASK, task);
+                    if (r.containsKey("AnomalyDetectionTaskExecution")) {
+                        builder.field(RestHandlerUtils.ANOMALY_DETECTION_TASK_EXECUTION, r.get("AnomalyDetectionTaskExecution"));
                     }
+                    builder.endObject();
+                    channel.sendResponse(new BytesRestResponse(RestStatus.OK, builder));
+                } else {
+                    channel.sendResponse(new BytesRestResponse(RestStatus.OK, "Task not found"));
                 }
-
-                builder.field(RestHandlerUtils.ANOMALY_DETECTION_TASK, task);
-                builder.endObject();
-                return new BytesRestResponse(RestStatus.OK, builder);
-            }
+            }, e -> {
+                logger.error("Fail to get anomaly detection task " + taskId, e);
+                onFailure(channel, e);
+            }));
         };
-    }
 
-    private RestResponse buildInternalServerErrorResponse(Exception e, String errorMsg) {
-        logger.error(errorMsg, e);
-        return new BytesRestResponse(RestStatus.INTERNAL_SERVER_ERROR, errorMsg);
     }
 
     @Override
