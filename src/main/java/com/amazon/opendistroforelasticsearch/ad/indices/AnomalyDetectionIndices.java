@@ -15,12 +15,16 @@
 
 package com.amazon.opendistroforelasticsearch.ad.indices;
 
+import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask.ANOMALY_DETECTION_TASK_INDEX;
+import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTaskExecution.ANOMALY_DETECTION_TASK_EXECUTION_INDEX;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.AD_RESULT_HISTORY_MAX_DOCS;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.AD_RESULT_HISTORY_RETENTION_PERIOD;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.AD_RESULT_HISTORY_ROLLOVER_PERIOD;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.ANOMALY_DETECTION_STATE_INDEX_MAPPING_FILE;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.ANOMALY_DETECTORS_INDEX_MAPPING_FILE;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.ANOMALY_DETECTOR_JOBS_INDEX_MAPPING_FILE;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.ANOMALY_DETECTTION_TASKS_INDEX_MAPPING_FILE;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.ANOMALY_DETECTTION_TASK_EXECUTION_INDEX_MAPPING_FILE;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.ANOMALY_RESULTS_INDEX_MAPPING_FILE;
 
 import java.io.IOException;
@@ -269,6 +273,64 @@ public class AnomalyDetectionIndices implements LocalNodeMasterListener {
     public void initDetectorStateIndex(ActionListener<CreateIndexResponse> actionListener) throws IOException {
         CreateIndexRequest request = new CreateIndexRequest(DetectorInternalState.DETECTOR_STATE_INDEX)
             .mapping(AnomalyDetector.TYPE, getDetectorStateMappings(), XContentType.JSON);
+        adminClient.indices().create(request, actionListener);
+    }
+
+    /**
+     * Get anomaly detection task index mapping json content.
+     *
+     * @return anomaly detector job index mapping
+     * @throws IOException IOException if mapping file can't be read correctly
+     */
+    private String getAnomalyDetectionTaskMappings() throws IOException {
+        URL url = AnomalyDetectionIndices.class.getClassLoader().getResource(ANOMALY_DETECTTION_TASKS_INDEX_MAPPING_FILE);
+        return Resources.toString(url, Charsets.UTF_8);
+    }
+
+    private String getAnomalyDetectionTaskExecutionMappings() throws IOException {
+        URL url = AnomalyDetectionIndices.class.getClassLoader().getResource(ANOMALY_DETECTTION_TASK_EXECUTION_INDEX_MAPPING_FILE);
+        return Resources.toString(url, Charsets.UTF_8);
+    }
+
+    public boolean doesAnomalyDetectionTaskIndexExist() {
+        return doesIndexExist(ANOMALY_DETECTION_TASK_INDEX);
+    }
+
+    public boolean doesAnomalyDetectionTaskExecutionIndexExist() {
+        return doesIndexExist(ANOMALY_DETECTION_TASK_EXECUTION_INDEX);
+    }
+
+    private boolean doesIndexExist(String indexName) {
+        return clusterService.state().metadata().hasIndex(indexName);
+    }
+
+    public void initAnomalyDetectionTaskIndexIfAbsent(ActionListener<CreateIndexResponse> actionListener) throws IOException {
+        if (!doesAnomalyDetectionTaskIndexExist()) {
+            initAnomalyDetectionTaskIndexDirectly(actionListener);
+        }
+    }
+
+    public void initAnomalyDetectionTaskIndexDirectly(ActionListener<CreateIndexResponse> actionListener) throws IOException {
+        String mapping = getAnomalyDetectionTaskMappings();
+        initIndexDirectly(mapping, ANOMALY_DETECTION_TASK_INDEX, actionListener);
+    }
+
+    public void initAnomalyDetectionTaskExecutionIndexDirectly(ActionListener<CreateIndexResponse> actionListener) throws IOException {
+        String mapping = getAnomalyDetectionTaskExecutionMappings();
+        initIndexDirectly(mapping, ANOMALY_DETECTION_TASK_EXECUTION_INDEX, actionListener);
+    }
+
+    private void initIndexDirectly(String mapping, String indexName, ActionListener<CreateIndexResponse> actionListener)
+        throws IOException {
+        initIndexDirectly(mapping, indexName, null, actionListener);
+    }
+
+    private void initIndexDirectly(String mapping, String indexName, String alias, ActionListener<CreateIndexResponse> actionListener)
+        throws IOException {
+        CreateIndexRequest request = new CreateIndexRequest(indexName).mapping(MAPPING_TYPE, mapping, XContentType.JSON);
+        if (alias != null) {
+            request.alias(new Alias(alias));
+        }
         adminClient.indices().create(request, actionListener);
     }
 

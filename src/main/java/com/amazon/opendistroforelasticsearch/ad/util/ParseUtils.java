@@ -22,11 +22,14 @@ import static org.elasticsearch.search.aggregations.AggregatorFactories.VALID_AG
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.regex.Matcher;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.common.ParsingException;
 import org.elasticsearch.common.xcontent.LoggingDeprecationHandler;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
@@ -39,16 +42,25 @@ import org.elasticsearch.search.aggregations.AggregationBuilder;
 import org.elasticsearch.search.aggregations.AggregatorFactories;
 import org.elasticsearch.search.aggregations.BaseAggregationBuilder;
 import org.elasticsearch.search.aggregations.PipelineAggregationBuilder;
+import org.elasticsearch.search.aggregations.bucket.composite.CompositeAggregationBuilder;
+import org.elasticsearch.search.aggregations.bucket.composite.CompositeValuesSourceBuilder;
+import org.elasticsearch.search.aggregations.bucket.composite.DateHistogramValuesSourceBuilder;
+import org.elasticsearch.search.aggregations.bucket.histogram.DateHistogramInterval;
 import org.elasticsearch.search.aggregations.bucket.range.DateRangeAggregationBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.Feature;
+import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
 
 /**
  * Parsing utility functions.
  */
 public final class ParseUtils {
+    private static final Logger log = LogManager.getLogger(ParseUtils.class);
+    private static final int MAX_SIZE = 1000;
+    public static final String FEATURE_DATA = "feature_data";
+    public static final String DATE_HISTOGRAM = "date_histogram";
 
     private ParseUtils() {}
 
@@ -262,6 +274,55 @@ public final class ParseUtils {
         }
 
         return factories;
+    }
+
+    public static SearchSourceBuilder generateFeatureQuerySearchRequest(
+        AnomalyDetector detector,
+        long startTime,
+        long endTime,
+        NamedXContentRegistry xContentRegistry
+    ) throws IOException {
+
+        RangeQueryBuilder rangeQuery = new RangeQueryBuilder(detector.getTimeField())
+            .from(startTime)
+            .to(endTime)
+            .format("epoch_millis")
+            .includeLower(true)
+            .includeUpper(false);
+
+        BoolQueryBuilder internalFilterQuery = QueryBuilders.boolQuery().must(rangeQuery).must(detector.getFilterQuery());
+
+        long intervalSeconds = ((IntervalTimeConfiguration) detector.getDetectionInterval()).toDuration().getSeconds();
+
+        List<CompositeValuesSourceBuilder<?>> sources = new ArrayList<>();
+        sources
+            .add(
+                new DateHistogramValuesSourceBuilder(DATE_HISTOGRAM)
+                    .field(detector.getTimeField())
+                    .fixedInterval(DateHistogramInterval.seconds((int) intervalSeconds))
+            );
+
+        CompositeAggregationBuilder aggregationBuilder = new CompositeAggregationBuilder(FEATURE_DATA, sources).size(MAX_SIZE);
+
+        if (detector.getFeatureAttributes() != null) {
+            for (Feature feature : detector.getFeatureAttributes()) {
+                if (feature.getEnabled()) {
+                    AggregatorFactories.Builder internalAgg = parseAggregators(
+                        feature.getAggregation().toString(),
+                        xContentRegistry,
+                        feature.getId()
+                    );
+                    aggregationBuilder.subAggregation(internalAgg.getAggregatorFactories().iterator().next());
+                }
+            }
+        }
+
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        searchSourceBuilder.aggregation(aggregationBuilder);
+        searchSourceBuilder.query(internalFilterQuery);
+        searchSourceBuilder.size(0);
+
+        return searchSourceBuilder;
     }
 
     public static SearchSourceBuilder generateInternalFeatureQuery(

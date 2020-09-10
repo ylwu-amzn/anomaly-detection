@@ -249,6 +249,16 @@ List<String> jacocoExclusions = [
         'com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorRunner',
         'com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices',
         'com.amazon.opendistroforelasticsearch.ad.util.ParseUtils',
+
+        // AD workbench
+        'com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultBatchTransportAction',
+        'com.amazon.opendistroforelasticsearch.ad.transport.handler.AnomalyResultBulkIndexHandler',
+        'com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultBatchRequest',
+        'com.amazon.opendistroforelasticsearch.ad.transport.AnomalyDetectionBatchTask',
+        'com.amazon.opendistroforelasticsearch.ad.task.AnomalyDetectionTaskManager',
+        'com.amazon.opendistroforelasticsearch.ad.task.AnomalyDetectionTaskState',
+        'com.amazon.opendistroforelasticsearch.ad.feature.SinglePointFeatures',
+        'com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultBatchResponse'
 ]
 
 jacocoTestCoverageVerification {

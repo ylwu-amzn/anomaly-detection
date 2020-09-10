@@ -140,6 +140,8 @@ public final class AnomalyDetectorSettings {
 
     public static final String ANOMALY_DETECTORS_INDEX_MAPPING_FILE = "mappings/anomaly-detectors.json";
     public static final String ANOMALY_DETECTOR_JOBS_INDEX_MAPPING_FILE = "mappings/anomaly-detector-jobs.json";
+    public static final String ANOMALY_DETECTTION_TASKS_INDEX_MAPPING_FILE = "mappings/anomaly-detection-tasks.json";
+    public static final String ANOMALY_DETECTTION_TASK_EXECUTION_INDEX_MAPPING_FILE = "mappings/anomaly-detection-task-executions.json";
     public static final String ANOMALY_RESULTS_INDEX_MAPPING_FILE = "mappings/anomaly-results.json";
     public static final String ANOMALY_DETECTION_STATE_INDEX_MAPPING_FILE = "mappings/anomaly-detection-state.json";
 

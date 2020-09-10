@@ -20,6 +20,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.xcontent.LoggingDeprecationHandler;
@@ -27,6 +29,7 @@ import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.rest.BytesRestResponse;
 import org.elasticsearch.rest.RestChannel;
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.search.fetch.subphase.FetchSourceContext;
@@ -40,6 +43,7 @@ import com.google.common.collect.ImmutableMap;
  */
 public final class RestHandlerUtils {
 
+    private static final Logger LOG = LogManager.getLogger(RestHandlerUtils.class);
     public static final String _ID = "_id";
     public static final String _VERSION = "_version";
     public static final String _SEQ_NO = "_seq_no";
@@ -48,7 +52,10 @@ public final class RestHandlerUtils {
     public static final String IF_PRIMARY_TERM = "if_primary_term";
     public static final String REFRESH = "refresh";
     public static final String DETECTOR_ID = "detectorID";
+    public static final String TASK_ID = "taskID";
     public static final String ANOMALY_DETECTOR = "anomaly_detector";
+    public static final String ANOMALY_DETECTION_TASK = "anomaly_detection_task";
+    public static final String ANOMALY_DETECTION_TASK_EXECUTION = "anomaly_detection_task_execution";
     public static final String ANOMALY_DETECTOR_JOB = "anomaly_detector_job";
     public static final String RUN = "_run";
     public static final String PREVIEW = "_preview";
@@ -120,5 +127,15 @@ public final class RestHandlerUtils {
             errorMsgBuilder.append(String.join(", ", duplicateFeatureAggNames));
         }
         return errorMsgBuilder.toString();
+    }
+
+    public static void onFailure(RestChannel channel, Exception e) {
+        if (e != null) {
+            try {
+                channel.sendResponse(new BytesRestResponse(channel, e));
+            } catch (IOException e1) {
+                LOG.warn("Fail to send out failure message of exception", e);
+            }
+        }
     }
 }

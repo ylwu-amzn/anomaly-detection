@@ -1,0 +1,80 @@
+{
+  "dynamic": false,
+  "_meta": {
+    "schema_version": 1
+  },
+  "properties": {
+    "schema_version": {
+      "type": "integer"
+    },
+    "name": {
+      "type": "text",
+      "fields": {
+        "keyword": {
+          "type": "keyword",
+          "ignore_above": 256
+        }
+      }
+    },
+    "description": {
+      "type": "text"
+    },
+    "detector_id": {
+      "type": "keyword"
+    },
+    "checkpoint_id": {
+      "type": "keyword"
+    },
+    "model_parameters": {
+      "properties": {
+        "rcf": {
+          "properties": {
+            "tree_number": {
+              "type": "integer"
+            },
+            "tree_size": {
+              "type": "integer"
+            },
+            "shingle_size": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    },
+    "schedule": {
+      "properties": {
+        "period": {
+          "properties": {
+            "interval": {
+              "type": "integer"
+            },
+            "unit": {
+              "type": "keyword"
+            }
+          }
+        }
+      }
+    },
+    "data_start_time": {
+      "type": "date",
+      "format": "strict_date_time||epoch_millis"
+    },
+    "data_end_time": {
+      "type": "date",
+      "format": "strict_date_time||epoch_millis"
+    },
+    "run_at": {
+      "type": "date",
+      "format": "strict_date_time||epoch_millis"
+    },
+    "last_update_time": {
+      "type": "date",
+      "format": "strict_date_time||epoch_millis"
+    },
+    "ui_metadata": {
+      "type": "object",
+      "enabled": false
+    }
+  }
+}
