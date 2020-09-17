@@ -79,6 +79,7 @@ import com.amazon.opendistroforelasticsearch.ad.ml.CheckpointDao;
 import com.amazon.opendistroforelasticsearch.ad.ml.HybridThresholdingModel;
 import com.amazon.opendistroforelasticsearch.ad.ml.ModelManager;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask;
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTaskExecution;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyResult;
@@ -373,6 +374,9 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             .<String, ADStat<?>>builder()
             .put(StatNames.AD_EXECUTE_REQUEST_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
             .put(StatNames.AD_EXECUTE_FAIL_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
+            .put(StatNames.AD_EXECUTE_TASK_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
+            .put(StatNames.AD_CANCEL_TASK_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
+            .put(StatNames.AD_EXECUTE_TASK_FAIL_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
             .put(StatNames.MODEL_INFORMATION.getName(), new ADStat<>(false, new ModelsOnNodeSupplier(modelManager)))
             .put(
                 StatNames.ANOMALY_DETECTORS_INDEX_STATUS.getName(),
@@ -383,10 +387,26 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 new ADStat<>(true, new IndexStatusSupplier(indexUtils, AnomalyResult.ANOMALY_RESULT_INDEX))
             )
             .put(
+                StatNames.ANOMALY_DETECTION_TASK_INDEX_STATUS.getName(),
+                new ADStat<>(true, new IndexStatusSupplier(indexUtils, AnomalyDetectionTask.ANOMALY_DETECTION_TASK_INDEX))
+            )
+            .put(
+                StatNames.ANOMALY_DETECTION_TASK_EXECUTION_INDEX_STATUS.getName(),
+                new ADStat<>(
+                    true,
+                    new IndexStatusSupplier(indexUtils, AnomalyDetectionTaskExecution.ANOMALY_DETECTION_TASK_EXECUTION_INDEX)
+                )
+            )
+            .put(
+                StatNames.ANOMALY_DETECTION_JOB_INDEX_STATUS.getName(),
+                new ADStat<>(true, new IndexStatusSupplier(indexUtils, AnomalyDetectorJob.ANOMALY_DETECTOR_JOB_INDEX))
+            )
+            .put(
                 StatNames.MODELS_CHECKPOINT_INDEX_STATUS.getName(),
                 new ADStat<>(true, new IndexStatusSupplier(indexUtils, CommonName.CHECKPOINT_INDEX_NAME))
             )
             .put(StatNames.DETECTOR_COUNT.getName(), new ADStat<>(true, new SettableSupplier()))
+            .put(StatNames.TASK_COUNT.getName(), new ADStat<>(true, new SettableSupplier()))
             .build();
 
         adStats = new ADStats(indexUtils, modelManager, stats);

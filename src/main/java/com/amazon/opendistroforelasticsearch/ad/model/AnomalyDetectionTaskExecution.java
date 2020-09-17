@@ -50,6 +50,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
     public static final String ANOMALY_DETECTION_TASK_EXECUTION_INDEX = ".opendistro-anomaly-detection-task-executions";
     public static final String TYPE = "_doc";
 
+    private static final String TASK_EXECUTION_ID_FIELD = "task_execution_id";
     private static final String TASK_ID_FIELD = "task_id";
     private static final String DETECTOR_ID_FIELD = "detector_id";
     private static final String DESCRIPTION_FIELD = "description";
@@ -64,6 +65,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
     private static final String LAST_UPDATE_TIME_FIELD = "last_update_time";
     private static Logger logger = LogManager.getLogger(AnomalyDetectionTaskExecution.class);
 
+    private final String taskExecutionId;
     private final String taskId;
     private final String detectorId;
     private final Long version;
@@ -91,12 +93,45 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
         Integer schemaVersion,
         Instant lastUpdateTime
     ) {
+        this(
+            null,
+            taskId,
+            detectorId,
+            version,
+            dataStartTime,
+            dataEndTime,
+            executionStartTime,
+            executionEndTime,
+            currentDetectionInterval,
+            state,
+            error,
+            schemaVersion,
+            lastUpdateTime
+        );
+    }
+
+    public AnomalyDetectionTaskExecution(
+        String taskExecutionId,
+        String taskId,
+        String detectorId,
+        Long version,
+        Instant dataStartTime,
+        Instant dataEndTime,
+        Instant executionStartTime,
+        Instant executionEndTime,
+        Instant currentDetectionInterval,
+        String state,
+        String error,
+        Integer schemaVersion,
+        Instant lastUpdateTime
+    ) {
         if (Strings.isBlank(taskId)) {
             throw new IllegalArgumentException("Detection task id should be set");
         }
         if (Strings.isBlank(detectorId)) {
             throw new IllegalArgumentException("Detector id should be set");
         }
+        this.taskExecutionId = taskExecutionId;
         this.taskId = taskId;
         this.detectorId = detectorId;
         this.version = version;
@@ -123,6 +158,9 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
             .field(DETECTOR_ID_FIELD, detectorId)
             .field(STATE_FIELD, state)
             .field(SCHEMA_VERSION_FIELD, schemaVersion);
+        if (taskExecutionId != null) {
+            xContentBuilder.field(TASK_EXECUTION_ID_FIELD, taskExecutionId);
+        }
         if (dataStartTime != null) {
             xContentBuilder.field(DATA_START_TIME_FIELD, dataStartTime.toEpochMilli());
         }
@@ -148,10 +186,14 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
     }
 
     public static AnomalyDetectionTaskExecution parse(XContentParser parser) throws IOException {
-        return parse(parser, null);
+        return parse(parser, null, null);
     }
 
-    public static AnomalyDetectionTaskExecution parse(XContentParser parser, Long version) throws IOException {
+    public static AnomalyDetectionTaskExecution parse(XContentParser parser, String taskExecutionId) throws IOException {
+        return parse(parser, null, taskExecutionId);
+    }
+
+    public static AnomalyDetectionTaskExecution parse(XContentParser parser, Long version, String taskExecutionId) throws IOException {
         String taskId = null;
         String detectorId = null;
         String state = null;
@@ -211,6 +253,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
         }
 
         return new AnomalyDetectionTaskExecution(
+            taskExecutionId,
             taskId,
             detectorId,
             version,

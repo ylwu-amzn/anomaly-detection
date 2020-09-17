@@ -346,7 +346,7 @@ public class AnomalyDetectionTaskManager {
                         .createParser(NamedXContentRegistry.EMPTY, LoggingDeprecationHandler.INSTANCE, hit.getSourceAsString())
                 ) {
                     ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser::getTokenLocation);
-                    AnomalyDetectionTaskExecution taskExecution = AnomalyDetectionTaskExecution.parse(parser);
+                    AnomalyDetectionTaskExecution taskExecution = AnomalyDetectionTaskExecution.parse(parser, hit.getId());
                     listener.onResponse(taskExecution);
                 } catch (Exception e) {
                     listener.onFailure(e);
@@ -396,9 +396,10 @@ public class AnomalyDetectionTaskManager {
                     }, taskExecutionException -> {
                         if (taskExecutionException instanceof IndexNotFoundException) {
                             listener.onResponse(result);
+                        } else {
+                            log.error("Fail to get task execution for task " + taskId, taskExecutionException);
+                            listener.onFailure(taskExecutionException);
                         }
-                        log.error("Fail to get task execution for task " + taskId, taskExecutionException);
-                        listener.onFailure(taskExecutionException);
                     }));
                 } else {
                     listener.onResponse(result);

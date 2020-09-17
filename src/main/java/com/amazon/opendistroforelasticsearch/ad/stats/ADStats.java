@@ -60,7 +60,7 @@ public class ADStats {
      * @throws IllegalArgumentException thrown on illegal statName
      */
     public ADStat<?> getStat(String key) throws IllegalArgumentException {
-        if (!stats.keySet().contains(key)) {
+        if (!stats.containsKey(key)) {
             throw new IllegalArgumentException("Stat=\"" + key + "\" does not exist");
         }
         return stats.get(key);

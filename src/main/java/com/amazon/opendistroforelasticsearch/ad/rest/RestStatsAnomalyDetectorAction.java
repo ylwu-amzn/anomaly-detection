@@ -191,7 +191,28 @@ public class RestStatsAnomalyDetectorAction extends BaseRestHandler {
                 adStatsResponse.setClusterStats(getClusterStatsMap(adStatsRequest));
                 listener.onResponse(adStatsResponse);
             }
-        } else {
+        }
+        // TODO: add task count metrics
+        // if (adStatsRequest.getStatsToBeRetrieved().contains(StatNames.TASK_COUNT.getName())) {
+        // clusterService.state().get
+        // if (clusterService.state().getRoutingTable().hasIndex(AnomalyDetectionTask.ANOMALY_DETECTION_TASK_INDEX)) {
+        // final SearchRequest request = client
+        // .prepareSearch(AnomalyDetectionTask.ANOMALY_DETECTION_TASK_INDEX)
+        // .setSize(0)
+        // .setTrackTotalHits(true)
+        // .request();
+        // client.search(request, ActionListener.wrap(indicesStatsResponse -> {
+        // adStats.getStat(StatNames.TASK_COUNT.getName()).setValue(indicesStatsResponse.getHits().getTotalHits().value);
+        // adStatsResponse.setClusterStats(getClusterStatsMap(adStatsRequest));
+        // listener.onResponse(adStatsResponse);
+        // }, e -> listener.onFailure(new RuntimeException("Failed to get AD cluster stats", e))));
+        // } else {
+        // adStats.getStat(StatNames.TASK_COUNT.getName()).setValue(0L);
+        // adStatsResponse.setClusterStats(getClusterStatsMap(adStatsRequest));
+        // listener.onResponse(adStatsResponse);
+        // }
+        // }
+        else {
             adStatsResponse.setClusterStats(getClusterStatsMap(adStatsRequest));
             listener.onResponse(adStatsResponse);
         }

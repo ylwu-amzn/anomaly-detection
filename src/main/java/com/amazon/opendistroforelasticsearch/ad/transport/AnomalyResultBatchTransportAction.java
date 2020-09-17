@@ -71,6 +71,7 @@ import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
 import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
 import com.amazon.opendistroforelasticsearch.ad.settings.EnabledSetting;
 import com.amazon.opendistroforelasticsearch.ad.stats.ADStats;
+import com.amazon.opendistroforelasticsearch.ad.stats.StatNames;
 import com.amazon.opendistroforelasticsearch.ad.task.AnomalyDetectionTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.task.AnomalyDetectionTaskState;
 import com.amazon.opendistroforelasticsearch.ad.transport.handler.AnomalyResultBulkIndexHandler;
@@ -155,19 +156,21 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
     }
 
     @Override
-    protected void doExecute(Task task, ActionRequest actionRequest, final ActionListener<AnomalyResultBatchResponse> listener) {
+    protected void doExecute(Task task, ActionRequest actionRequest, ActionListener<AnomalyResultBatchResponse> actionListener) {
         // TODO: threadId: 60, threadName: elasticsearch[integTest-0][ad-batch-task-threadpool][T#1]
         AnomalyDetectionBatchTask batchTask = (AnomalyDetectionBatchTask) task;
         LOG.info("Task cancellable: {}", batchTask.isCancelled());
 
         // TODO: add circuit breaker
         AnomalyResultBatchRequest request = AnomalyResultBatchRequest.fromActionRequest(actionRequest);
-        ActionListener<AnomalyResultBatchResponse> original = listener;
-        // listener = ActionListener.wrap(original::onResponse, e -> {
-        // //TODO: add task failure metrics
-        //// adStats.getStat(StatNames.AD_EXECUTE_BATCH_FAIL_COUNT.getName()).increment();
-        // original.onFailure(e);
-        // });
+        ActionListener<AnomalyResultBatchResponse> listener = ActionListener.wrap(actionListener::onResponse, e -> {
+            if (e instanceof TaskCancelledException) {
+                adStats.getStat(StatNames.AD_CANCEL_TASK_COUNT.getName()).increment();
+            } else {
+                adStats.getStat(StatNames.AD_EXECUTE_TASK_FAIL_COUNT.getName()).increment();
+            }
+            actionListener.onFailure(e);
+        });
 
         String detectorId = request.getDetectorId();
         String taskId = request.getTaskId();
@@ -192,6 +195,7 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
             if (!EnabledSetting.isADPluginEnabled()) {
                 throw new EndRunException(detectorId, CommonErrorMessages.DISABLED_ERR_MSG, true);
             }
+            adStats.getStat(StatNames.AD_EXECUTE_TASK_COUNT.getName()).increment();
             anomalyDetectionTaskManager.indexTaskExecution(taskExecution, taskExecutionId, ActionListener.wrap(r -> {
                 taskMap.put(taskExecutionId, batchTask);
                 try {
