@@ -39,6 +39,7 @@ import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.rest.RestStatus;
 
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.settings.EnabledSetting;
 import com.amazon.opendistroforelasticsearch.ad.stats.ADStats;
@@ -150,9 +151,13 @@ public class RestStatsAnomalyDetectorAction extends BaseRestHandler {
      */
     private void getStats(Client client, RestChannel channel, ADStatsRequest adStatsRequest) {
         // Use MultiResponsesDelegateActionListener to execute 2 async requests and create the response once they finish
+        int maxResponseCount = 2;
+        if (adStatsRequest.getStatsToBeRetrieved().contains(StatNames.TASK_COUNT.getName())) {
+            maxResponseCount += 1;
+        }
         MultiResponsesDelegateActionListener<ADStatsResponse> delegateListener = new MultiResponsesDelegateActionListener<>(
             getRestStatsListener(channel),
-            2,
+            maxResponseCount,
             "Unable to return AD Stats"
         );
 
@@ -192,27 +197,24 @@ public class RestStatsAnomalyDetectorAction extends BaseRestHandler {
                 listener.onResponse(adStatsResponse);
             }
         }
-        // TODO: add task count metrics
-        // if (adStatsRequest.getStatsToBeRetrieved().contains(StatNames.TASK_COUNT.getName())) {
-        // clusterService.state().get
-        // if (clusterService.state().getRoutingTable().hasIndex(AnomalyDetectionTask.ANOMALY_DETECTION_TASK_INDEX)) {
-        // final SearchRequest request = client
-        // .prepareSearch(AnomalyDetectionTask.ANOMALY_DETECTION_TASK_INDEX)
-        // .setSize(0)
-        // .setTrackTotalHits(true)
-        // .request();
-        // client.search(request, ActionListener.wrap(indicesStatsResponse -> {
-        // adStats.getStat(StatNames.TASK_COUNT.getName()).setValue(indicesStatsResponse.getHits().getTotalHits().value);
-        // adStatsResponse.setClusterStats(getClusterStatsMap(adStatsRequest));
-        // listener.onResponse(adStatsResponse);
-        // }, e -> listener.onFailure(new RuntimeException("Failed to get AD cluster stats", e))));
-        // } else {
-        // adStats.getStat(StatNames.TASK_COUNT.getName()).setValue(0L);
-        // adStatsResponse.setClusterStats(getClusterStatsMap(adStatsRequest));
-        // listener.onResponse(adStatsResponse);
-        // }
-        // }
-        else {
+        if (adStatsRequest.getStatsToBeRetrieved().contains(StatNames.TASK_COUNT.getName())) {
+            if (clusterService.state().getRoutingTable().hasIndex(AnomalyDetectionTask.ANOMALY_DETECTION_TASK_INDEX)) {
+                final SearchRequest request = client
+                    .prepareSearch(AnomalyDetectionTask.ANOMALY_DETECTION_TASK_INDEX)
+                    .setSize(0)
+                    .setTrackTotalHits(true)
+                    .request();
+                client.search(request, ActionListener.wrap(indicesStatsResponse -> {
+                    adStats.getStat(StatNames.TASK_COUNT.getName()).setValue(indicesStatsResponse.getHits().getTotalHits().value);
+                    adStatsResponse.setClusterStats(getClusterStatsMap(adStatsRequest));
+                    listener.onResponse(adStatsResponse);
+                }, e -> listener.onFailure(new RuntimeException("Failed to get AD cluster stats", e))));
+            } else {
+                adStats.getStat(StatNames.TASK_COUNT.getName()).setValue(0L);
+                adStatsResponse.setClusterStats(getClusterStatsMap(adStatsRequest));
+                listener.onResponse(adStatsResponse);
+            }
+        } else {
             adStatsResponse.setClusterStats(getClusterStatsMap(adStatsRequest));
             listener.onResponse(adStatsResponse);
         }
