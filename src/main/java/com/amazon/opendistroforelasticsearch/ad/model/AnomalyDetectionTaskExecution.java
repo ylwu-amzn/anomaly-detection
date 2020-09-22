@@ -56,11 +56,12 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
     public static final String DATA_END_TIME_FIELD = "data_end_time";
     private static final String EXECUTION_START_TIME_FIELD = "execution_start_time";
     public static final String EXECUTION_END_TIME_FIELD = "execution_end_time";
-    public static final String CURRENT_DETECTION_INTERVAL_FIELD = "current_detection_interval";
+    public static final String CURRENT_DETECTION_INTERVAL_FIELD = "current_piece_end_time";
+    public static final String PROGRESS_FIELD = "progress";
     public static final String STATE_FIELD = "state";
     public static final String ERROR_FIELD = "error";
     private static final String SCHEMA_VERSION_FIELD = "schema_version";
-    private static final String LAST_UPDATE_TIME_FIELD = "last_update_time";
+    public static final String LAST_UPDATE_TIME_FIELD = "last_update_time";
     private static Logger logger = LogManager.getLogger(AnomalyDetectionTaskExecution.class);
 
     private final String taskExecutionId;
@@ -72,6 +73,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
     private final Instant executionStartTime;
     private final Instant executionEndTime;
     private final Instant currentDetectionInterval;
+    private final Float progress;
     private final String state;
     private final String error;
     private final Integer schemaVersion;
@@ -86,6 +88,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
         Instant executionStartTime,
         Instant executionEndTime,
         Instant currentDetectionInterval,
+        Float progress,
         String state,
         String error,
         Integer schemaVersion,
@@ -101,6 +104,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
             executionStartTime,
             executionEndTime,
             currentDetectionInterval,
+            progress,
             state,
             error,
             schemaVersion,
@@ -118,6 +122,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
         Instant executionStartTime,
         Instant executionEndTime,
         Instant currentDetectionInterval,
+        Float progress,
         String state,
         String error,
         Integer schemaVersion,
@@ -135,6 +140,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
         this.executionStartTime = executionStartTime;
         this.executionEndTime = executionEndTime;
         this.currentDetectionInterval = currentDetectionInterval;
+        this.progress = progress;
         this.state = state;
         this.error = error;
         this.schemaVersion = schemaVersion;
@@ -177,6 +183,9 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
         if (lastUpdateTime != null) {
             xContentBuilder.timeField(LAST_UPDATE_TIME_FIELD, LAST_UPDATE_TIME_FIELD, lastUpdateTime.toEpochMilli());
         }
+        if (progress != null) {
+            xContentBuilder.field(PROGRESS_FIELD, progress);
+        }
         return xContentBuilder.endObject();
     }
 
@@ -197,6 +206,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
         Instant executionStartTime = null;
         Instant executionEndTime = null;
         Instant currentDetectionInterval = null;
+        Float progress = 0.0f;
         int schemaVersion = 0;
         String error = null;
         Instant lastUpdateTime = null;
@@ -235,6 +245,9 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
                 case CURRENT_DETECTION_INTERVAL_FIELD:
                     currentDetectionInterval = ParseUtils.toInstant(parser);
                     break;
+                case PROGRESS_FIELD:
+                    progress = parser.floatValue();
+                    break;
                 case ERROR_FIELD:
                     error = parser.text();
                     break;
@@ -257,6 +270,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
             executionStartTime,
             executionEndTime,
             currentDetectionInterval,
+            progress,
             state,
             error,
             schemaVersion,
@@ -280,6 +294,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
             && Objects.equals(executionStartTime, that.executionStartTime)
             && Objects.equals(executionEndTime, that.executionEndTime)
             && Objects.equals(currentDetectionInterval, that.currentDetectionInterval)
+            && Objects.equals(progress, that.progress)
             && Objects.equals(state, that.state)
             && Objects.equals(error, that.error)
             && Objects.equals(schemaVersion, that.schemaVersion)
@@ -297,6 +312,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
                 executionStartTime,
                 executionEndTime,
                 currentDetectionInterval,
+                progress,
                 state,
                 error,
                 schemaVersion,
@@ -310,6 +326,10 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
 
     public AnomalyDetectionTask getTask() {
         return task;
+    }
+
+    public Float getProgress() {
+        return progress;
     }
 
     public Long getVersion() {

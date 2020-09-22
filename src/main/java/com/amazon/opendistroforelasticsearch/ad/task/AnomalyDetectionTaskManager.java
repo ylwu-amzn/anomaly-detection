@@ -18,6 +18,10 @@ package com.amazon.opendistroforelasticsearch.ad.task;
 import static com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorPlugin.AD_BATCh_TASK_THREAD_POOL_NAME;
 import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask.ANOMALY_DETECTION_TASK_INDEX;
 import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTaskExecution.ANOMALY_DETECTION_TASK_EXECUTION_INDEX;
+import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTaskExecution.ERROR_FIELD;
+import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTaskExecution.EXECUTION_END_TIME_FIELD;
+import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTaskExecution.LAST_UPDATE_TIME_FIELD;
+import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTaskExecution.STATE_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils.XCONTENT_WITH_TYPE;
 import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
 
@@ -45,6 +49,8 @@ import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.support.WriteRequest;
+import org.elasticsearch.action.update.UpdateRequest;
+import org.elasticsearch.action.update.UpdateResponse;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.common.xcontent.LoggingDeprecationHandler;
@@ -57,6 +63,7 @@ import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.index.reindex.BulkByScrollResponse;
 import org.elasticsearch.index.reindex.DeleteByQueryAction;
 import org.elasticsearch.index.reindex.DeleteByQueryRequest;
+import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.sort.SortOrder;
@@ -72,6 +79,7 @@ import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTaskExecution;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultBatchAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultBatchRequest;
+import com.google.common.collect.ImmutableMap;
 
 public class AnomalyDetectionTaskManager {
     public static final String ANOMALY_DETECTION_TASK = "AnomalyDetectionTask";
@@ -133,6 +141,7 @@ public class AnomalyDetectionTaskManager {
                         if (exception instanceof IndexNotFoundException) {
                             prepareTask(taskId, task, listener);
                         } else {
+                            log.error("Failed to get latest task execution", exception);
                             listener.onFailure(exception);
                         }
                     }
@@ -185,6 +194,7 @@ public class AnomalyDetectionTaskManager {
             Instant.now(),
             null,
             task.getDataStartTime(),
+            0.0f,
             AnomalyDetectionTaskState.INIT.name(),
             null,
             0,
@@ -195,7 +205,7 @@ public class AnomalyDetectionTaskManager {
             if (response.getShardInfo().getSuccessful() < 1) {
                 listener.onFailure(new RuntimeException("Fail to index anomaly detection task execution"));
             }
-
+            // execute task
             executeTask(taskExecution, response.getId(), listener);
         }, exception -> { listener.onFailure(exception); }));
     }
@@ -212,6 +222,29 @@ public class AnomalyDetectionTaskManager {
         client.index(indexRequest, listener);
     }
 
+    public void updateTaskExecution(String taskExecutionId, Map<String, Object> updatedFields) {
+        updateTaskExecution(taskExecutionId, updatedFields, ActionListener.wrap(response -> {
+            if (response.status() == RestStatus.OK) {
+                log.info("Updated task execution result {}", response.status());
+            } else {
+                log.error("Failed to update task execution {}, status: {}", taskExecutionId, response.status());
+            }
+        }, exception -> { log.error("Failed to update task execution" + taskExecutionId, exception); }));
+    }
+
+    public void updateTaskExecution(String taskExecutionId, Map<String, Object> updatedFields, ActionListener<UpdateResponse> listener) {
+        UpdateRequest updateRequest = new UpdateRequest(ANOMALY_DETECTION_TASK_EXECUTION_INDEX, taskExecutionId);
+        Map<String, Object> updatedContent = new HashMap<>();
+        updatedContent.putAll(updatedFields);
+        updatedContent.put(LAST_UPDATE_TIME_FIELD, Instant.now().toEpochMilli());
+        updateRequest.doc(updatedContent);
+        client
+            .update(
+                updateRequest,
+                ActionListener.wrap(response -> listener.onResponse(response), exception -> listener.onFailure(exception))
+            );
+    }
+
     private void executeTask(AnomalyDetectionTaskExecution taskExecution, String taskExecutionId, ActionListener<String> listener) {
         try {
             threadPool.executor(AD_BATCh_TASK_THREAD_POOL_NAME).submit(taskRunnable(taskExecution, taskExecutionId));
@@ -219,31 +252,18 @@ public class AnomalyDetectionTaskManager {
         } catch (Exception e) {
             log.error("Fail to start AD batch task " + taskExecution.getTaskId(), e);
             listener.onFailure(e);
-            // TODO: catch exception, set task execution as failed.
-            AnomalyDetectionTaskExecution newTaskExecution = new AnomalyDetectionTaskExecution(
-                taskExecution.getTaskId(),
-                taskExecution.getTask(),
-                taskExecution.getVersion(),
-                taskExecution.getDataStartTime(),
-                taskExecution.getDataEndTime(),
-                taskExecution.getExecutionStartTime(),
-                Instant.now(),
-                taskExecution.getCurrentDetectionInterval(),
-                AnomalyDetectionTaskState.FAILED.name(),
-                ExceptionUtils.getFullStackTrace(e),
-                taskExecution.getSchemaVersion(),
-                Instant.now()
+            updateTaskExecution(
+                taskExecutionId,
+                ImmutableMap
+                    .of(
+                        STATE_FIELD,
+                        AnomalyDetectionTaskState.FAILED.name(),
+                        EXECUTION_END_TIME_FIELD,
+                        Instant.now(),
+                        ERROR_FIELD,
+                        ExceptionUtils.getFullStackTrace(e)
+                    )
             );
-            try {
-                indexTaskExecution(
-                    newTaskExecution,
-                    taskExecutionId,
-                    ActionListener
-                        .wrap(r -> { log.info(r.status()); }, exception -> { log.error("Fail to index task execution", exception); })
-                );
-            } catch (IOException exception) {
-                log.error("Fail to index task execution", exception);
-            }
         }
     }
 
@@ -261,49 +281,37 @@ public class AnomalyDetectionTaskManager {
                         AnomalyResultBatchAction.INSTANCE,
                         request,
                         ActionListener.wrap(response -> { log.info(response.getMessage()); }, exception -> {
-                            String state = exception instanceof TaskCancelledException
-                                ? AnomalyDetectionTaskState.CANCELLED.name()
-                                : AnomalyDetectionTaskState.FAILED.name();
-                            AnomalyDetectionTaskExecution newTaskExecution = new AnomalyDetectionTaskExecution(
-                                taskExecution.getTaskId(),
-                                taskExecution.getTask(),
-                                taskExecution.getVersion(),
-                                taskExecution.getDataStartTime(),
-                                taskExecution.getDataEndTime(),
-                                taskExecution.getExecutionStartTime(),
-                                Instant.now(),
-                                taskExecution.getCurrentDetectionInterval(),
-                                state,
-                                ExceptionUtils.getFullStackTrace(exception),
-                                taskExecution.getSchemaVersion(),
-                                Instant.now()
-                            );
-                            indexTaskExecution(newTaskExecution, taskExecutionId);
+                            String state = AnomalyDetectionTaskState.FAILED.name();
+                            Map<String, Object> updatedFields = new HashMap<>();
+                            if (exception instanceof TaskCancelledException) {
+                                state = AnomalyDetectionTaskState.CANCELLED.name();
+                            } else {
+                                updatedFields.put(ERROR_FIELD, ExceptionUtils.getFullStackTrace(exception));
+                            }
+                            updatedFields.put(STATE_FIELD, state);
+                            updateTaskExecution(taskExecutionId, updatedFields);
                             log.error("Fail to execute batch task action " + taskExecution.getTaskId(), exception);
                         })
                     );
             } catch (Exception e) {
                 log.error("Failed to execute task " + taskExecution.getTaskId(), e);
-                AnomalyDetectionTaskExecution newTaskExecution = new AnomalyDetectionTaskExecution(
-                    taskExecution.getTaskId(),
-                    taskExecution.getTask(),
-                    taskExecution.getVersion(),
-                    taskExecution.getDataStartTime(),
-                    taskExecution.getDataEndTime(),
-                    taskExecution.getExecutionStartTime(),
-                    Instant.now(),
-                    taskExecution.getCurrentDetectionInterval(),
-                    AnomalyDetectionTaskState.FAILED.name(),
-                    ExceptionUtils.getFullStackTrace(e),
-                    taskExecution.getSchemaVersion(),
-                    Instant.now()
+                updateTaskExecution(
+                    taskExecutionId,
+                    ImmutableMap
+                        .of(
+                            STATE_FIELD,
+                            AnomalyDetectionTaskState.FAILED.name(),
+                            EXECUTION_END_TIME_FIELD,
+                            Instant.now(),
+                            ERROR_FIELD,
+                            ExceptionUtils.getFullStackTrace(e)
+                        )
                 );
-                indexTaskExecution(newTaskExecution, taskExecutionId);
             }
         };
     }
 
-    public void indexTaskExecution(AnomalyDetectionTaskExecution taskExecution, String taskExecutionId) {
+    /*public void indexTaskExecution(AnomalyDetectionTaskExecution taskExecution, String taskExecutionId) {
         try {
             indexTaskExecution(
                 taskExecution,
@@ -313,8 +321,7 @@ public class AnomalyDetectionTaskManager {
         } catch (IOException exception) {
             log.error("Failed to index task execution" + taskExecutionId, exception);
         }
-
-    }
+    }*/
 
     public void stopTask(String taskId, ActionListener<String> listener) {
         ListTasksRequest listTasksRequest = new ListTasksRequest();
@@ -344,7 +351,7 @@ public class AnomalyDetectionTaskManager {
                     }));
                 });
             } else {
-                listener.onResponse("No running task found");
+                listener.onResponse("Task is not running");
             }
         }, exception -> {
             log.error("Fail to stop task " + taskId, exception);

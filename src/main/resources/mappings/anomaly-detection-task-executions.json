@@ -32,9 +32,12 @@
     "error": {
       "type": "text"
     },
-    "current_detection_interval": {
+    "current_piece_end_time": {
       "type": "date",
       "format": "strict_date_time||epoch_millis"
+    },
+    "progress": {
+      "type": "double"
     },
     "last_update_time": {
       "type": "date",
