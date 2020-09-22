@@ -10,9 +10,6 @@
     "task_id": {
       "type": "keyword"
     },
-    "detector_id": {
-      "type": "keyword"
-    },
     "data_start_time": {
       "type": "date",
       "format": "strict_date_time||epoch_millis"
@@ -42,6 +39,149 @@
     "last_update_time": {
       "type": "date",
       "format": "strict_date_time||epoch_millis"
+    },
+    "task": {
+      "properties": {
+        "name": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "description": {
+          "type": "text"
+        },
+        "checkpoint_id": {
+          "type": "keyword"
+        },
+        "model_parameters": {
+          "properties": {
+            "rcf": {
+              "properties": {
+                "tree_number": {
+                  "type": "integer"
+                },
+                "tree_size": {
+                  "type": "integer"
+                },
+                "shingle_size": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "schedule": {
+          "properties": {
+            "period": {
+              "properties": {
+                "interval": {
+                  "type": "integer"
+                },
+                "unit": {
+                  "type": "keyword"
+                }
+              }
+            }
+          }
+        },
+        "data_start_time": {
+          "type": "date",
+          "format": "strict_date_time||epoch_millis"
+        },
+        "data_end_time": {
+          "type": "date",
+          "format": "strict_date_time||epoch_millis"
+        },
+        "run_at": {
+          "type": "date",
+          "format": "strict_date_time||epoch_millis"
+        },
+        "time_field": {
+          "type": "keyword"
+        },
+        "indices": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "filter_query": {
+          "type": "object",
+          "enabled": false
+        },
+        "feature_attributes": {
+          "type": "nested",
+          "properties": {
+            "feature_id": {
+              "type": "keyword",
+              "fields": {
+                "keyword": {
+                  "type": "keyword",
+                  "ignore_above": 256
+                }
+              }
+            },
+            "feature_name": {
+              "type": "text",
+              "fields": {
+                "keyword": {
+                  "type": "keyword",
+                  "ignore_above": 256
+                }
+              }
+            },
+            "feature_enabled": {
+              "type": "boolean"
+            },
+            "aggregation_query": {
+              "type": "object",
+              "enabled": false
+            }
+          }
+        },
+        "detection_interval": {
+          "properties": {
+            "period": {
+              "properties": {
+                "interval": {
+                  "type": "integer"
+                },
+                "unit": {
+                  "type": "keyword"
+                }
+              }
+            }
+          }
+        },
+        "window_delay": {
+          "properties": {
+            "period": {
+              "properties": {
+                "interval": {
+                  "type": "integer"
+                },
+                "unit": {
+                  "type": "keyword"
+                }
+              }
+            }
+          }
+        },
+        "shingle_size": {
+          "type": "integer"
+        },
+        "last_update_time": {
+          "type": "date",
+          "format": "strict_date_time||epoch_millis"
+        }
+      }
     }
   }
 }

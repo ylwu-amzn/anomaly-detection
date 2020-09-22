@@ -51,6 +51,7 @@ import org.elasticsearch.search.aggregations.metrics.Percentile;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 
 import com.amazon.opendistroforelasticsearch.ad.dataprocessor.Interpolator;
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
 import com.amazon.opendistroforelasticsearch.ad.util.ClientUtil;
@@ -176,20 +177,20 @@ public class SearchFeatureDao {
     }
 
     public void getFeaturesForPeriodByBatch(
-        AnomalyDetector detector,
+        AnomalyDetectionTask task,
         long startTime,
         long endTime,
         ActionListener<List<Optional<double[]>>> listener
     ) throws IOException {
-        SearchSourceBuilder searchSourceBuilder = generateFeatureQuerySearchRequest(detector, startTime, endTime, xContent);
+        SearchSourceBuilder searchSourceBuilder = generateFeatureQuerySearchRequest(task, startTime, endTime, xContent);
 
-        SearchRequest searchRequest = new SearchRequest(detector.getIndices().toArray(new String[0])).source(searchSourceBuilder);
+        SearchRequest searchRequest = new SearchRequest(task.getIndices().toArray(new String[0])).source(searchSourceBuilder);
         client
             .search(
                 searchRequest,
                 ActionListener
                     .wrap(
-                        response -> { listener.onResponse(parseBucketAggregationResponse(response, detector.getEnabledFeatureIds())); },
+                        response -> { listener.onResponse(parseBucketAggregationResponse(response, task.getEnabledFeatureIds())); },
                         listener::onFailure
                     )
             );

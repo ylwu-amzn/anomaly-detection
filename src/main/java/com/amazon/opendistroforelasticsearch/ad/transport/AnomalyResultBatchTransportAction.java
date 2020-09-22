@@ -25,7 +25,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.logging.log4j.LogManager;
@@ -41,7 +40,6 @@ import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
-import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
@@ -57,14 +55,15 @@ import com.amazon.opendistroforelasticsearch.ad.common.exception.AnomalyDetectio
 import com.amazon.opendistroforelasticsearch.ad.common.exception.ClientException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.EndRunException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.InternalFailure;
+import com.amazon.opendistroforelasticsearch.ad.common.exception.ResourceNotFoundException;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
 import com.amazon.opendistroforelasticsearch.ad.feature.FeatureManager;
 import com.amazon.opendistroforelasticsearch.ad.feature.SinglePointFeatures;
 import com.amazon.opendistroforelasticsearch.ad.ml.HybridThresholdingModel;
 import com.amazon.opendistroforelasticsearch.ad.ml.ModelManager;
 import com.amazon.opendistroforelasticsearch.ad.ml.ThresholdingModel;
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTaskExecution;
-import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyResult;
 import com.amazon.opendistroforelasticsearch.ad.model.FeatureData;
 import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
@@ -172,14 +171,36 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
             actionListener.onFailure(e);
         });
 
-        String detectorId = request.getDetectorId();
         String taskId = request.getTaskId();
         String taskExecutionId = request.getTaskExecutionId();
 
         Instant executeStartTime = Instant.now();
+
+        anomalyDetectionTaskManager.getTask(taskId, false, ActionListener.wrap(response -> {
+            if (response.containsKey(AnomalyDetectionTaskManager.ANOMALY_DETECTION_TASK)) {
+                AnomalyDetectionTask anomalyDetectionTask = (AnomalyDetectionTask) response
+                    .get(AnomalyDetectionTaskManager.ANOMALY_DETECTION_TASK);
+
+                executeTask(batchTask, request, taskId, taskExecutionId, executeStartTime, anomalyDetectionTask, listener);
+
+            } else {
+                listener.onFailure(new ResourceNotFoundException("Can't find task"));
+            }
+        }, exception -> listener.onFailure(exception)));
+    }
+
+    private void executeTask(
+        AnomalyDetectionBatchTask batchTask,
+        AnomalyResultBatchRequest request,
+        String taskId,
+        String taskExecutionId,
+        Instant executeStartTime,
+        AnomalyDetectionTask anomalyDetectionTask,
+        ActionListener<AnomalyResultBatchResponse> listener
+    ) {
         AnomalyDetectionTaskExecution taskExecution = new AnomalyDetectionTaskExecution(
             taskId,
-            detectorId,
+            anomalyDetectionTask,
             null,
             Instant.ofEpochMilli(request.getStart()),
             Instant.ofEpochMilli(request.getEnd()),
@@ -192,34 +213,58 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
             Instant.now()
         );
         try {
-            if (!EnabledSetting.isADPluginEnabled()) {
-                throw new EndRunException(detectorId, CommonErrorMessages.DISABLED_ERR_MSG, true);
+            if (!EnabledSetting.isADPluginEnabled()) {// TODO check AD plugin enable or not at more places
+                throw new EndRunException(CommonErrorMessages.DISABLED_ERR_MSG, true);
             }
             adStats.getStat(StatNames.AD_EXECUTE_TASK_COUNT.getName()).increment();
             anomalyDetectionTaskManager.indexTaskExecution(taskExecution, taskExecutionId, ActionListener.wrap(r -> {
+                // TODO: remove task execution from map if error happens
                 taskMap.put(taskExecutionId, batchTask);
                 try {
                     checkTaskCancelled(taskExecutionId);
-                    stateManager
-                        .getAnomalyDetector(
-                            detectorId,
-                            onGetDetector(listener, detectorId, taskId, taskExecutionId, request, executeStartTime)
+                    if (!shouldStart(listener, anomalyDetectionTask)) {
+                        return;
+                    }
+                    long dataStartTime = request.getStart();
+                    long dataEndTime = request.getEnd();
+                    // Step2. get feature data
+                    long interval = ((IntervalTimeConfiguration) anomalyDetectionTask.getDetectionInterval()).toDuration().toMillis();
+                    // normalize start time to make it consistent with feature data agg result
+                    dataStartTime = dataStartTime - dataStartTime % interval;
+                    long timeStamp = dataStartTime + 1000 * interval > dataEndTime ? dataEndTime : dataStartTime + 1000 * interval;
+                    LOG
+                        .info(
+                            "start first piece from {} to {}, interval {}, dataStartTime {}, dataEndTime {}",
+                            dataStartTime,
+                            timeStamp,
+                            interval,
+                            dataStartTime,
+                            dataEndTime
                         );
-                    // threadPool.executor(AD_BATCh_TASK_THREAD_POOL_NAME).execute(
-                    // () -> stateManager.getAnomalyDetector(detectorId, onGetDetector(listener, detectorId, taskId, request)));
-
+                    getFeatureData(
+                        listener,
+                        taskId,
+                        taskExecutionId,
+                        anomalyDetectionTask,
+                        request,
+                        dataStartTime,
+                        timeStamp,
+                        dataEndTime,
+                        interval,
+                        executeStartTime
+                    );
                 } catch (Exception ex) {
-                    handleExecuteException(ex, listener, detectorId);
+                    handleExecuteException(ex, listener);
                 }
             }, e -> {
                 LOG.error("Fail to update task execution " + taskId, e);
                 listener.onFailure(e);
             }));
         } catch (IOException exception) {
+            // TODO: handle exception in task manager, persist error
             LOG.error("Fail to run task " + taskId, exception);
             listener.onFailure(exception);
         }
-
     }
 
     private void checkTaskCancelled(String taskExecutionId) {
@@ -229,75 +274,11 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
         }
     }
 
-    private ActionListener<Optional<AnomalyDetector>> onGetDetector(
-        ActionListener<AnomalyResultBatchResponse> listener,
-        String adID,
-        String taskId,
-        String taskExecutionId,
-        AnomalyResultBatchRequest request,
-        Instant executeStartTime
-    ) {
-        return ActionListener.wrap(detector -> {
-            if (!detector.isPresent()) {
-                listener.onFailure(new EndRunException(adID, "AnomalyDetector is not available.", true));
-                return;
-            }
-            AnomalyDetector anomalyDetector = detector.get();
-
-            String thresholdModelID = modelManager.getThresholdModelId(adID);
-            Optional<DiscoveryNode> asThresholdNode = hashRing.getOwningNode(thresholdModelID);
-            if (!asThresholdNode.isPresent()) {
-                listener.onFailure(new InternalFailure(adID, "Threshold model node is not available."));
-                return;
-            }
-
-            DiscoveryNode thresholdNode = asThresholdNode.get();
-
-            if (!shouldStart(listener, adID, anomalyDetector, thresholdNode.getId(), thresholdModelID)) {
-                return;
-            }
-
-            // long delayMillis = Optional
-            // .ofNullable((IntervalTimeConfiguration) anomalyDetector.getWindowDelay())
-            // .map(t -> t.toDuration().toMillis())
-            // .orElse(0L);
-            long dataStartTime = request.getStart();
-            long dataEndTime = request.getEnd();
-
-            // Step2. get feature data
-            long interval = ((IntervalTimeConfiguration) anomalyDetector.getDetectionInterval()).toDuration().toMillis();
-            dataStartTime = dataStartTime - dataStartTime % interval;
-            long timeStamp = dataStartTime + 1000 * interval > dataEndTime ? dataEndTime : dataStartTime + 1000 * interval;
-            LOG
-                .info(
-                    "start first piece from {} to {}, interval {}, dataStartTime {}, dataEndTime {}",
-                    dataStartTime,
-                    timeStamp,
-                    interval,
-                    dataStartTime,
-                    dataEndTime
-                );
-            getFeatureData(
-                listener,
-                taskId,
-                taskExecutionId,
-                anomalyDetector,
-                request,
-                dataStartTime,
-                timeStamp,
-                dataEndTime,
-                interval,
-                executeStartTime
-            );
-
-        }, exception -> handleExecuteException(exception, listener, adID));
-    }
-
     private void getFeatureData(
         ActionListener<AnomalyResultBatchResponse> listener,
         String taskId,
         String taskExecutionId,
-        AnomalyDetector detector,
+        AnomalyDetectionTask task,
         AnomalyResultBatchRequest request,
         long dataStartTime,
         long timeStamp,
@@ -309,13 +290,13 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
             checkTaskCancelled(taskExecutionId);
             featureManager
                 .getFeatures(
-                    detector,
+                    task,
                     dataStartTime,
                     timeStamp,
                     onFeatureResponseLocalRCF(
                         taskId,
                         taskExecutionId,
-                        detector,
+                        task,
                         listener,
                         request,
                         timeStamp,
@@ -325,7 +306,7 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
                     )
                 );
         } catch (Exception e) {
-            handleExecuteException(e, listener, detector.getDetectorId());
+            handleExecuteException(e, listener);
         }
 
     }
@@ -333,7 +314,7 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
     private ActionListener<List<SinglePointFeatures>> onFeatureResponseLocalRCF(
         String taskId,
         String taskExecutionId,
-        AnomalyDetector detector,
+        AnomalyDetectionTask task,
         ActionListener<AnomalyResultBatchResponse> listener,
         AnomalyResultBatchRequest request,
         long timeStamp,
@@ -344,16 +325,16 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
         ActionListener<List<SinglePointFeatures>> actionListener = ActionListener.wrap(featureList -> {
             if (featureList.size() == 0) {
                 LOG.error("No data in current window.");
-                runNextPiece(detector, taskId, taskExecutionId, request, timeStamp, dataEndTime, interval, listener, executeStartTime);
-            } else if (featureList.size() <= detector.getShingleSize()) { // TODO: change to shingle_size * 85% , add interpolation
+                runNextPiece(task, taskId, taskExecutionId, request, timeStamp, dataEndTime, interval, listener, executeStartTime);
+            } else if (featureList.size() <= task.getShingleSize()) { // TODO: change to shingle_size * 85% , add interpolation
                 LOG.error("No full shingle in current detection window");
-                runNextPiece(detector, taskId, taskExecutionId, request, timeStamp, dataEndTime, interval, listener, executeStartTime);
+                runNextPiece(task, taskId, taskExecutionId, request, timeStamp, dataEndTime, interval, listener, executeStartTime);
             } else {
                 getScoreFromRCF(
-                    detector,
+                    task,
                     taskId,
                     taskExecutionId,
-                    detector.getEnabledFeatureIds().size(),
+                    task.getEnabledFeatureIds().size(),
                     featureList,
                     request,
                     timeStamp,
@@ -372,7 +353,7 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
     }
 
     private void getScoreFromRCF(
-        AnomalyDetector detector,
+        AnomalyDetectionTask task,
         String taskId,
         String taskExecutionId,
         int enabledFeatureSize,
@@ -388,7 +369,7 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
             LOG.info("Create new RCF model for task {}", taskExecutionId);
             RandomCutForest rcf = RandomCutForest
                 .builder()
-                .dimensions(detector.getShingleSize() * enabledFeatureSize)
+                .dimensions(task.getShingleSize() * enabledFeatureSize)
                 .sampleSize(NUM_SAMPLES_PER_TREE)
                 .numberOfTrees(NUM_TREES)
                 .lambda(TIME_DECAY)
@@ -453,8 +434,8 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
 
             List<FeatureData> featureData = new ArrayList<>();
 
-            List<String> enabledFeatureIds = detector.getEnabledFeatureIds();
-            List<String> enabledFeatureNames = detector.getEnabledFeatureNames();
+            List<String> enabledFeatureIds = task.getEnabledFeatureIds();
+            List<String> enabledFeatureNames = task.getEnabledFeatureNames();
             for (int j = 0; j < enabledFeatureIds.size(); j++) {
                 featureData
                     .add(
@@ -467,7 +448,7 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
             }
 
             AnomalyResult anomalyResult = new AnomalyResult(
-                detector.getDetectorId(),
+                null, // TODO, add task id in AD result?
                 taskExecutionId,
                 score,
                 grade,
@@ -489,7 +470,7 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
                     .wrap(
                         response -> {
                             runNextPiece(
-                                detector,
+                                task,
                                 taskId,
                                 taskExecutionId,
                                 request,
@@ -510,7 +491,7 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
     }
 
     private void runNextPiece(
-        AnomalyDetector detector,
+        AnomalyDetectionTask task,
         String taskId,
         String taskExecutionId,
         AnomalyResultBatchRequest request,
@@ -521,14 +502,14 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
         Instant executeStartTime
     ) {
         if (timeStamp < dataEndTime) {
-            long endTimeStamp = timeStamp + (PIECE_SIZE - detector.getShingleSize() + 1) * interval > dataEndTime
+            long endTimeStamp = timeStamp + (PIECE_SIZE - task.getShingleSize() + 1) * interval > dataEndTime
                 ? dataEndTime
-                : timeStamp + (PIECE_SIZE - detector.getShingleSize() + 1) * interval;
+                : timeStamp + (PIECE_SIZE - task.getShingleSize() + 1) * interval;
             rateLimiter.acquire(60 / PIECES_PER_MINUTE);
             LOG.info("start next piece start from {} to {}, interval {}", timeStamp, endTimeStamp, interval);
             AnomalyDetectionTaskExecution taskExecution = new AnomalyDetectionTaskExecution(
                 taskId,
-                detector.getDetectorId(),
+                task,
                 null,
                 Instant.ofEpochMilli(request.getStart()),
                 Instant.ofEpochMilli(request.getEnd()),
@@ -546,9 +527,9 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
                         listener,
                         taskId,
                         taskExecutionId,
-                        detector,
+                        task,
                         request,
-                        timeStamp - (detector.getShingleSize() - 1) * interval,
+                        timeStamp - (task.getShingleSize() - 1) * interval,
                         endTimeStamp,
                         dataEndTime,
                         interval,
@@ -561,7 +542,7 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
         } else {
             AnomalyDetectionTaskExecution taskExecution = new AnomalyDetectionTaskExecution(
                 taskId,
-                detector.getDetectorId(),
+                task,
                 null,
                 Instant.ofEpochMilli(request.getStart()),
                 Instant.ofEpochMilli(request.getEnd()),
@@ -575,7 +556,7 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
             );
             try {
                 anomalyDetectionTaskManager.indexTaskExecution(taskExecution, taskExecutionId, ActionListener.wrap(r -> {
-                    LOG.info("all pieces finished for task {}, detector {}", taskExecutionId, detector.getDetectorId());
+                    LOG.info("all pieces finished for task {}, execution {}", task.getTaskId(), taskExecutionId);
                     AnomalyResultBatchResponse res = new AnomalyResultBatchResponse("task execution done");
                     taskThresholdModelMap.remove(taskExecutionId);
                     taskRcfMap.remove(taskExecutionId);
@@ -588,14 +569,14 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
         }
     }
 
-    void handleExecuteException(Exception ex, ActionListener<AnomalyResultBatchResponse> listener, String adID) {
+    void handleExecuteException(Exception ex, ActionListener<AnomalyResultBatchResponse> listener) {
         if (ex instanceof ClientException || ex instanceof TaskCancelledException) {
             listener.onFailure(ex);
         } else if (ex instanceof AnomalyDetectionException) {
             listener.onFailure(new InternalFailure((AnomalyDetectionException) ex));
         } else {
             Throwable cause = ExceptionsHelper.unwrapCause(ex);
-            listener.onFailure(new InternalFailure(adID, cause));
+            listener.onFailure(new InternalFailure(cause));
         }
     }
 
@@ -631,36 +612,71 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
      * Check if we should start anomaly prediction.
      *
      * @param listener listener to respond back to AnomalyResultRequest.
-     * @param adID     detector ID
-     * @param detector detector instance corresponds to adID
-     * @param thresholdNodeId the threshold model hosting node ID for adID
-     * @param thresholdModelID the threshold model ID for adID
+     * @param task anomaly detection task
      * @return if we can start anomaly prediction.
      */
-    private boolean shouldStart(
-        ActionListener<AnomalyResultBatchResponse> listener,
-        String adID,
-        AnomalyDetector detector,
-        String thresholdNodeId,
-        String thresholdModelID
-    ) {
+    private boolean shouldStart(ActionListener<AnomalyResultBatchResponse> listener, AnomalyDetectionTask task) {
         ClusterState state = clusterService.state();
         if (checkGlobalBlock(state)) {
-            listener.onFailure(new InternalFailure(adID, READ_WRITE_BLOCKED));
+            listener.onFailure(new InternalFailure(READ_WRITE_BLOCKED));
             return false;
         }
 
-        if (stateManager.isMuted(thresholdNodeId)) {
-            listener.onFailure(new InternalFailure(adID, String.format(NODE_UNRESPONSIVE_ERR_MSG + " %s", thresholdModelID)));
-            return false;
-        }
-
-        if (checkIndicesBlocked(state, ClusterBlockLevel.READ, detector.getIndices().toArray(new String[0]))) {
-            listener.onFailure(new InternalFailure(adID, INDEX_READ_BLOCKED));
+        if (checkIndicesBlocked(state, ClusterBlockLevel.READ, task.getIndices().toArray(new String[0]))) {
+            listener.onFailure(new InternalFailure(INDEX_READ_BLOCKED));
             return false;
         }
 
         return true;
     }
 
+    /*private ActionListener<Map<String, Object>> onGetTask(
+        String taskId,
+        String taskExecutionId,
+        AnomalyResultBatchRequest request,
+        Instant executeStartTime,
+        ActionListener<AnomalyResultBatchResponse> listener
+    ) {
+        return ActionListener.wrap(response -> {
+            if (response.containsKey(ANOMALY_DETECTION_TASK)) {
+                AnomalyDetectionTask task = (AnomalyDetectionTask) response.get(ANOMALY_DETECTION_TASK);
+                if (!shouldStart(listener, task)) {
+                    return;
+                }
+    
+                // long delayMillis = Optional
+                // .ofNullable((IntervalTimeConfiguration) task.getWindowDelay())
+                // .map(t -> t.toDuration().toMillis())
+                // .orElse(0L);
+                long dataStartTime = request.getStart();
+                long dataEndTime = request.getEnd();
+                // Step2. get feature data
+                long interval = ((IntervalTimeConfiguration) task.getDetectionInterval()).toDuration().toMillis();
+                // normalize start time to make it consistent with feature data agg result
+                dataStartTime = dataStartTime - dataStartTime % interval;
+                long timeStamp = dataStartTime + 1000 * interval > dataEndTime ? dataEndTime : dataStartTime + 1000 * interval;
+                LOG
+                    .info(
+                        "start first piece from {} to {}, interval {}, dataStartTime {}, dataEndTime {}",
+                        dataStartTime,
+                        timeStamp,
+                        interval,
+                        dataStartTime,
+                        dataEndTime
+                    );
+                getFeatureData(
+                    listener,
+                    taskId,
+                    taskExecutionId,
+                    task,
+                    request,
+                    dataStartTime,
+                    timeStamp,
+                    dataEndTime,
+                    interval,
+                    executeStartTime
+                );
+            }
+        }, exception -> listener.onFailure(new EndRunException("Task not found.", true)));
+    }*/
 }

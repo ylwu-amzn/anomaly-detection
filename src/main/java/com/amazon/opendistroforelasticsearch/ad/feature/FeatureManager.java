@@ -48,6 +48,7 @@ import org.elasticsearch.threadpool.ThreadPool;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.EndRunException;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
 import com.amazon.opendistroforelasticsearch.ad.dataprocessor.Interpolator;
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
 
@@ -187,12 +188,12 @@ public class FeatureManager {
             .collect(Collectors.toList());
     }
 
-    public void getFeatures(AnomalyDetector detector, long startTime, long endTime, ActionListener<List<SinglePointFeatures>> listener) {
+    public void getFeatures(AnomalyDetectionTask task, long startTime, long endTime, ActionListener<List<SinglePointFeatures>> listener) {
         try {
-            int shingleSize = detector.getShingleSize();
+            int shingleSize = task.getShingleSize();
             List<double[]> features = new ArrayList<>();
-            long interval = ((IntervalTimeConfiguration) detector.getDetectionInterval()).toDuration().toMillis();
-            searchFeatureDao.getFeaturesForPeriodByBatch(detector, startTime, endTime, ActionListener.wrap(points -> {
+            long interval = ((IntervalTimeConfiguration) task.getDetectionInterval()).toDuration().toMillis();
+            searchFeatureDao.getFeaturesForPeriodByBatch(task, startTime, endTime, ActionListener.wrap(points -> {
                 for (int i = 0; i < points.size(); i++) { // TODO: process missing values, by default missing values will not returned.
                     Optional<double[]> point = points.get(i);
                     features.add(point.get());
@@ -214,7 +215,7 @@ public class FeatureManager {
                 listener.onResponse(featureList);
             }, listener::onFailure));
         } catch (Exception e) {
-            logger.error("Failed to get features for " + detector.getDetectorId());
+            logger.error("Failed to get features for task: " + task.getTaskId());
         }
     }
 

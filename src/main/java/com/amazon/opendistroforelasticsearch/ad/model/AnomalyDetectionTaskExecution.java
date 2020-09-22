@@ -19,7 +19,6 @@ import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpect
 
 import java.io.IOException;
 import java.time.Instant;
-import java.util.Map;
 import java.util.Objects;
 
 import org.apache.logging.log4j.LogManager;
@@ -52,8 +51,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
 
     private static final String TASK_EXECUTION_ID_FIELD = "task_execution_id";
     private static final String TASK_ID_FIELD = "task_id";
-    private static final String DETECTOR_ID_FIELD = "detector_id";
-    private static final String DESCRIPTION_FIELD = "description";
+    private static final String TASK_FIELD = "task";
     private static final String DATA_START_TIME_FIELD = "data_start_time";
     public static final String DATA_END_TIME_FIELD = "data_end_time";
     private static final String EXECUTION_START_TIME_FIELD = "execution_start_time";
@@ -67,7 +65,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
 
     private final String taskExecutionId;
     private final String taskId;
-    private final String detectorId;
+    private final AnomalyDetectionTask task;
     private final Long version;
     private final Instant dataStartTime;
     private final Instant dataEndTime;
@@ -81,7 +79,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
 
     public AnomalyDetectionTaskExecution(
         String taskId,
-        String detectorId,
+        AnomalyDetectionTask task,
         Long version,
         Instant dataStartTime,
         Instant dataEndTime,
@@ -96,7 +94,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
         this(
             null,
             taskId,
-            detectorId,
+            task,
             version,
             dataStartTime,
             dataEndTime,
@@ -113,7 +111,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
     public AnomalyDetectionTaskExecution(
         String taskExecutionId,
         String taskId,
-        String detectorId,
+        AnomalyDetectionTask task,
         Long version,
         Instant dataStartTime,
         Instant dataEndTime,
@@ -128,12 +126,9 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
         if (Strings.isBlank(taskId)) {
             throw new IllegalArgumentException("Detection task id should be set");
         }
-        if (Strings.isBlank(detectorId)) {
-            throw new IllegalArgumentException("Detector id should be set");
-        }
         this.taskExecutionId = taskExecutionId;
         this.taskId = taskId;
-        this.detectorId = detectorId;
+        this.task = task;
         this.version = version;
         this.dataStartTime = dataStartTime;
         this.dataEndTime = dataEndTime;
@@ -155,9 +150,9 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
         XContentBuilder xContentBuilder = builder
             .startObject()
             .field(TASK_ID_FIELD, taskId)
-            .field(DETECTOR_ID_FIELD, detectorId)
             .field(STATE_FIELD, state)
-            .field(SCHEMA_VERSION_FIELD, schemaVersion);
+            .field(SCHEMA_VERSION_FIELD, schemaVersion)
+            .field(TASK_FIELD, task);
         if (taskExecutionId != null) {
             xContentBuilder.field(TASK_EXECUTION_ID_FIELD, taskExecutionId);
         }
@@ -195,7 +190,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
 
     public static AnomalyDetectionTaskExecution parse(XContentParser parser, Long version, String taskExecutionId) throws IOException {
         String taskId = null;
-        String detectorId = null;
+        AnomalyDetectionTask task = null;
         String state = null;
         Instant dataStartTime = null;
         Instant dataEndTime = null;
@@ -203,7 +198,6 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
         Instant executionEndTime = null;
         Instant currentDetectionInterval = null;
         int schemaVersion = 0;
-        Map<String, Object> uiMetadata = null;
         String error = null;
         Instant lastUpdateTime = null;
 
@@ -216,8 +210,9 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
                 case TASK_ID_FIELD:
                     taskId = parser.text();
                     break;
-                case DETECTOR_ID_FIELD:
-                    detectorId = parser.text();
+                case TASK_FIELD:
+                    ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.currentToken(), parser::getTokenLocation);
+                    task = AnomalyDetectionTask.parse(parser);
                     break;
                 case STATE_FIELD:
                     state = parser.text();
@@ -255,7 +250,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
         return new AnomalyDetectionTaskExecution(
             taskExecutionId,
             taskId,
-            detectorId,
+            task,
             version,
             dataStartTime,
             dataEndTime,
@@ -278,7 +273,7 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
             return false;
         AnomalyDetectionTaskExecution that = (AnomalyDetectionTaskExecution) o;
         return Objects.equals(taskId, that.taskId)
-            && Objects.equals(detectorId, that.detectorId)
+            && task.equals(that.task)
             && Objects.equals(version, that.version)
             && Objects.equals(dataStartTime, that.dataStartTime)
             && Objects.equals(dataEndTime, that.dataEndTime)
@@ -296,7 +291,6 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
         return Objects
             .hash(
                 taskId,
-                detectorId,
                 version,
                 dataStartTime,
                 dataEndTime,
@@ -314,8 +308,8 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
         return taskId;
     }
 
-    public String getDetectorId() {
-        return detectorId;
+    public AnomalyDetectionTask getTask() {
+        return task;
     }
 
     public Long getVersion() {
@@ -364,8 +358,8 @@ public class AnomalyDetectionTaskExecution implements ToXContentObject {
             + "taskId='"
             + taskId
             + '\''
-            + ", detectorId='"
-            + detectorId
+            + ", task='"
+            + task.toString()
             + '\''
             + ", version="
             + version

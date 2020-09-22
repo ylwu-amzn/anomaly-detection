@@ -16,11 +16,15 @@
 package com.amazon.opendistroforelasticsearch.ad.model;
 
 import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
+import static org.elasticsearch.index.query.AbstractQueryBuilder.parseInnerQueryBuilder;
 
 import java.io.IOException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -32,6 +36,8 @@ import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.ToXContentObject;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
+import org.elasticsearch.index.query.QueryBuilder;
+import org.elasticsearch.index.query.QueryBuilders;
 
 import com.amazon.opendistroforelasticsearch.ad.annotation.Generated;
 import com.amazon.opendistroforelasticsearch.ad.util.ParseUtils;
@@ -55,19 +61,27 @@ public class AnomalyDetectionTask implements ToXContentObject {
     private static final String ID_FIELD = "id";
     private static final String NAME_FIELD = "name";
     private static final String DESCRIPTION_FIELD = "description";
-    private static final String DETECTOR_ID_FIELD = "detector_id";
     // private static final String CHECKPOINT_ID = "checkpoint_id";
     private static final String SCHEMA_VERSION_FIELD = "schema_version";
     private static final String SCHEDULE_FIELD = "schedule";
     private static final String LAST_UPDATE_TIME_FIELD = "last_update_time";
-    public static final String UI_METADATA_FIELD = "ui_metadata";
     private static final String DATA_START_TIME_FIELD = "data_start_time";
     public static final String DATA_END_TIME_FIELD = "data_end_time";
     public static final String START_TIME_FIELD = "start_time";
+    public static final String UI_METADATA_FIELD = "ui_metadata";
+
+    // fields from detector
+    private static final String TIMEFIELD_FIELD = "time_field";
+    private static final String INDICES_FIELD = "indices";
+    private static final String FILTER_QUERY_FIELD = "filter_query";
+    private static final String FEATURE_ATTRIBUTES_FIELD = "feature_attributes";
+    private static final String DETECTION_INTERVAL_FIELD = "detection_interval";
+    private static final String WINDOW_DELAY_FIELD = "window_delay";
+    private static final String SHINGLE_SIZE_FIELD = "shingle_size";
+
     private static Logger logger = LogManager.getLogger(AnomalyDetectionTask.class);
 
     private final String taskId;
-    private final String detectorId;
     private final Long version;
     private final String name;
     private final String description;
@@ -79,20 +93,33 @@ public class AnomalyDetectionTask implements ToXContentObject {
     private final Integer schemaVersion;
     private final Instant lastUpdateTime;
 
+    // fields from detector
+    private final String timeField;
+    private final List<String> indices;
+    private final QueryBuilder filterQuery;
+    private final List<Feature> featureAttributes;
+    private final TimeConfiguration detectionInterval;
+    private final TimeConfiguration windowDelay;
+    private final Integer shingleSize;
+
     /**
      * Constructor function.
-     *
-     * @param detectorId        detector identifier
      * @param version           detector document version
      * @param name              detector name
      * @param description       description of detector
      * @param uiMetadata        metadata used by Kibana
      * @param schemaVersion     anomaly detector index mapping version
      * @param lastUpdateTime    detector's last update time
+     * @param timeField  time field
+     * @param indices indices used as detector input
+     * @param filterQuery detector filter query
+     * @param featureAttributes detector feature attributes
+     * @param detectionInterval detecting interval
+     * @param windowDelay max delay window for realtime data
+     * @param shingleSize number of the most recent time intervals to form a shingled data point
      */
     public AnomalyDetectionTask(
         String taskId,
-        String detectorId,
         Long version,
         String name,
         String description,
@@ -102,13 +129,26 @@ public class AnomalyDetectionTask implements ToXContentObject {
         Instant startTime,
         Map<String, Object> uiMetadata,
         Integer schemaVersion,
-        Instant lastUpdateTime
+        Instant lastUpdateTime,
+        String timeField,
+        List<String> indices,
+        QueryBuilder filterQuery,
+        List<Feature> featureAttributes,
+        TimeConfiguration detectionInterval,
+        TimeConfiguration windowDelay,
+        Integer shingleSize
     ) {
+        this.timeField = timeField;
+        this.indices = indices;
+        this.filterQuery = filterQuery;
+        this.featureAttributes = featureAttributes;
+        this.detectionInterval = detectionInterval;
+        this.windowDelay = windowDelay;
+        this.shingleSize = shingleSize;
         if (Strings.isBlank(name)) {
             throw new IllegalArgumentException("Detection task name should be set");
         }
         this.taskId = taskId;
-        this.detectorId = detectorId;
         this.version = version;
         this.name = name;
         this.description = description;
@@ -130,9 +170,17 @@ public class AnomalyDetectionTask implements ToXContentObject {
         XContentBuilder xContentBuilder = builder
             .startObject()
             .field(NAME_FIELD, name)
-            .field(DETECTOR_ID_FIELD, detectorId)
             .field(DESCRIPTION_FIELD, description)
-            .field(SCHEMA_VERSION_FIELD, schemaVersion);
+            .field(SCHEMA_VERSION_FIELD, schemaVersion)
+            .field(TIMEFIELD_FIELD, timeField)
+            .field(INDICES_FIELD, indices.toArray())
+            .field(FILTER_QUERY_FIELD, filterQuery)
+            .field(DETECTION_INTERVAL_FIELD, detectionInterval)
+            .field(WINDOW_DELAY_FIELD, windowDelay)
+            .field(SHINGLE_SIZE_FIELD, shingleSize);
+        if (featureAttributes != null) {
+            xContentBuilder.field(FEATURE_ATTRIBUTES_FIELD, featureAttributes.toArray());
+        }
         if (schedule != null) {
             xContentBuilder.field(SCHEDULE_FIELD, schedule);
         }
@@ -151,6 +199,7 @@ public class AnomalyDetectionTask implements ToXContentObject {
         if (lastUpdateTime != null) {
             xContentBuilder.timeField(LAST_UPDATE_TIME_FIELD, LAST_UPDATE_TIME_FIELD, lastUpdateTime.toEpochMilli());
         }
+
         return xContentBuilder.endObject();
     }
 
@@ -179,7 +228,7 @@ public class AnomalyDetectionTask implements ToXContentObject {
      * @throws IOException IOException if content can't be parsed correctly
      */
     public static AnomalyDetectionTask parse(XContentParser parser, String taskId, Long version) throws IOException {
-        return parse(parser, taskId, version, null);
+        return parse(parser, taskId, version, null, null, null);
     }
 
     /**
@@ -191,11 +240,16 @@ public class AnomalyDetectionTask implements ToXContentObject {
      * @return anomaly detector instance
      * @throws IOException IOException if content can't be parsed correctly
      */
-    public static AnomalyDetectionTask parse(XContentParser parser, String taskId, Long version, TimeValue defaultDetectionInterval)
-        throws IOException {
+    public static AnomalyDetectionTask parse(
+        XContentParser parser,
+        String taskId,
+        Long version,
+        TimeValue defaultDetectionInterval,
+        TimeValue defaultDetectionWindowDelay,
+        Integer defaultShingleSize
+    ) throws IOException {
         String id = null;
         String name = null;
-        String detectorId = null;
         String description = null;
         TimeConfiguration schedule = defaultDetectionInterval == null
             ? null
@@ -207,13 +261,26 @@ public class AnomalyDetectionTask implements ToXContentObject {
         Map<String, Object> uiMetadata = null;
         Instant lastUpdateTime = null;
 
+        // fields from detector
+        String timeField = null;
+        List<String> indices = new ArrayList<>();
+        QueryBuilder filterQuery = QueryBuilders.matchAllQuery();
+        TimeConfiguration detectionInterval = defaultDetectionInterval == null
+            ? null
+            : new IntervalTimeConfiguration(defaultDetectionInterval.getMinutes(), ChronoUnit.MINUTES);
+        TimeConfiguration windowDelay = defaultDetectionWindowDelay == null
+            ? null
+            : new IntervalTimeConfiguration(defaultDetectionWindowDelay.getSeconds(), ChronoUnit.SECONDS);
+        Integer shingleSize = defaultShingleSize;
+        List<Feature> features = new ArrayList<>();
+
         ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.currentToken(), parser::getTokenLocation);
         while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
             String fieldName = parser.currentName();
             parser.nextToken();
 
             switch (fieldName) {
-                case ID_FIELD: // we need ID for realtime task, as it will use detector id as task id.
+                case ID_FIELD:
                     id = parser.text();
                     break;
                 case NAME_FIELD:
@@ -221,9 +288,6 @@ public class AnomalyDetectionTask implements ToXContentObject {
                     break;
                 case DESCRIPTION_FIELD:
                     description = parser.text();
-                    break;
-                case DETECTOR_ID_FIELD:
-                    detectorId = parser.text();
                     break;
                 case UI_METADATA_FIELD:
                     uiMetadata = parser.map();
@@ -246,6 +310,41 @@ public class AnomalyDetectionTask implements ToXContentObject {
                 case LAST_UPDATE_TIME_FIELD:
                     lastUpdateTime = ParseUtils.toInstant(parser);
                     break;
+                // detector's fields
+                case TIMEFIELD_FIELD:
+                    timeField = parser.text();
+                    break;
+                case INDICES_FIELD:
+                    ensureExpectedToken(XContentParser.Token.START_ARRAY, parser.currentToken(), parser::getTokenLocation);
+                    while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
+                        indices.add(parser.text());
+                    }
+                    break;
+                case FILTER_QUERY_FIELD:
+                    ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.currentToken(), parser::getTokenLocation);
+                    try {
+                        filterQuery = parseInnerQueryBuilder(parser);
+                    } catch (IllegalArgumentException e) {
+                        if (!e.getMessage().contains("empty clause")) {
+                            throw e;
+                        }
+                    }
+                    break;
+                case DETECTION_INTERVAL_FIELD:
+                    detectionInterval = TimeConfiguration.parse(parser);
+                    break;
+                case FEATURE_ATTRIBUTES_FIELD:
+                    ensureExpectedToken(XContentParser.Token.START_ARRAY, parser.currentToken(), parser::getTokenLocation);
+                    while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
+                        features.add(Feature.parse(parser));
+                    }
+                    break;
+                case WINDOW_DELAY_FIELD:
+                    windowDelay = TimeConfiguration.parse(parser);
+                    break;
+                case SHINGLE_SIZE_FIELD:
+                    shingleSize = parser.intValue();
+                    break;
                 default:
                     parser.skipChildren();
                     break;
@@ -254,7 +353,6 @@ public class AnomalyDetectionTask implements ToXContentObject {
         String parsedTaskId = Strings.isNotBlank(taskId) ? taskId : id;
         return new AnomalyDetectionTask(
             parsedTaskId,
-            detectorId,
             version,
             name,
             description,
@@ -264,7 +362,14 @@ public class AnomalyDetectionTask implements ToXContentObject {
             startTime,
             uiMetadata,
             schemaVersion,
-            lastUpdateTime
+            lastUpdateTime,
+            timeField,
+            indices,
+            filterQuery,
+            features,
+            detectionInterval,
+            windowDelay,
+            shingleSize
         );
     }
 
@@ -286,10 +391,6 @@ public class AnomalyDetectionTask implements ToXContentObject {
 
     public String getTaskId() {
         return taskId;
-    }
-
-    public String getDetectorId() {
-        return detectorId;
     }
 
     public Long getVersion() {
@@ -332,6 +433,42 @@ public class AnomalyDetectionTask implements ToXContentObject {
         return lastUpdateTime;
     }
 
+    public String getTimeField() {
+        return timeField;
+    }
+
+    public List<String> getIndices() {
+        return indices;
+    }
+
+    public QueryBuilder getFilterQuery() {
+        return filterQuery;
+    }
+
+    public List<Feature> getFeatureAttributes() {
+        return featureAttributes;
+    }
+
+    public TimeConfiguration getDetectionInterval() {
+        return detectionInterval;
+    }
+
+    public TimeConfiguration getWindowDelay() {
+        return windowDelay;
+    }
+
+    public Integer getShingleSize() {
+        return shingleSize;
+    }
+
+    public List<String> getEnabledFeatureIds() {
+        return featureAttributes.stream().filter(Feature::getEnabled).map(Feature::getId).collect(Collectors.toList());
+    }
+
+    public List<String> getEnabledFeatureNames() {
+        return featureAttributes.stream().filter(Feature::getEnabled).map(Feature::getName).collect(Collectors.toList());
+    }
+
     @Generated
     @Override
     public int hashCode() {
@@ -343,9 +480,6 @@ public class AnomalyDetectionTask implements ToXContentObject {
         return "AnomalyDetectionTask{"
             + "taskId='"
             + taskId
-            + '\''
-            + ", detectorId='"
-            + detectorId
             + '\''
             + ", version="
             + version
@@ -359,6 +493,8 @@ public class AnomalyDetectionTask implements ToXContentObject {
             + dataStartTime
             + ", dataEndTime="
             + dataEndTime
+            + ", startTime="
+            + startTime
             + ", schedule="
             + schedule
             + ", uiMetadata="
@@ -367,6 +503,21 @@ public class AnomalyDetectionTask implements ToXContentObject {
             + schemaVersion
             + ", lastUpdateTime="
             + lastUpdateTime
+            + ", timeField='"
+            + timeField
+            + '\''
+            + ", indices="
+            + indices
+            + ", filterQuery="
+            + filterQuery
+            + ", featureAttributes="
+            + featureAttributes
+            + ", detectionInterval="
+            + detectionInterval
+            + ", windowDelay="
+            + windowDelay
+            + ", shingleSize="
+            + shingleSize
             + '}';
     }
 }

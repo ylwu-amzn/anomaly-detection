@@ -43,6 +43,10 @@ public class AnomalyDetectionException extends RuntimeException {
         this.anomalyDetectorId = adID;
     }
 
+    public AnomalyDetectionException(Throwable cause) {
+        super(cause);
+    }
+
     public AnomalyDetectionException(String message) {
         super(message);
     }

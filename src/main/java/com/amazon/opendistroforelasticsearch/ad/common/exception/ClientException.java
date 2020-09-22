@@ -25,11 +25,19 @@ public class ClientException extends AnomalyDetectionException {
         super(anomalyDetectorId, message);
     }
 
+    public ClientException(String message) {
+        super(message);
+    }
+
     public ClientException(String anomalyDetectorId, String message, Throwable throwable) {
         super(anomalyDetectorId, message, throwable);
     }
 
     public ClientException(String anomalyDetectorId, Throwable cause) {
         super(anomalyDetectorId, cause);
+    }
+
+    public ClientException(Throwable cause) {
+        super(cause);
     }
 }

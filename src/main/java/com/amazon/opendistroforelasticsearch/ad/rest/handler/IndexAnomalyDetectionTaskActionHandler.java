@@ -16,7 +16,6 @@
 package com.amazon.opendistroforelasticsearch.ad.rest.handler;
 
 import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask.ANOMALY_DETECTION_TASK_INDEX;
-import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector.ANOMALY_DETECTORS_INDEX;
 import static com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils.START_JOB;
 import static com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils.STOP_JOB;
 import static com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils.XCONTENT_WITH_TYPE;
@@ -181,34 +180,14 @@ public class IndexAnomalyDetectionTaskActionHandler extends AbstractActionHandle
         }
     }
 
-    private void onSearchTaskResponse(SearchResponse response) {
-        logger.info("Search task result: {}, {}", response.getHits().getTotalHits().value, task.getDetectorId());
+    private void onSearchTaskResponse(SearchResponse response) throws IOException {
         if (response.getHits().getTotalHits().value >= maxAnomalyDetectionTasks) {
             String errorMsg = "Can't create anomaly detection tasks more than " + maxAnomalyDetectionTasks;
             logger.error(errorMsg);
             onFailure(new IllegalArgumentException(errorMsg));
         } else {
-            GetRequest request = new GetRequest(ANOMALY_DETECTORS_INDEX, task.getDetectorId());
-            client
-                .get(
-                    request,
-                    ActionListener.wrap(getResponse -> onGetAnomalyDetectorResponse(getResponse), exception -> onFailure(exception))
-                );
+            indexAnomalyDetectionTask();
         }
-    }
-
-    private void onGetAnomalyDetectorResponse(GetResponse response) throws IOException {
-        logger.info("Anomaly detector response exists: {}", response.isExists());
-        if (!response.isExists()) {
-            XContentBuilder builder = channel
-                .newErrorBuilder()
-                .startObject()
-                .field("Message", "AnomalyDetector is not found with id: " + task.getDetectorId())
-                .endObject();
-            channel.sendResponse(new BytesRestResponse(RestStatus.NOT_FOUND, response.toXContent(builder, EMPTY_PARAMS)));
-            return;
-        }
-        indexAnomalyDetectionTask();
     }
 
     private void updateAnomalyDetectionTask(NodeClient client, String taskId) {
@@ -227,26 +206,12 @@ public class IndexAnomalyDetectionTaskActionHandler extends AbstractActionHandle
             channel.sendResponse(new BytesRestResponse(RestStatus.NOT_FOUND, response.toXContent(builder, EMPTY_PARAMS)));
             return;
         }
-        GetRequest request = new GetRequest(ANOMALY_DETECTORS_INDEX, task.getDetectorId());
-        client
-            .get(request, ActionListener.wrap(getResponse -> onGetAnomalyDetectorResponse(getResponse), exception -> onFailure(exception)));
+        indexAnomalyDetectionTask();
     }
 
     public void indexAnomalyDetectionTask() throws IOException {
-        AnomalyDetectionTask newTask = new AnomalyDetectionTask(
-            task.getTaskId(),
-            task.getDetectorId(),
-            task.getVersion(),
-            task.getName(),
-            task.getDescription(),
-            task.getSchedule(),
-            task.getDataStartTime(),
-            task.getDataEndTime(),
-            task.getStartTime(),
-            task.getUiMetadata(),
-            task.getSchemaVersion(),
-            task.getLastUpdateTime()
-        );
+        // TODO: need to update lastUpdateTime to now.
+        AnomalyDetectionTask newTask = task;
         logger.info("Index task: {}", newTask.toString());
         IndexRequest indexRequest = new IndexRequest(ANOMALY_DETECTION_TASK_INDEX)
             .setRefreshPolicy(refreshPolicy)
@@ -261,7 +226,6 @@ public class IndexAnomalyDetectionTaskActionHandler extends AbstractActionHandle
     }
 
     private ActionListener<IndexResponse> indexAnomalyDetectorResponse() {
-
         return new RestActionListener<IndexResponse>(channel) {
             @Override
             public void processResponse(IndexResponse response) throws Exception {

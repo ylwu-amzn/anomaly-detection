@@ -21,6 +21,14 @@ package com.amazon.opendistroforelasticsearch.ad.common.exception;
  */
 public class InternalFailure extends ClientException {
 
+    public InternalFailure(String message) {
+        super(message);
+    }
+
+    public InternalFailure(Throwable cause) {
+        super(cause);
+    }
+
     public InternalFailure(String anomalyDetectorId, String message) {
         super(anomalyDetectorId, message);
     }

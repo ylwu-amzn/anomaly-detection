@@ -258,7 +258,11 @@ List<String> jacocoExclusions = [
         'com.amazon.opendistroforelasticsearch.ad.task.AnomalyDetectionTaskManager',
         'com.amazon.opendistroforelasticsearch.ad.task.AnomalyDetectionTaskState',
         'com.amazon.opendistroforelasticsearch.ad.feature.SinglePointFeatures',
-        'com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultBatchResponse'
+        'com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultBatchResponse',
+        'com.amazon.opendistroforelasticsearch.ad.common.exception.ResourceNotFoundException',
+        'com.amazon.opendistroforelasticsearch.ad.common.exception.ClientException',
+        'com.amazon.opendistroforelasticsearch.ad.common.exception.EndRunException',
+        'com.amazon.opendistroforelasticsearch.ad.common.exception.InternalFailure'
 ]
 
 jacocoTestCoverageVerification {

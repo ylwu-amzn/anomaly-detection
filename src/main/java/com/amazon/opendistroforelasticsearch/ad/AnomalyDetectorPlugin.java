@@ -437,7 +437,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             stateManager
         );
 
-        this.anomalyDetectionTaskManager = new AnomalyDetectionTaskManager(threadPool, client, anomalyDetectionIndices);
+        this.anomalyDetectionTaskManager = new AnomalyDetectionTaskManager(threadPool, client, anomalyDetectionIndices, xContentRegistry);
 
         return ImmutableList
             .of(
@@ -515,10 +515,10 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
         return ImmutableList
             .of(
                 AnomalyDetector.XCONTENT_REGISTRY,
+                AnomalyDetectionTask.XCONTENT_REGISTRY,
                 AnomalyResult.XCONTENT_REGISTRY,
                 DetectorInternalState.XCONTENT_REGISTRY,
-                AnomalyDetectorJob.XCONTENT_REGISTRY,
-                AnomalyDetectionTask.XCONTENT_REGISTRY
+                AnomalyDetectorJob.XCONTENT_REGISTRY
             );
     }
 

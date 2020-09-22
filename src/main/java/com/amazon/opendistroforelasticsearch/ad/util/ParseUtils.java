@@ -49,6 +49,7 @@ import org.elasticsearch.search.aggregations.bucket.histogram.DateHistogramInter
 import org.elasticsearch.search.aggregations.bucket.range.DateRangeAggregationBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.Feature;
 import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
@@ -277,35 +278,35 @@ public final class ParseUtils {
     }
 
     public static SearchSourceBuilder generateFeatureQuerySearchRequest(
-        AnomalyDetector detector,
+        AnomalyDetectionTask task,
         long startTime,
         long endTime,
         NamedXContentRegistry xContentRegistry
     ) throws IOException {
 
-        RangeQueryBuilder rangeQuery = new RangeQueryBuilder(detector.getTimeField())
+        RangeQueryBuilder rangeQuery = new RangeQueryBuilder(task.getTimeField())
             .from(startTime)
             .to(endTime)
             .format("epoch_millis")
             .includeLower(true)
             .includeUpper(false);
 
-        BoolQueryBuilder internalFilterQuery = QueryBuilders.boolQuery().must(rangeQuery).must(detector.getFilterQuery());
+        BoolQueryBuilder internalFilterQuery = QueryBuilders.boolQuery().must(rangeQuery).must(task.getFilterQuery());
 
-        long intervalSeconds = ((IntervalTimeConfiguration) detector.getDetectionInterval()).toDuration().getSeconds();
+        long intervalSeconds = ((IntervalTimeConfiguration) task.getDetectionInterval()).toDuration().getSeconds();
 
         List<CompositeValuesSourceBuilder<?>> sources = new ArrayList<>();
         sources
             .add(
                 new DateHistogramValuesSourceBuilder(DATE_HISTOGRAM)
-                    .field(detector.getTimeField())
+                    .field(task.getTimeField())
                     .fixedInterval(DateHistogramInterval.seconds((int) intervalSeconds))
             );
 
         CompositeAggregationBuilder aggregationBuilder = new CompositeAggregationBuilder(FEATURE_DATA, sources).size(MAX_SIZE);
 
-        if (detector.getFeatureAttributes() != null) {
-            for (Feature feature : detector.getFeatureAttributes()) {
+        if (task.getFeatureAttributes() != null) {
+            for (Feature feature : task.getFeatureAttributes()) {
                 if (feature.getEnabled()) {
                     AggregatorFactories.Builder internalAgg = parseAggregators(
                         feature.getAggregation().toString(),

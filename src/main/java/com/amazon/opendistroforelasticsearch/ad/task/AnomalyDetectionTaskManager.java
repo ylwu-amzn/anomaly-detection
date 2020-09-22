@@ -74,18 +74,27 @@ import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultBatchActi
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultBatchRequest;
 
 public class AnomalyDetectionTaskManager {
+    public static final String ANOMALY_DETECTION_TASK = "AnomalyDetectionTask";
+    public static final String ANOMALY_DETECTION_TASK_EXECUTION = "AnomalyDetectionTaskExecution";
     private final Logger log = LogManager.getLogger(this.getClass());
     private static final String TASK_ID_HEADER = "anomaly_detection_task_id";
 
     private final AnomalyDetectionIndices anomalyDetectionIndices;
     private final ThreadPool threadPool;
     private final Client client;
+    private final NamedXContentRegistry xContentRegistry;
     // private final HashRing hashRing;
 
-    public AnomalyDetectionTaskManager(ThreadPool threadPool, Client client, AnomalyDetectionIndices anomalyDetectionIndices) {
+    public AnomalyDetectionTaskManager(
+        ThreadPool threadPool,
+        Client client,
+        AnomalyDetectionIndices anomalyDetectionIndices,
+        NamedXContentRegistry xContentRegistry
+    ) {
         this.threadPool = threadPool;
         this.client = client;
         this.anomalyDetectionIndices = anomalyDetectionIndices;
+        this.xContentRegistry = xContentRegistry;
         // this.hashRing = hashRing;
     }
 
@@ -107,7 +116,7 @@ public class AnomalyDetectionTaskManager {
             try (
                 XContentParser parser = XContentType.JSON
                     .xContent()
-                    .createParser(NamedXContentRegistry.EMPTY, LoggingDeprecationHandler.INSTANCE, response.getSourceAsString())
+                    .createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, response.getSourceAsString())
             ) {
                 ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser::getTokenLocation);
                 AnomalyDetectionTask task = AnomalyDetectionTask.parse(parser, taskId);
@@ -169,7 +178,7 @@ public class AnomalyDetectionTaskManager {
     private void indexTaskExecution(AnomalyDetectionTask task, ActionListener<String> listener) throws IOException {
         AnomalyDetectionTaskExecution taskExecution = new AnomalyDetectionTaskExecution(
             task.getTaskId(),
-            task.getDetectorId(),
+            task,
             null,
             task.getDataStartTime(),
             task.getDataEndTime(),
@@ -203,31 +212,31 @@ public class AnomalyDetectionTaskManager {
         client.index(indexRequest, listener);
     }
 
-    private void executeTask(AnomalyDetectionTaskExecution task, String taskExecutionId, ActionListener<String> listener) {
+    private void executeTask(AnomalyDetectionTaskExecution taskExecution, String taskExecutionId, ActionListener<String> listener) {
         try {
-            threadPool.executor(AD_BATCh_TASK_THREAD_POOL_NAME).submit(taskRunnable(task, taskExecutionId));
+            threadPool.executor(AD_BATCh_TASK_THREAD_POOL_NAME).submit(taskRunnable(taskExecution, taskExecutionId));
             listener.onResponse(taskExecutionId);
         } catch (Exception e) {
-            log.error("Fail to start AD batch task " + task.getTaskId(), e);
+            log.error("Fail to start AD batch task " + taskExecution.getTaskId(), e);
             listener.onFailure(e);
             // TODO: catch exception, set task execution as failed.
-            AnomalyDetectionTaskExecution taskExecution = new AnomalyDetectionTaskExecution(
-                task.getTaskId(),
-                task.getDetectorId(),
-                task.getVersion(),
-                task.getDataStartTime(),
-                task.getDataEndTime(),
-                task.getExecutionStartTime(),
+            AnomalyDetectionTaskExecution newTaskExecution = new AnomalyDetectionTaskExecution(
+                taskExecution.getTaskId(),
+                taskExecution.getTask(),
+                taskExecution.getVersion(),
+                taskExecution.getDataStartTime(),
+                taskExecution.getDataEndTime(),
+                taskExecution.getExecutionStartTime(),
                 Instant.now(),
-                task.getCurrentDetectionInterval(),
+                taskExecution.getCurrentDetectionInterval(),
                 AnomalyDetectionTaskState.FAILED.name(),
                 ExceptionUtils.getFullStackTrace(e),
-                task.getSchemaVersion(),
+                taskExecution.getSchemaVersion(),
                 Instant.now()
             );
             try {
                 indexTaskExecution(
-                    taskExecution,
+                    newTaskExecution,
                     taskExecutionId,
                     ActionListener
                         .wrap(r -> { log.info(r.status()); }, exception -> { log.error("Fail to index task execution", exception); })
@@ -242,7 +251,6 @@ public class AnomalyDetectionTaskManager {
         return () -> {
             try {
                 AnomalyResultBatchRequest request = new AnomalyResultBatchRequest(
-                    taskExecution.getDetectorId(),
                     taskExecution.getTaskId(),
                     taskExecutionId,
                     taskExecution.getDataStartTime().toEpochMilli(),
@@ -258,7 +266,7 @@ public class AnomalyDetectionTaskManager {
                                 : AnomalyDetectionTaskState.FAILED.name();
                             AnomalyDetectionTaskExecution newTaskExecution = new AnomalyDetectionTaskExecution(
                                 taskExecution.getTaskId(),
-                                taskExecution.getDetectorId(),
+                                taskExecution.getTask(),
                                 taskExecution.getVersion(),
                                 taskExecution.getDataStartTime(),
                                 taskExecution.getDataEndTime(),
@@ -278,7 +286,7 @@ public class AnomalyDetectionTaskManager {
                 log.error("Failed to execute task " + taskExecution.getTaskId(), e);
                 AnomalyDetectionTaskExecution newTaskExecution = new AnomalyDetectionTaskExecution(
                     taskExecution.getTaskId(),
-                    taskExecution.getDetectorId(),
+                    taskExecution.getTask(),
                     taskExecution.getVersion(),
                     taskExecution.getDataStartTime(),
                     taskExecution.getDataEndTime(),
@@ -388,7 +396,7 @@ public class AnomalyDetectionTaskManager {
                 try (
                     XContentParser parser = XContentType.JSON
                         .xContent()
-                        .createParser(NamedXContentRegistry.EMPTY, LoggingDeprecationHandler.INSTANCE, hit.getSourceAsString())
+                        .createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, hit.getSourceAsString())
                 ) {
                     ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser::getTokenLocation);
                     AnomalyDetectionTaskExecution taskExecution = AnomalyDetectionTaskExecution.parse(parser, hit.getId());
@@ -425,11 +433,11 @@ public class AnomalyDetectionTaskManager {
                 try (
                     XContentParser parser = XContentType.JSON
                         .xContent()
-                        .createParser(NamedXContentRegistry.EMPTY, LoggingDeprecationHandler.INSTANCE, getTaskResponse.getSourceAsString())
+                        .createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, getTaskResponse.getSourceAsString())
                 ) {
                     ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser::getTokenLocation);
-                    AnomalyDetectionTask task = AnomalyDetectionTask.parse(parser);
-                    result.put("AnomalyDetectionTask", task);
+                    AnomalyDetectionTask task = AnomalyDetectionTask.parse(parser, getTaskResponse.getId());
+                    result.put(ANOMALY_DETECTION_TASK, task);
 
                 } catch (Exception e) {
                     log.error("Fail to parse anomaly detection task " + taskId, e);
@@ -438,7 +446,7 @@ public class AnomalyDetectionTaskManager {
 
                 if (returnTaskExecution) {
                     getLatestTaskExecution(taskId, ActionListener.wrap(taskExecution -> {
-                        result.put("AnomalyDetectionTaskExecution", taskExecution);
+                        result.put(ANOMALY_DETECTION_TASK_EXECUTION, taskExecution);
                         listener.onResponse(result);
                     }, taskExecutionException -> {
                         if (taskExecutionException instanceof IndexNotFoundException) {
