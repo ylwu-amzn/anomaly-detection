@@ -95,7 +95,6 @@ public class RestIndexAnomalyDetectionTaskAction extends BaseRestHandler {
         XContentParser parser = request.contentParser();
         ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser::getTokenLocation);
         AnomalyDetectionTask task = AnomalyDetectionTask.parse(parser, taskId);
-        logger.info("Prepared task {}", task.toString());
 
         long seqNo = request.paramAsLong(IF_SEQ_NO, SequenceNumbers.UNASSIGNED_SEQ_NO);
         long primaryTerm = request.paramAsLong(IF_PRIMARY_TERM, SequenceNumbers.UNASSIGNED_PRIMARY_TERM);

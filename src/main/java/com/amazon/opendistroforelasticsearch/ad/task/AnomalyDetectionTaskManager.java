@@ -79,11 +79,11 @@ import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTaskExecution;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultBatchAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultBatchRequest;
+import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 import com.google.common.collect.ImmutableMap;
 
 public class AnomalyDetectionTaskManager {
-    public static final String ANOMALY_DETECTION_TASK = "AnomalyDetectionTask";
-    public static final String ANOMALY_DETECTION_TASK_EXECUTION = "AnomalyDetectionTaskExecution";
+    public static final String GET_TASK_RESPONSE = "getTaskResponse";
     private final Logger log = LogManager.getLogger(this.getClass());
     private static final String TASK_ID_HEADER = "anomaly_detection_task_id";
 
@@ -137,8 +137,8 @@ public class AnomalyDetectionTaskManager {
                     }
                 },
                     exception -> {
-                        // If task execution index not exist, we should start task
-                        if (exception instanceof IndexNotFoundException) {
+                        // If task execution index not exist or task execution not found, we should start task
+                        if (exception instanceof IndexNotFoundException || exception instanceof ResourceNotFoundException) {
                             prepareTask(taskId, task, listener);
                         } else {
                             log.error("Failed to get latest task execution", exception);
@@ -378,14 +378,17 @@ public class AnomalyDetectionTaskManager {
                         deleteException -> { listener.onFailure(deleteException); }
                     )
             );
-        }, exception -> {
-            if (exception instanceof IndexNotFoundException) {
-                deleteTaskDoc(taskId, deleteTaskListener);
-            } else {
-                log.error("Fail to delete task " + taskId, exception);
-                listener.onFailure(exception);
+        },
+            exception -> {
+                // If task execution index not exist or task execution not found, we should delete task
+                if (exception instanceof IndexNotFoundException || exception instanceof ResourceNotFoundException) {
+                    deleteTaskDoc(taskId, deleteTaskListener);
+                } else {
+                    log.error("Fail to delete task " + taskId, exception);
+                    listener.onFailure(exception);
+                }
             }
-        }));
+        ));
     }
 
     /**
@@ -436,7 +439,7 @@ public class AnomalyDetectionTaskManager {
         GetRequest getRequest = new GetRequest(ANOMALY_DETECTION_TASK_INDEX).id(taskId);
         client.get(getRequest, ActionListener.wrap(getTaskResponse -> {
             if (getTaskResponse.isExists()) {
-                result.put("getTaskResponse", getTaskResponse);
+                result.put(GET_TASK_RESPONSE, getTaskResponse);
                 try (
                     XContentParser parser = XContentType.JSON
                         .xContent()
@@ -444,7 +447,7 @@ public class AnomalyDetectionTaskManager {
                 ) {
                     ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser::getTokenLocation);
                     AnomalyDetectionTask task = AnomalyDetectionTask.parse(parser, getTaskResponse.getId());
-                    result.put(ANOMALY_DETECTION_TASK, task);
+                    result.put(RestHandlerUtils.ANOMALY_DETECTION_TASK, task);
 
                 } catch (Exception e) {
                     log.error("Fail to parse anomaly detection task " + taskId, e);
@@ -453,16 +456,19 @@ public class AnomalyDetectionTaskManager {
 
                 if (returnTaskExecution) {
                     getLatestTaskExecution(taskId, ActionListener.wrap(taskExecution -> {
-                        result.put(ANOMALY_DETECTION_TASK_EXECUTION, taskExecution);
+                        result.put(RestHandlerUtils.ANOMALY_DETECTION_TASK_EXECUTION, taskExecution);
                         listener.onResponse(result);
-                    }, taskExecutionException -> {
-                        if (taskExecutionException instanceof IndexNotFoundException) {
-                            listener.onResponse(result);
-                        } else {
-                            log.error("Fail to get task execution for task " + taskId, taskExecutionException);
-                            listener.onFailure(taskExecutionException);
+                    },
+                        exception -> {
+                            // If task execution index not exist or task execution not found, we should just return task
+                            if (exception instanceof IndexNotFoundException || exception instanceof ResourceNotFoundException) {
+                                listener.onResponse(result);
+                            } else {
+                                log.error("Fail to get task execution for task " + taskId, exception);
+                                listener.onFailure(exception);
+                            }
                         }
-                    }));
+                    ));
                 } else {
                     listener.onResponse(result);
                 }

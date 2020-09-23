@@ -75,6 +75,7 @@ import com.amazon.opendistroforelasticsearch.ad.stats.StatNames;
 import com.amazon.opendistroforelasticsearch.ad.task.AnomalyDetectionTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.task.AnomalyDetectionTaskState;
 import com.amazon.opendistroforelasticsearch.ad.transport.handler.AnomalyResultBulkIndexHandler;
+import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 import com.amazon.randomcutforest.RandomCutForest;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.RateLimiter;
@@ -182,9 +183,8 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
         Instant executeStartTime = Instant.now();
 
         anomalyDetectionTaskManager.getTask(taskId, false, ActionListener.wrap(response -> {
-            if (response.containsKey(AnomalyDetectionTaskManager.ANOMALY_DETECTION_TASK)) {
-                AnomalyDetectionTask anomalyDetectionTask = (AnomalyDetectionTask) response
-                    .get(AnomalyDetectionTaskManager.ANOMALY_DETECTION_TASK);
+            if (response.containsKey(RestHandlerUtils.ANOMALY_DETECTION_TASK)) {
+                AnomalyDetectionTask anomalyDetectionTask = (AnomalyDetectionTask) response.get(RestHandlerUtils.ANOMALY_DETECTION_TASK);
                 executeTask(batchTask, request, taskId, taskExecutionId, executeStartTime, anomalyDetectionTask, listener);
             } else {
                 listener.onFailure(new ResourceNotFoundException("Can't find task"));
@@ -546,7 +546,7 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
                 ? dataEndTime
                 : pieceEndTime + (PIECE_SIZE - task.getShingleSize() + 1) * interval;
             // TODO: add limiter later
-            // rateLimiter.acquire(60 / PIECES_PER_MINUTE);
+            rateLimiter.acquire(60 / PIECES_PER_MINUTE);
             LOG.info("start next piece start from {} to {}, interval {}", pieceEndTime, endTimeStamp, interval);
             anomalyDetectionTaskManager
                 .updateTaskExecution(

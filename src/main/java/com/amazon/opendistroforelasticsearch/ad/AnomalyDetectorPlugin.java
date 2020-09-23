@@ -516,6 +516,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             .of(
                 AnomalyDetector.XCONTENT_REGISTRY,
                 AnomalyDetectionTask.XCONTENT_REGISTRY,
+                AnomalyDetectionTaskExecution.XCONTENT_REGISTRY,
                 AnomalyResult.XCONTENT_REGISTRY,
                 DetectorInternalState.XCONTENT_REGISTRY,
                 AnomalyDetectorJob.XCONTENT_REGISTRY

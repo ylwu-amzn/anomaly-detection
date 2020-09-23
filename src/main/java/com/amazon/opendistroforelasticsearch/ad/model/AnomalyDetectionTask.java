@@ -64,7 +64,7 @@ public class AnomalyDetectionTask implements ToXContentObject {
     // private static final String CHECKPOINT_ID = "checkpoint_id";
     private static final String SCHEMA_VERSION_FIELD = "schema_version";
     private static final String SCHEDULE_FIELD = "schedule";
-    private static final String LAST_UPDATE_TIME_FIELD = "last_update_time";
+    public static final String LAST_UPDATE_TIME_FIELD = "last_update_time";
     private static final String DATA_START_TIME_FIELD = "data_start_time";
     public static final String DATA_END_TIME_FIELD = "data_end_time";
     public static final String START_TIME_FIELD = "start_time";
@@ -196,7 +196,9 @@ public class AnomalyDetectionTask implements ToXContentObject {
         if (uiMetadata != null && !uiMetadata.isEmpty()) {
             xContentBuilder.field(UI_METADATA_FIELD, uiMetadata);
         }
-        if (lastUpdateTime != null) {
+        if (params.param(LAST_UPDATE_TIME_FIELD) != null) {
+            xContentBuilder.timeField(LAST_UPDATE_TIME_FIELD, LAST_UPDATE_TIME_FIELD, Long.parseLong(params.param(LAST_UPDATE_TIME_FIELD)));
+        } else if (lastUpdateTime != null) {
             xContentBuilder.timeField(LAST_UPDATE_TIME_FIELD, LAST_UPDATE_TIME_FIELD, lastUpdateTime.toEpochMilli());
         }
 

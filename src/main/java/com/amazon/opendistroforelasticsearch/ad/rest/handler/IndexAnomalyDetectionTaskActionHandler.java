@@ -18,12 +18,15 @@ package com.amazon.opendistroforelasticsearch.ad.rest.handler;
 import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask.ANOMALY_DETECTION_TASK_INDEX;
 import static com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils.START_JOB;
 import static com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils.STOP_JOB;
-import static com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils.XCONTENT_WITH_TYPE;
 import static org.elasticsearch.common.xcontent.ToXContent.EMPTY_PARAMS;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.util.Arrays;
 import java.util.Locale;
+import java.util.stream.Collectors;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
@@ -39,8 +42,9 @@ import org.elasticsearch.client.node.NodeClient;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.index.query.QueryBuilder;
+import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.rest.BytesRestResponse;
 import org.elasticsearch.rest.RestChannel;
@@ -53,6 +57,7 @@ import com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorPlugin;
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
+import com.google.common.collect.ImmutableMap;
 
 /**
  * Anomaly detector job REST action handler to process POST/PUT request.
@@ -131,20 +136,20 @@ public class IndexAnomalyDetectionTaskActionHandler extends AbstractActionHandle
      * 1.If job not exists, create new job.
      * 2.If job exists: a). if job enabled, return error message; b). if job disabled, enable job.
      *
-     * @throws IOException IOException from {@link AnomalyDetectionIndices#getAnomalyDetectionTaskMappings()}
+     * @throws IOException IOException from {@link AnomalyDetectionIndices#initAnomalyDetectorIndexIfAbsent(ActionListener)}
      */
     public void start() throws IOException {
         if (!anomalyDetectionIndices.doesAnomalyDetectionTaskIndexExist()) {
             anomalyDetectionIndices
                 .initAnomalyDetectionTaskIndexDirectly(
-                    ActionListener.wrap(response -> onCreateMappingsResponse(response), exception -> onFailure(exception))
+                    ActionListener.wrap(response -> onCreateTaskIndex(response), exception -> onFailure(exception))
                 );
         } else {
             prepareAnomalyDetectionTaskIndexing();
         }
     }
 
-    private void onCreateMappingsResponse(CreateIndexResponse response) throws IOException {
+    private void onCreateTaskIndex(CreateIndexResponse response) throws IOException {
         if (response.isAcknowledged()) {
             logger.info("Created {} with mappings.", ANOMALY_DETECTION_TASK_INDEX);
             prepareAnomalyDetectionTaskIndexing();
@@ -166,15 +171,11 @@ public class IndexAnomalyDetectionTaskActionHandler extends AbstractActionHandle
     }
 
     private void createAnomalyDetectionTask() {
-        logger.info("Start to create anomaly detection task {}", task);
         try {
-            QueryBuilder query = QueryBuilders.matchAllQuery();
-            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().query(query).size(0).timeout(requestTimeout);
-
-            SearchRequest searchRequest = new SearchRequest(ANOMALY_DETECTION_TASK_INDEX).source(searchSourceBuilder);
-
-            client
-                .search(searchRequest, ActionListener.wrap(response -> onSearchTaskResponse(response), exception -> onFailure(exception)));
+            SearchRequest countRequest = new SearchRequest(ANOMALY_DETECTION_TASK_INDEX);
+            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true);
+            countRequest.source(searchSourceBuilder);
+            client.search(countRequest, ActionListener.wrap(response -> onSearchTaskResponse(response), exception -> onFailure(exception)));
         } catch (Exception e) {
             onFailure(e);
         }
@@ -186,17 +187,16 @@ public class IndexAnomalyDetectionTaskActionHandler extends AbstractActionHandle
             logger.error(errorMsg);
             onFailure(new IllegalArgumentException(errorMsg));
         } else {
-            indexAnomalyDetectionTask();
+            searchTaskInputIndices();
         }
     }
 
     private void updateAnomalyDetectionTask(NodeClient client, String taskId) {
         GetRequest request = new GetRequest(ANOMALY_DETECTION_TASK_INDEX, taskId);
-        client
-            .get(request, ActionListener.wrap(response -> onGetAnomalyDetectionTaskResponse(response), exception -> onFailure(exception)));
+        client.get(request, ActionListener.wrap(response -> onGetTaskResponse(response), exception -> onFailure(exception)));
     }
 
-    private void onGetAnomalyDetectionTaskResponse(GetResponse response) throws IOException {
+    private void onGetTaskResponse(GetResponse response) throws IOException {
         if (!response.isExists()) {
             XContentBuilder builder = channel
                 .newErrorBuilder()
@@ -206,16 +206,72 @@ public class IndexAnomalyDetectionTaskActionHandler extends AbstractActionHandle
             channel.sendResponse(new BytesRestResponse(RestStatus.NOT_FOUND, response.toXContent(builder, EMPTY_PARAMS)));
             return;
         }
-        indexAnomalyDetectionTask();
+        searchTaskInputIndices();
+    }
+
+    private void searchTaskInputIndices() {
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().size(0).trackTotalHits(true).terminateAfter(1);
+
+        SearchRequest searchRequest = new SearchRequest(task.getIndices().toArray(new String[0])).source(searchSourceBuilder);
+
+        client
+            .search(
+                searchRequest,
+                ActionListener.wrap(searchResponse -> onSearchTaskInputIndices(searchResponse), exception -> onFailure(exception))
+            );
+    }
+
+    public void onSearchTaskInputIndices(SearchResponse response) {
+        if (response.getHits().getTotalHits().value == 0) {
+            String errorMsg = "Can't create anomaly detector as no document found in indices: "
+                + Arrays.toString(task.getIndices().toArray(new String[0]));
+            logger.error(errorMsg);
+            onFailure(new IllegalArgumentException(errorMsg));
+        } else {
+            checkTaskNameExists();
+        }
+    }
+
+    private void checkTaskNameExists() {
+        BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
+        boolQueryBuilder.must(QueryBuilders.termQuery("name.keyword", task.getName()));
+        if (StringUtils.isNotBlank(task.getTaskId())) {
+            boolQueryBuilder.mustNot(QueryBuilders.termQuery(RestHandlerUtils._ID, task.getTaskId()));
+        }
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().query(boolQueryBuilder).timeout(requestTimeout);
+        SearchRequest searchRequest = new SearchRequest(ANOMALY_DETECTION_TASK_INDEX).source(searchSourceBuilder);
+
+        client
+            .search(
+                searchRequest,
+                ActionListener.wrap(searchResponse -> onSearchTaskNameResponse(searchResponse), exception -> onFailure(exception))
+            );
+    }
+
+    private void onSearchTaskNameResponse(SearchResponse response) throws IOException {
+        if (response.getHits().getTotalHits().value > 0) {
+            String errorMsg = String
+                .format(
+                    "Cannot create anomaly detection task with name [%s] as it's already used by task %s",
+                    task.getName(),
+                    Arrays.stream(response.getHits().getHits()).map(hit -> hit.getId()).collect(Collectors.toList())
+                );
+            logger.warn(errorMsg);
+            onFailure(new IllegalArgumentException(errorMsg));
+        } else {
+            indexAnomalyDetectionTask();
+        }
     }
 
     public void indexAnomalyDetectionTask() throws IOException {
         // TODO: need to update lastUpdateTime to now.
-        AnomalyDetectionTask newTask = task;
-        logger.info("Index task: {}", newTask.toString());
+        ToXContent.MapParams params = new ToXContent.MapParams(
+            ImmutableMap.of(AnomalyDetectionTask.LAST_UPDATE_TIME_FIELD, String.valueOf(Instant.now().toEpochMilli()))
+        );
+
         IndexRequest indexRequest = new IndexRequest(ANOMALY_DETECTION_TASK_INDEX)
             .setRefreshPolicy(refreshPolicy)
-            .source(newTask.toXContent(channel.newBuilder(), XCONTENT_WITH_TYPE))
+            .source(task.toXContent(channel.newBuilder(), params))
             .setIfSeqNo(seqNo)
             .setIfPrimaryTerm(primaryTerm)
             .timeout(requestTimeout);

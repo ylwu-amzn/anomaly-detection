@@ -15,6 +15,7 @@
 
 package com.amazon.opendistroforelasticsearch.ad.rest;
 
+import static com.amazon.opendistroforelasticsearch.ad.task.AnomalyDetectionTaskManager.GET_TASK_RESPONSE;
 import static com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils.TASK_ID;
 import static com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils.onFailure;
 
@@ -48,6 +49,7 @@ public class RestGetAnomalyDetectionTaskAction extends BaseRestHandler {
 
     private static final String GET_ANOMALY_DETECTION_TASK_ACTION = "get_anomaly_detection_task";
     private static final Logger logger = LogManager.getLogger(RestGetAnomalyDetectionTaskAction.class);
+    public static final String EXECUTION = "execution";
     private final AnomalyDetectionTaskManager anomalyDetectionTaskManager;
 
     public RestGetAnomalyDetectionTaskAction(AnomalyDetectionTaskManager anomalyDetectionTaskManager) {
@@ -65,13 +67,13 @@ public class RestGetAnomalyDetectionTaskAction extends BaseRestHandler {
             throw new IllegalStateException(CommonErrorMessages.DISABLED_ERR_MSG);
         }
         String taskId = request.param(TASK_ID);
-        boolean taskExecution = request.paramAsBoolean("execution", false);
+        boolean taskExecution = request.paramAsBoolean(EXECUTION, false);
 
         return channel -> {
             anomalyDetectionTaskManager.getTask(taskId, taskExecution, ActionListener.wrap(r -> {
-                if (r.containsKey("AnomalyDetectionTask")) {
-                    AnomalyDetectionTask task = (AnomalyDetectionTask) r.get("AnomalyDetectionTask");
-                    GetResponse response = (GetResponse) r.get("getTaskResponse");
+                if (r.containsKey(RestHandlerUtils.ANOMALY_DETECTION_TASK)) {
+                    AnomalyDetectionTask task = (AnomalyDetectionTask) r.get(RestHandlerUtils.ANOMALY_DETECTION_TASK);
+                    GetResponse response = (GetResponse) r.get(GET_TASK_RESPONSE);
                     XContentBuilder builder = channel
                         .newBuilder()
                         .startObject()
@@ -80,8 +82,12 @@ public class RestGetAnomalyDetectionTaskAction extends BaseRestHandler {
                         .field(RestHandlerUtils._PRIMARY_TERM, response.getPrimaryTerm())
                         .field(RestHandlerUtils._SEQ_NO, response.getSeqNo())
                         .field(RestHandlerUtils.ANOMALY_DETECTION_TASK, task);
-                    if (r.containsKey("AnomalyDetectionTaskExecution")) {
-                        builder.field(RestHandlerUtils.ANOMALY_DETECTION_TASK_EXECUTION, r.get("AnomalyDetectionTaskExecution"));
+                    if (r.containsKey(RestHandlerUtils.ANOMALY_DETECTION_TASK_EXECUTION)) {
+                        builder
+                            .field(
+                                RestHandlerUtils.ANOMALY_DETECTION_TASK_EXECUTION,
+                                r.get(RestHandlerUtils.ANOMALY_DETECTION_TASK_EXECUTION)
+                            );
                     }
                     builder.endObject();
                     channel.sendResponse(new BytesRestResponse(RestStatus.OK, builder));
