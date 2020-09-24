@@ -30,6 +30,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang.StringUtils;
@@ -52,6 +53,8 @@ import org.elasticsearch.action.support.WriteRequest;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.action.update.UpdateResponse;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.common.xcontent.LoggingDeprecationHandler;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
@@ -73,37 +76,87 @@ import org.elasticsearch.tasks.TaskInfo;
 import org.elasticsearch.threadpool.ThreadPool;
 
 import com.amazon.opendistroforelasticsearch.ad.common.exception.AnomalyDetectionException;
+import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.ResourceNotFoundException;
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTask;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTaskExecution;
+import com.amazon.opendistroforelasticsearch.ad.stats.ADStatsResponse;
+import com.amazon.opendistroforelasticsearch.ad.stats.StatNames;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADStatsNodeResponse;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADStatsNodesAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADStatsRequest;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskExecutionAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskExecutionRequest;
+import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyDetectionBatchTask;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultBatchAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultBatchRequest;
+import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultBatchResponse;
+import com.amazon.opendistroforelasticsearch.ad.util.DiscoveryNodeFilterer;
+import com.amazon.opendistroforelasticsearch.ad.util.MultiResponsesDelegateActionListener;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 
 public class AnomalyDetectionTaskManager {
     public static final String GET_TASK_RESPONSE = "getTaskResponse";
     private final Logger log = LogManager.getLogger(this.getClass());
     private static final String TASK_ID_HEADER = "anomaly_detection_task_id";
 
+    private static AnomalyDetectionTaskManager INSTANCE;
     private final AnomalyDetectionIndices anomalyDetectionIndices;
     private final ThreadPool threadPool;
     private final Client client;
     private final NamedXContentRegistry xContentRegistry;
     // private final HashRing hashRing;
+    private final Map<String, AnomalyDetectionBatchTask> taskMap;
+    private final DiscoveryNodeFilterer nodeFilter;
+    // TODO: limit running tasks
+    private final Integer MAX_RUNNING_TASK = 10;
+    private final ClusterService clusterService;
 
-    public AnomalyDetectionTaskManager(
+    private AnomalyDetectionTaskManager(
         ThreadPool threadPool,
+        ClusterService clusterService,
         Client client,
         AnomalyDetectionIndices anomalyDetectionIndices,
-        NamedXContentRegistry xContentRegistry
+        NamedXContentRegistry xContentRegistry,
+        DiscoveryNodeFilterer nodeFilter
     ) {
         this.threadPool = threadPool;
+        this.clusterService = clusterService;
         this.client = client;
         this.anomalyDetectionIndices = anomalyDetectionIndices;
         this.xContentRegistry = xContentRegistry;
         // this.hashRing = hashRing;
+        taskMap = new ConcurrentHashMap<>();
+        this.nodeFilter = nodeFilter;
+    }
+
+    public static AnomalyDetectionTaskManager initInstance(
+        ThreadPool threadPool,
+        ClusterService clusterService,
+        Client client,
+        AnomalyDetectionIndices anomalyDetectionIndices,
+        NamedXContentRegistry xContentRegistry,
+        DiscoveryNodeFilterer nodeFilter
+    ) {
+        if (INSTANCE != null) {
+            return INSTANCE;
+        }
+        synchronized (AnomalyDetectionTaskManager.class) {
+            if (INSTANCE != null) {
+                return INSTANCE;
+            }
+            return new AnomalyDetectionTaskManager(
+                threadPool,
+                clusterService,
+                client,
+                anomalyDetectionIndices,
+                xContentRegistry,
+                nodeFilter
+            );
+        }
     }
 
     /**
@@ -247,6 +300,11 @@ public class AnomalyDetectionTaskManager {
 
     private void executeTask(AnomalyDetectionTaskExecution taskExecution, String taskExecutionId, ActionListener<String> listener) {
         try {
+            // getNodeTaskStats(taskExecution.getTaskId(), ActionListener.wrap(r -> {
+            // threadPool.executor(AD_BATCh_TASK_THREAD_POOL_NAME).submit(taskRunnable(taskExecution, taskExecutionId,
+            // r));
+            // listener.onResponse(taskExecutionId);
+            // }, e -> handleTaskExecutionException(taskExecution, taskExecutionId, e)));
             threadPool.executor(AD_BATCh_TASK_THREAD_POOL_NAME).submit(taskRunnable(taskExecution, taskExecutionId));
             listener.onResponse(taskExecutionId);
         } catch (Exception e) {
@@ -267,48 +325,193 @@ public class AnomalyDetectionTaskManager {
         }
     }
 
-    private Runnable taskRunnable(AnomalyDetectionTaskExecution taskExecution, String taskExecutionId) {
-        return () -> {
-            try {
-                AnomalyResultBatchRequest request = new AnomalyResultBatchRequest(
-                    taskExecution.getTaskId(),
-                    taskExecutionId,
-                    taskExecution.getDataStartTime().toEpochMilli(),
-                    taskExecution.getDataEndTime().toEpochMilli()
-                );
-                client
-                    .execute(
-                        AnomalyResultBatchAction.INSTANCE,
-                        request,
-                        ActionListener.wrap(response -> { log.info(response.getMessage()); }, exception -> {
-                            String state = AnomalyDetectionTaskState.FAILED.name();
-                            Map<String, Object> updatedFields = new HashMap<>();
-                            if (exception instanceof TaskCancelledException) {
-                                state = AnomalyDetectionTaskState.CANCELLED.name();
-                            } else {
-                                updatedFields.put(ERROR_FIELD, ExceptionUtils.getFullStackTrace(exception));
-                            }
-                            updatedFields.put(STATE_FIELD, state);
-                            updateTaskExecution(taskExecutionId, updatedFields);
-                            log.error("Fail to execute batch task action " + taskExecution.getTaskId(), exception);
-                        })
-                    );
-            } catch (Exception e) {
-                log.error("Failed to execute task " + taskExecution.getTaskId(), e);
-                updateTaskExecution(
-                    taskExecutionId,
-                    ImmutableMap
-                        .of(
-                            STATE_FIELD,
-                            AnomalyDetectionTaskState.FAILED.name(),
-                            EXECUTION_END_TIME_FIELD,
-                            Instant.now(),
-                            ERROR_FIELD,
-                            ExceptionUtils.getFullStackTrace(e)
-                        )
-                );
+    private void getNodeTaskStats(String taskId, ActionListener<DiscoveryNode> listener) {
+        DiscoveryNode[] dataNodes = nodeFilter.getEligibleDataNodes();
+        ADStatsRequest adStatsRequest = new ADStatsRequest(dataNodes);
+        adStatsRequest.addAll(ImmutableSet.of(StatNames.AD_EXECUTING_TASK_COUNT.getName(), StatNames.NODE_MEMORY_USAGE.getName()));
+
+        DiscoveryNode localNode = clusterService.localNode();
+        System.out.println(localNode.getId());
+        client.execute(ADStatsNodesAction.INSTANCE, adStatsRequest, ActionListener.wrap(adStatsResponse -> {
+            List<ADStatsNodeResponse> candidateNodeResponse = adStatsResponse
+                .getNodes()
+                .stream()
+                // .filter(stat -> (short) stat.getStatsMap().get(StatNames.MEMORY_USAGE.name()) < 85 && (long)
+                // stat.getStatsMap().get(StatNames.AD_EXECUTING_TASK_COUNT.name()) < 10)
+                .filter(stat -> (int) stat.getStatsMap().get(StatNames.AD_EXECUTING_TASK_COUNT.getName()) < 10)
+                // .sorted((ADStatsNodeResponse r1, ADStatsNodeResponse r2) -> ((Short)
+                // r1.getStatsMap().get(StatNames.MEMORY_USAGE.name())).compareTo((short)
+                // r2.getStatsMap().get(StatNames.MEMORY_USAGE.name())))
+                .sorted(
+                    (ADStatsNodeResponse r1, ADStatsNodeResponse r2) -> ((Integer) r1
+                        .getStatsMap()
+                        .get(StatNames.AD_EXECUTING_TASK_COUNT.getName()))
+                            .compareTo((Integer) r2.getStatsMap().get(StatNames.AD_EXECUTING_TASK_COUNT.getName()))
+                )
+                .collect(Collectors.toList());
+            if (candidateNodeResponse.size() > 0) {
+                listener.onResponse(candidateNodeResponse.get(0).getNode());
+                // for (ADStatsNodeResponse r : candidateNodeResponse) {
+                // if(!localNode.getId().equals(r.getNode().getId())) {
+                // listener.onResponse(r.getNode());
+                // break;
+                // }
+                // }
+
+            } else {
+                String errorMessage = "No eligible node to run AD task " + taskId;
+                log.warn(errorMessage);
+                listener.onFailure(new LimitExceededException(errorMessage));
             }
+        }, exception -> {
+            log.error("Failed to get node's task stats", exception);
+            listener.onFailure(exception);
+        }));
+    }
+
+    private Runnable taskRunnable(AnomalyDetectionTaskExecution taskExecution, String taskExecutionId) {
+        // AnomalyDetectionTaskExecution taskExecution, String taskExecutionId, DiscoveryNode node) {
+        // return () -> {
+        // if (clusterService.localNode().getId().equals(node.getId())) {
+        // executeTaskLocally(taskExecution, taskExecutionId, node.getId());
+        // } else {
+        // executeTaskRemotely(taskExecution, taskExecutionId, node.getId());
+        // }
+        // };
+        return () -> {
+            getNodeTaskStats(taskExecution.getTaskId(), ActionListener.wrap(node -> {
+                if (clusterService.localNode().getId().equals(node.getId())) {
+                    executeTaskLocally(taskExecution, taskExecutionId, node.getId());
+                } else {
+                    executeTaskRemotely(taskExecution, taskExecutionId, node.getId());
+                }
+            }, exception -> { handleTaskExecutionException(taskExecution, taskExecutionId, exception); }));
+
         };
+    }
+
+    private ActionListener<AnomalyResultBatchResponse> taskExecutionListener(
+        AnomalyDetectionTaskExecution taskExecution,
+        String taskExecutionId
+    ) {
+        return ActionListener.wrap(response -> {
+            log.info("Task execution finished for {}, response: {}", taskExecutionId, response.getMessage());
+            // remove task execution from map when finish
+            removeTaskExecution(taskExecutionId);
+        }, exception -> { handleTaskExecutionException(taskExecution, taskExecutionId, exception); });
+    }
+
+    private void handleTaskExecutionException(AnomalyDetectionTaskExecution taskExecution, String taskExecutionId, Exception exception) {
+        // remove task execution from map if execution fails
+        log.error("Fail to execute batch task action " + taskExecution.getTaskId(), exception);
+        removeTaskExecution(taskExecutionId);
+        String state = AnomalyDetectionTaskState.FAILED.name();
+        Map<String, Object> updatedFields = new HashMap<>();
+        if (exception instanceof TaskCancelledException) {
+            state = AnomalyDetectionTaskState.CANCELLED.name();
+        } else {
+            updatedFields.put(ERROR_FIELD, ExceptionUtils.getFullStackTrace(exception));
+        }
+        updatedFields.put(STATE_FIELD, state);
+        updatedFields.put(EXECUTION_END_TIME_FIELD, Instant.now().toEpochMilli());
+        updateTaskExecution(taskExecutionId, updatedFields);
+    }
+
+    private void executeTaskRemotely(AnomalyDetectionTaskExecution taskExecution, String taskExecutionId, String nodeId) {
+        try {
+            ADTaskExecutionRequest request = new ADTaskExecutionRequest(
+                taskExecution.getTaskId(),
+                taskExecutionId,
+                taskExecution.getDataStartTime().toEpochMilli(),
+                taskExecution.getDataEndTime().toEpochMilli(),
+                nodeId
+            );
+            client.execute(ADTaskExecutionAction.INSTANCE, request, taskExecutionListener(taskExecution, taskExecutionId));
+        } catch (Exception e) {
+            handleTaskExecutionException(taskExecution, taskExecutionId, e);
+        }
+
+    }
+
+    private void executeTaskLocally(AnomalyDetectionTaskExecution taskExecution, String taskExecutionId, String nodeId) {
+        try {
+            AnomalyResultBatchRequest request = new AnomalyResultBatchRequest(
+                taskExecution.getTaskId(),
+                taskExecutionId,
+                taskExecution.getDataStartTime().toEpochMilli(),
+                taskExecution.getDataEndTime().toEpochMilli(),
+                nodeId
+            );
+            client.execute(AnomalyResultBatchAction.INSTANCE, request, taskExecutionListener(taskExecution, taskExecutionId));
+            // String error = checkLimitation();
+            // if (error == null) {
+            // client.execute(AnomalyResultBatchAction.INSTANCE, request, ActionListener.wrap(response -> {
+            // log.info("Task execution finished for {}, response: {}", taskExecutionId, response.getMessage());
+            // // remove task execution from map when finish
+            // removeTaskExecution(taskExecutionId);
+            // }, exception -> {
+            // // remove task execution from map if execution fails
+            // removeTaskExecution(taskExecutionId);
+            // String state = AnomalyDetectionTaskState.FAILED.name();
+            // Map<String, Object> updatedFields = new HashMap<>();
+            // if (exception instanceof TaskCancelledException) {
+            // state = AnomalyDetectionTaskState.CANCELLED.name();
+            // } else {
+            // updatedFields.put(ERROR_FIELD, ExceptionUtils.getFullStackTrace(exception));
+            // }
+            // updatedFields.put(STATE_FIELD, state);
+            // updateTaskExecution(taskExecutionId, updatedFields);
+            // log.error("Fail to execute batch task action " + taskExecution.getTaskId(), exception);
+            // }));
+            // } else {
+            // log.warn("This node can't run more task, check other nodes");
+            // DiscoveryNode[] eligibleDataNodes = nodeFilterer.getEligibleDataNodes();
+            // MultiResponsesDelegateActionListener<ADStatsResponse> delegateListener = new MultiResponsesDelegateActionListener<>(
+            // ActionListener.wrap(response -> {}, excpetion -> {}),
+            // ,
+            // "Unable to return AD Stats"
+            // );
+            //
+            // transportService
+            // .sendRequest(
+            // rcfNode.get(),
+            // RCFResultAction.NAME,
+            // new RCFResultRequest(adID, rcfModelID, featureOptional.getProcessedFeatures().get()),
+            // option,
+            // new ActionListenerResponseHandler<>(rcfListener, RCFResultResponse::new)
+            // );
+            // }
+
+        } catch (Exception e) {
+            // log.error("Failed to execute task " + taskExecution.getTaskId(), e);
+            // // remove task execution from map if error happens
+            // removeTaskExecution(taskExecutionId);
+            // updateTaskExecution(
+            // taskExecutionId,
+            // ImmutableMap
+            // .of(
+            // STATE_FIELD,
+            // AnomalyDetectionTaskState.FAILED.name(),
+            // EXECUTION_END_TIME_FIELD,
+            // Instant.now(),
+            // ERROR_FIELD,
+            // ExceptionUtils.getFullStackTrace(e)
+            // )
+            // );
+            handleTaskExecutionException(taskExecution, taskExecutionId, e);
+        }
+    }
+
+    private void getNodeStats(
+        Client client,
+        MultiResponsesDelegateActionListener<ADStatsResponse> listener,
+        ADStatsRequest adStatsRequest
+    ) {
+        client.execute(ADStatsNodesAction.INSTANCE, adStatsRequest, ActionListener.wrap(adStatsResponse -> {
+            ADStatsResponse restADStatsResponse = new ADStatsResponse();
+            restADStatsResponse.setADStatsNodesResponse(adStatsResponse);
+            listener.onResponse(restADStatsResponse);
+        }, listener::onFailure));
     }
 
     /*public void indexTaskExecution(AnomalyDetectionTaskExecution taskExecution, String taskExecutionId) {
@@ -483,4 +686,87 @@ public class AnomalyDetectionTaskManager {
             listener.onFailure(getTaskException);
         }));
     }
+
+    public String checkLimitation() {
+        if (taskMap.size() >= MAX_RUNNING_TASK) {
+            return "Can't run more than " + MAX_RUNNING_TASK + " per node";
+        }
+        return null;
+    }
+
+    public void removeTaskExecution(String taskExecutionId) {
+        taskMap.remove(taskExecutionId);
+        // adStats.getStat(StatNames.AD_EXECUTING_TASK_COUNT.getName()).setValue((long) taskMap.size());
+    }
+
+    public void putTaskExecution(String taskExecutionId, AnomalyDetectionBatchTask batchTask) {
+        taskMap.put(taskExecutionId, batchTask);
+        // adStats.getStat(StatNames.AD_EXECUTING_TASK_COUNT.getName()).setValue((long) taskMap.size());
+    }
+
+    public void checkTaskCancelled(String taskExecutionId) {
+        if (taskMap.containsKey(taskExecutionId) && taskMap.get(taskExecutionId).isCancelled()) {
+            removeTaskExecution(taskExecutionId);
+            throw new TaskCancelledException("cancelled");
+        }
+    }
+
+    public int getTaskCount() {
+        return this.taskMap.size();
+    }
+
+    public List<Map<String, Object>> getTasks() {
+        return this.taskMap.values().stream().map(task -> task.getTaskInfo()).collect(Collectors.toList());
+    }
+
+    /*public void createTaskFromDetector(AnomalyDetectionTaskCreationRequest request, ActionListener listener) {
+        GetRequest getRequest = new GetRequest(AnomalyDetector.ANOMALY_DETECTORS_INDEX).id(request.getDetectorId());
+        client.get(getRequest, ActionListener.wrap(response -> {
+            try (
+                XContentParser parser = XContentType.JSON
+                    .xContent()
+                    .createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, response.getSourceAsString())
+            ) {
+                ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser::getTokenLocation);
+                AnomalyDetector detector = AnomalyDetector.parse(parser, response.getId());
+                String name = request.getName() == null ? detector.getName() : request.getName();
+                String description = request.getDescription() == null ? detector.getDescription() : request.getDescription();
+    
+                AnomalyDetectionTask task = new AnomalyDetectionTask(
+                    null,
+                    null,
+                    name,
+                    description,
+                    null,
+                    request.getDataStartTime(),
+                    request.getDataEndTime(),
+                    null,
+                    null,
+                    null,
+                    Instant.now(),
+                    detector.getTimeField(),
+                    detector.getIndices(),
+                    detector.getFilterQuery(),
+                    detector.getFeatureAttributes(),
+                    detector.getDetectionInterval(),
+                    detector.getWindowDelay(),
+                    detector.getShingleSize()
+                );
+    
+                IndexRequest indexRequest = new IndexRequest(ANOMALY_DETECTION_TASK_INDEX)
+                    .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)
+                    .source(task.toXContent(XContentBuilder.builder(XContentType.JSON.xContent()), XCONTENT_WITH_TYPE));
+                client.index(indexRequest, ActionListener.wrap(r -> {
+                    if (r.status() == RestStatus.CREATED) {
+                        listener.onResponse(r);
+                    } else {
+                        listener.onFailure(new AnomalyDetectionException("Task creation not acknowledged"));
+                    }
+                }, e -> { listener.onFailure(e); }));
+            } catch (Exception t) {
+                log.error("Fail to parse detector {}", request.getDetectorId());
+                listener.onFailure(new AnomalyDetectionException("Fail to parse detector"));
+            }
+        }, exception -> { listener.onFailure(new AnomalyDetectionException("Fail to get detector")); }));
+    }*/
 }

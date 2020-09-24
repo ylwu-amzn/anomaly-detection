@@ -262,7 +262,10 @@ List<String> jacocoExclusions = [
         'com.amazon.opendistroforelasticsearch.ad.common.exception.ResourceNotFoundException',
         'com.amazon.opendistroforelasticsearch.ad.common.exception.ClientException',
         'com.amazon.opendistroforelasticsearch.ad.common.exception.EndRunException',
-        'com.amazon.opendistroforelasticsearch.ad.common.exception.InternalFailure'
+        'com.amazon.opendistroforelasticsearch.ad.common.exception.InternalFailure',
+        'com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ADTaskExecutionRequest',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ADTaskExecutionTransportAction'
 ]
 
 jacocoTestCoverageVerification {

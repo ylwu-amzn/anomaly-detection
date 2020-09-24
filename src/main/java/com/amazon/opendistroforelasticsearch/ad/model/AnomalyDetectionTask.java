@@ -19,6 +19,7 @@ import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpect
 import static org.elasticsearch.index.query.AbstractQueryBuilder.parseInnerQueryBuilder;
 
 import java.io.IOException;
+import java.security.InvalidParameterException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -145,9 +146,6 @@ public class AnomalyDetectionTask implements ToXContentObject {
         this.detectionInterval = detectionInterval;
         this.windowDelay = windowDelay;
         this.shingleSize = shingleSize;
-        if (Strings.isBlank(name)) {
-            throw new IllegalArgumentException("Detection task name should be set");
-        }
         this.taskId = taskId;
         this.version = version;
         this.name = name;
@@ -159,6 +157,7 @@ public class AnomalyDetectionTask implements ToXContentObject {
         this.uiMetadata = uiMetadata;
         this.schemaVersion = schemaVersion;
         this.lastUpdateTime = lastUpdateTime;
+        validate();
     }
 
     public XContentBuilder toXContent(XContentBuilder builder) throws IOException {
@@ -203,6 +202,27 @@ public class AnomalyDetectionTask implements ToXContentObject {
         }
 
         return xContentBuilder.endObject();
+    }
+
+    private void validate() {
+        if (dataStartTime != null && dataEndTime != null && dataStartTime.isAfter(dataEndTime)) {
+            throw new InvalidParameterException("Data start time must before data end time");
+        }
+        if (Strings.isBlank(name)) {
+            throw new IllegalArgumentException("Task name should be set");
+        }
+        if (timeField == null) {
+            throw new IllegalArgumentException("Time field should be set");
+        }
+        if (indices == null || indices.isEmpty()) {
+            throw new IllegalArgumentException("Indices should be set");
+        }
+        if (detectionInterval == null) {
+            throw new IllegalArgumentException("Detection interval should be set");
+        }
+        if (shingleSize != null && shingleSize < 1) {
+            throw new IllegalArgumentException("Shingle size must be a positive integer");
+        }
     }
 
     /**

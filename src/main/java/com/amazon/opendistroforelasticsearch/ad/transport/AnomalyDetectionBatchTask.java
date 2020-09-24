@@ -22,15 +22,19 @@ import org.elasticsearch.tasks.TaskId;
 
 public class AnomalyDetectionBatchTask extends CancellableTask {
 
+    private Map<String, Object> taskInfo;
+
     public AnomalyDetectionBatchTask(
         long id,
         String type,
         String action,
         String description,
         TaskId parentTaskId,
-        Map<String, String> headers
+        Map<String, String> headers,
+        Map<String, Object> taskInfo
     ) {
         super(id, type, action, description, parentTaskId, headers);
+        this.taskInfo = taskInfo;
     }
 
     @Override
@@ -38,4 +42,7 @@ public class AnomalyDetectionBatchTask extends CancellableTask {
         return true;
     }
 
+    public Map<String, Object> getTaskInfo() {
+        return taskInfo;
+    }
 }

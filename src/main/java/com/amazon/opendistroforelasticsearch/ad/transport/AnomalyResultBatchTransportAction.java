@@ -17,6 +17,7 @@ package com.amazon.opendistroforelasticsearch.ad.transport;
 
 import static com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorPlugin.AD_BATCh_TASK_THREAD_POOL_NAME;
 import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTaskExecution.CURRENT_DETECTION_INTERVAL_FIELD;
+import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTaskExecution.ERROR_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTaskExecution.PROGRESS_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectionTaskExecution.STATE_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_SAMPLES_PER_TREE;
@@ -57,6 +58,7 @@ import com.amazon.opendistroforelasticsearch.ad.common.exception.AnomalyDetectio
 import com.amazon.opendistroforelasticsearch.ad.common.exception.ClientException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.EndRunException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.InternalFailure;
+import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.ResourceNotFoundException;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
 import com.amazon.opendistroforelasticsearch.ad.feature.FeatureManager;
@@ -105,7 +107,7 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
     private final Map<String, ThresholdingModel> taskThresholdModelMap;
     private final Map<String, Boolean> taskThresholdModelTrainedMap;
     private final Map<String, List<Double>> taskTrainingDataMap; // TODO, check if this class is singleton or not
-    private final Map<String, AnomalyDetectionBatchTask> taskMap;
+    // private final Map<String, AnomalyDetectionBatchTask> taskMap;
     private final AnomalyResultBulkIndexHandler anomalyResultBulkIndexHandler;
     // TODO: make the dynamic setting
     private final int PIECES_PER_MINUTE = 10;
@@ -155,19 +157,22 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
         this.anomalyResultBulkIndexHandler = anomalyResultBulkIndexHandler;
         taskThresholdModelTrainedMap = new ConcurrentHashMap<>();
         taskTrainingDataMap = new ConcurrentHashMap<>();
-        taskMap = new ConcurrentHashMap<>();
+        // taskMap = new ConcurrentHashMap<>();
         this.threadPool = threadPool;
     }
 
     @Override
     protected void doExecute(Task task, ActionRequest actionRequest, ActionListener<AnomalyResultBatchResponse> actionListener) {
-        // TODO: threadId: 60, threadName: elasticsearch[integTest-0][ad-batch-task-threadpool][T#1]
         AnomalyDetectionBatchTask batchTask = (AnomalyDetectionBatchTask) task;
-        LOG.info("Task cancellable: {}", batchTask.isCancelled());
-
-        // TODO: add circuit breaker
         AnomalyResultBatchRequest request = AnomalyResultBatchRequest.fromActionRequest(actionRequest);
-        ActionListener<AnomalyResultBatchResponse> listener = ActionListener.wrap(actionListener::onResponse, e -> {
+        String taskId = request.getTaskId();
+        String taskExecutionId = request.getTaskExecutionId();
+
+        ActionListener<AnomalyResultBatchResponse> listener = ActionListener.wrap(response -> {
+            anomalyDetectionTaskManager.removeTaskExecution(taskExecutionId);
+            actionListener.onResponse(response);
+        }, e -> {
+            anomalyDetectionTaskManager.removeTaskExecution(taskExecutionId);
             if (e instanceof TaskCancelledException) {
                 adStats.getStat(StatNames.AD_CANCEL_TASK_COUNT.getName()).increment();
             } else {
@@ -176,10 +181,27 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
             actionListener.onFailure(e);
         });
 
-        String taskId = request.getTaskId();
-        String taskExecutionId = request.getTaskExecutionId();
+        if (adCircuitBreakerService.isOpen()) {
+            String errorMessage = "Circuit breaker is open. Can't run task.";
+            LOG.error(errorMessage + taskId);
+            anomalyDetectionTaskManager
+                .updateTaskExecution(
+                    taskExecutionId,
+                    ImmutableMap.of(STATE_FIELD, AnomalyDetectionTaskState.FAILED.name(), ERROR_FIELD, errorMessage),
+                    ActionListener.wrap(response -> {
+                        AnomalyResultBatchResponse res = new AnomalyResultBatchResponse(errorMessage);
+                        listener.onResponse(res);
+                    }, exception -> { listener.onFailure(exception); })
+                );
+            return;
+        }
 
-        // TODO: only used in AD result.
+        String error = anomalyDetectionTaskManager.checkLimitation();
+        if (error != null) {
+            listener.onFailure(new LimitExceededException(error));
+            return;
+        }
+
         Instant executeStartTime = Instant.now();
 
         anomalyDetectionTaskManager.getTask(taskId, false, ActionListener.wrap(response -> {
@@ -219,10 +241,9 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
                             0.0f
                         ),
                     ActionListener.wrap(r -> {
-                        // TODO: remove task execution from map if error happens
-                        taskMap.put(taskExecutionId, batchTask);
+                        anomalyDetectionTaskManager.putTaskExecution(taskExecutionId, batchTask);
                         try {
-                            checkTaskCancelled(taskExecutionId);
+                            anomalyDetectionTaskManager.checkTaskCancelled(taskExecutionId);
                             if (!shouldStart(listener, anomalyDetectionTask)) {
                                 return;
                             }
@@ -274,13 +295,6 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
         }
     }
 
-    private void checkTaskCancelled(String taskExecutionId) {
-        if (taskMap.containsKey(taskExecutionId) && taskMap.get(taskExecutionId).isCancelled()) {
-            taskMap.remove(taskExecutionId);
-            throw new TaskCancelledException("cancelled");
-        }
-    }
-
     private void getFeatureData(
         ActionListener<AnomalyResultBatchResponse> listener,
         String taskId,
@@ -295,7 +309,7 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
         Instant executeStartTime
     ) {
         try {
-            checkTaskCancelled(taskExecutionId);
+            anomalyDetectionTaskManager.checkTaskCancelled(taskExecutionId);
             featureManager
                 .getFeatures(
                     task,
@@ -591,10 +605,10 @@ public class AnomalyResultBatchTransportAction extends HandledTransportAction<Ac
                         ),
                     ActionListener.wrap(r -> {
                         LOG.info("all pieces finished for task {}, execution {}", task.getTaskId(), taskExecutionId);
-                        AnomalyResultBatchResponse res = new AnomalyResultBatchResponse("task execution done");
                         taskThresholdModelMap.remove(taskExecutionId);
                         taskRcfMap.remove(taskExecutionId);
                         taskThresholdModelTrainedMap.remove(taskExecutionId);
+                        AnomalyResultBatchResponse res = new AnomalyResultBatchResponse("task execution done");
                         listener.onResponse(res);
                     }, e -> { listener.onFailure(e); })
                 );

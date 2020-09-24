@@ -102,12 +102,17 @@ import com.amazon.opendistroforelasticsearch.ad.stats.ADStat;
 import com.amazon.opendistroforelasticsearch.ad.stats.ADStats;
 import com.amazon.opendistroforelasticsearch.ad.stats.StatNames;
 import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.CounterSupplier;
+import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.ExecutingTaskSupplier;
 import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.IndexStatusSupplier;
 import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.ModelsOnNodeSupplier;
+import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.NodeMemorySupplier;
 import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.SettableSupplier;
+import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.TasksOnNodeSupplier;
 import com.amazon.opendistroforelasticsearch.ad.task.AnomalyDetectionTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADStatsNodesAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADStatsNodesTransportAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskExecutionAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskExecutionTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultBatchAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultBatchTransportAction;
@@ -369,6 +374,8 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             AD_THREAD_POOL_NAME
         );
         anomalyDetectorRunner = new AnomalyDetectorRunner(modelManager, featureManager, AnomalyDetectorSettings.MAX_PREVIEW_RESULTS);
+        this.anomalyDetectionTaskManager = AnomalyDetectionTaskManager
+            .initInstance(threadPool, clusterService, client, anomalyDetectionIndices, xContentRegistry, nodeFilter);
 
         Map<String, ADStat<?>> stats = ImmutableMap
             .<String, ADStat<?>>builder()
@@ -376,8 +383,11 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             .put(StatNames.AD_EXECUTE_FAIL_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
             .put(StatNames.AD_EXECUTE_TASK_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
             .put(StatNames.AD_CANCEL_TASK_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
+            .put(StatNames.AD_EXECUTING_TASK_COUNT.getName(), new ADStat<>(false, new ExecutingTaskSupplier(anomalyDetectionTaskManager)))
             .put(StatNames.AD_EXECUTE_TASK_FAIL_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
             .put(StatNames.MODEL_INFORMATION.getName(), new ADStat<>(false, new ModelsOnNodeSupplier(modelManager)))
+            .put(StatNames.TASK_INFORMATION.getName(), new ADStat<>(false, new TasksOnNodeSupplier(anomalyDetectionTaskManager)))
+            .put(StatNames.NODE_MEMORY_USAGE.getName(), new ADStat<>(false, new NodeMemorySupplier(jvmService)))
             .put(
                 StatNames.ANOMALY_DETECTORS_INDEX_STATUS.getName(),
                 new ADStat<>(true, new IndexStatusSupplier(indexUtils, AnomalyDetector.ANOMALY_DETECTORS_INDEX))
@@ -436,8 +446,6 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             xContentRegistry,
             stateManager
         );
-
-        this.anomalyDetectionTaskManager = new AnomalyDetectionTaskManager(threadPool, client, anomalyDetectionIndices, xContentRegistry);
 
         return ImmutableList
             .of(
@@ -536,6 +544,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 new ActionHandler<>(ThresholdResultAction.INSTANCE, ThresholdResultTransportAction.class),
                 new ActionHandler<>(AnomalyResultAction.INSTANCE, AnomalyResultTransportAction.class),
                 new ActionHandler<>(AnomalyResultBatchAction.INSTANCE, AnomalyResultBatchTransportAction.class),
+                new ActionHandler<>(ADTaskExecutionAction.INSTANCE, ADTaskExecutionTransportAction.class),
                 new ActionHandler<>(CronAction.INSTANCE, CronTransportAction.class),
                 new ActionHandler<>(ADStatsNodesAction.INSTANCE, ADStatsNodesTransportAction.class),
                 new ActionHandler<>(ProfileAction.INSTANCE, ProfileTransportAction.class),
