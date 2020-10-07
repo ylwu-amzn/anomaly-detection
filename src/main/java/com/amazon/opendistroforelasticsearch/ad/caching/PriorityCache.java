@@ -502,4 +502,31 @@ public class PriorityCache implements EntityCache {
         }
         return false;
     }
+
+    @Override public long getTotalUpdates(String detectorId) {
+        return Optional
+            .of(activeEnities)
+            .map(entities -> entities.get(detectorId))
+            .map(buffer -> buffer.getHighestPriorityEntityId())
+            .map(entityIdOptional -> entityIdOptional.get())
+            .map(entityId -> getTotalUpdates(detectorId, entityId))
+            .orElse(0l);
+    }
+
+    @Override
+    public long getTotalUpdates(String detectorId, String entityId) {
+        CacheBuffer cacheBuffer = activeEnities.get(detectorId);
+        if (cacheBuffer != null) {
+            Optional<EntityModel> modelOptional = cacheBuffer.getModel(entityId);
+            // TODO: make it work for shingles. samples.size() is not the real shingle
+            long accumulatedShingles = modelOptional
+                .map(model -> model.getRcf())
+                .map(rcf -> rcf.getTotalUpdates())
+                .orElseGet(
+                    () -> modelOptional.map(model -> model.getSamples()).map(samples -> samples.size()).map(Long::valueOf).orElse(0L)
+                );
+            return accumulatedShingles;
+        }
+        return 0l;
+    }
 }

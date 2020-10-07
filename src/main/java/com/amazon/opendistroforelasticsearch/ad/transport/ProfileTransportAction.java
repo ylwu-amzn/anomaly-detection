@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.amazon.opendistroforelasticsearch.ad.caching.CacheProvider;
 import org.elasticsearch.action.FailedNodeException;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.nodes.TransportNodesAction;
@@ -41,6 +42,7 @@ public class ProfileTransportAction extends TransportNodesAction<ProfileRequest,
 
     private ModelManager modelManager;
     private FeatureManager featureManager;
+    private CacheProvider cacheProvider;
 
     /**
      * Constructor
@@ -59,7 +61,8 @@ public class ProfileTransportAction extends TransportNodesAction<ProfileRequest,
         TransportService transportService,
         ActionFilters actionFilters,
         ModelManager modelManager,
-        FeatureManager featureManager
+        FeatureManager featureManager,
+        CacheProvider cacheProvider
     ) {
         super(
             ProfileAction.NAME,
@@ -74,6 +77,7 @@ public class ProfileTransportAction extends TransportNodesAction<ProfileRequest,
         );
         this.modelManager = modelManager;
         this.featureManager = featureManager;
+        this.cacheProvider = cacheProvider;
     }
 
     @Override
@@ -96,6 +100,8 @@ public class ProfileTransportAction extends TransportNodesAction<ProfileRequest,
         String detectorId = request.getDetectorId();
         Set<ProfileName> profiles = request.getProfilesToBeRetrieved();
         int shingleSize = -1;
+        long activeEntity = 0;
+        long totalUpdates = 0;
         if (profiles.contains(ProfileName.COORDINATING_NODE) || profiles.contains(ProfileName.SHINGLE_SIZE)) {
             shingleSize = featureManager.getShingleSize(detectorId);
         }
@@ -105,6 +111,12 @@ public class ProfileTransportAction extends TransportNodesAction<ProfileRequest,
         } else {
             modelSize = new HashMap<>();
         }
-        return new ProfileNodeResponse(clusterService.localNode(), modelSize, shingleSize);
+        if (profiles.contains(ProfileName.ACTIVE_ENTITIES)) {
+            activeEntity = cacheProvider.getActiveEntities(detectorId);
+        }
+        if (profiles.contains(ProfileName.INIT_PROGRESS)) {
+            totalUpdates = cacheProvider.getTotalUpdates(detectorId);
+        }
+        return new ProfileNodeResponse(clusterService.localNode(), modelSize, shingleSize, activeEntity, totalUpdates);
     }
 }

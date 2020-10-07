@@ -64,4 +64,21 @@ public interface EntityCache extends MaintenanceState, CleanState {
      * @return a value between 0 and 1 indicating the percentage of a detector's initialization
      */
     float getInitProgress(String detectorId, String entityId);
+
+    /**
+     * Get total updates of detector's most active entity's RCF model.
+     *
+     * @param detectorId detector id
+     * @return RCF model total updates of most active entity
+     */
+    long getTotalUpdates(String detectorId);
+
+    /**
+     * Get RCF model total updates of specific entity
+     *
+     * @param detectorId detector id
+     * @param entityId  entity id
+     * @return RCF model total updates of specific entity
+     */
+    long getTotalUpdates(String detectorId, String entityId);
 }

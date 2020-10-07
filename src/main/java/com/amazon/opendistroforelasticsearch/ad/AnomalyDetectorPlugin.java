@@ -30,6 +30,8 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.amazon.opendistroforelasticsearch.ad.transport.EntityProfileAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.EntityProfileTransportAction;
 import org.elasticsearch.SpecialPermission;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
@@ -453,6 +455,12 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 StatNames.MODELS_CHECKPOINT_INDEX_STATUS.getName(),
                 new ADStat<>(true, new IndexStatusSupplier(indexUtils, CommonName.CHECKPOINT_INDEX_NAME))
             )
+            .put(
+               StatNames.ANOMALY_DETECTION_JOB_INDEX_STATUS.getName(),
+               new ADStat<>(true, new IndexStatusSupplier(indexUtils, AnomalyDetectorJob.ANOMALY_DETECTOR_JOB_INDEX)))
+           .put(
+               StatNames.ANOMALY_DETECTION_STATE_STATUS.getName(),
+               new ADStat<>(true, new IndexStatusSupplier(indexUtils, DetectorInternalState.DETECTOR_STATE_INDEX)))
             .put(StatNames.DETECTOR_COUNT.getName(), new ADStat<>(true, new SettableSupplier()))
             .build();
 
@@ -603,7 +611,8 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 new ActionHandler<>(StatsAnomalyDetectorAction.INSTANCE, StatsAnomalyDetectorTransportAction.class),
                 new ActionHandler<>(DeleteAnomalyDetectorAction.INSTANCE, DeleteAnomalyDetectorTransportAction.class),
                 new ActionHandler<>(EntityResultAction.INSTANCE, EntityResultTransportAction.class),
-                new ActionHandler<>(ADResultBulkAction.INSTANCE, ADResultBulkTransportAction.class)
+                new ActionHandler<>(ADResultBulkAction.INSTANCE, ADResultBulkTransportAction.class),
+                new ActionHandler<>(EntityProfileAction.INSTANCE, EntityProfileTransportAction.class)
             );
     }
 

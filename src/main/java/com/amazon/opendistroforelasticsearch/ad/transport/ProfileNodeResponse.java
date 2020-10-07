@@ -18,6 +18,7 @@ package com.amazon.opendistroforelasticsearch.ad.transport;
 import java.io.IOException;
 import java.util.Map;
 
+import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
 import org.elasticsearch.action.support.nodes.BaseNodeResponse;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.io.stream.StreamInput;
@@ -31,10 +32,11 @@ import org.elasticsearch.common.xcontent.XContentBuilder;
 public class ProfileNodeResponse extends BaseNodeResponse implements ToXContentFragment {
     // filed name in toXContent
     static final String MODEL_SIZE_IN_BYTES = "model_size_in_bytes";
-    static final String SHINGLE_SIZE = "shingle_size";
 
     private Map<String, Long> modelSize;
     private int shingleSize;
+    private long activeEntities;
+    private long totalUpdates;
 
     /**
      * Constructor
@@ -46,6 +48,7 @@ public class ProfileNodeResponse extends BaseNodeResponse implements ToXContentF
         super(in);
         modelSize = in.readMap(StreamInput::readString, StreamInput::readLong);
         shingleSize = in.readInt();
+        activeEntities = in.readVLong();
     }
 
     /**
@@ -55,10 +58,13 @@ public class ProfileNodeResponse extends BaseNodeResponse implements ToXContentF
      * @param modelSize Mapping of model id to its memory consumption in bytes
      * @param shingleSize shingle size
      */
-    public ProfileNodeResponse(DiscoveryNode node, Map<String, Long> modelSize, int shingleSize) {
+    public ProfileNodeResponse(DiscoveryNode node, Map<String, Long> modelSize, int shingleSize, long activeEntity,
+        long totalUpdates) {
         super(node);
         this.modelSize = modelSize;
         this.shingleSize = shingleSize;
+        this.activeEntities = activeEntity;
+        this.totalUpdates = totalUpdates;
     }
 
     /**
@@ -77,6 +83,8 @@ public class ProfileNodeResponse extends BaseNodeResponse implements ToXContentF
         super.writeTo(out);
         out.writeMap(modelSize, StreamOutput::writeString, StreamOutput::writeLong);
         out.writeInt(shingleSize);
+        out.writeVLong(activeEntities);
+        out.writeVLong(totalUpdates);
     }
 
     /**
@@ -95,7 +103,9 @@ public class ProfileNodeResponse extends BaseNodeResponse implements ToXContentF
         }
         builder.endObject();
 
-        builder.field(SHINGLE_SIZE, shingleSize);
+        builder.field(CommonName.SHINGLE_SIZE, shingleSize);
+        builder.field(CommonName.ACTIVE_ENTITIES, activeEntities);
+        builder.field(CommonName.TOTAL_UPDATES, totalUpdates);
 
         return builder;
     }
@@ -106,5 +116,13 @@ public class ProfileNodeResponse extends BaseNodeResponse implements ToXContentF
 
     public int getShingleSize() {
         return shingleSize;
+    }
+
+    public long getActiveEntities() {
+        return activeEntities;
+    }
+
+    public long getTotalUpdates() {
+        return totalUpdates;
     }
 }

@@ -69,6 +69,7 @@ public class RestGetAnomalyDetectorAction extends BaseRestHandler {
 
     private static final String GET_ANOMALY_DETECTOR_ACTION = "get_anomaly_detector";
     private static final Logger logger = LogManager.getLogger(RestGetAnomalyDetectorAction.class);
+    public static final String ENTITY = "entity";
     private final AnomalyDetectorProfileRunner profileRunner;
     private final Set<String> allProfileTypeStrs;
     private final Set<ProfileName> allProfileTypes;
@@ -99,9 +100,19 @@ public class RestGetAnomalyDetectorAction extends BaseRestHandler {
         String typesStr = request.param(TYPE);
         String rawPath = request.rawPath();
         if (!Strings.isEmpty(typesStr) || rawPath.endsWith(PROFILE) || rawPath.endsWith(PROFILE + "/")) {
-            boolean all = request.paramAsBoolean("_all", false);
-            return channel -> profileRunner
-                .profile(detectorId, getProfileActionListener(channel, detectorId), getProfilesToCollect(typesStr, all));
+            if (request.params().containsKey(ENTITY)) {
+                String entityValue = request.param(ENTITY);
+                return channel -> profileRunner.profileEntity(detectorId, entityValue, ActionListener.wrap(r -> {
+                    channel.sendResponse(new BytesRestResponse(RestStatus.OK, r.toXContent(channel.newBuilder())));
+                }, e ->
+                {
+                    channel.sendResponse(buildInternalServerErrorResponse(e, e.getMessage()));
+                }));
+            } else {
+                boolean all = request.paramAsBoolean("_all", false);
+                return channel -> profileRunner
+                    .profile(detectorId, getProfileActionListener(channel, detectorId), getProfilesToCollect(typesStr, all));
+            }
         } else {
             boolean returnJob = request.paramAsBoolean("job", false);
             MultiGetRequest.Item adItem = new MultiGetRequest.Item(ANOMALY_DETECTORS_INDEX, detectorId)

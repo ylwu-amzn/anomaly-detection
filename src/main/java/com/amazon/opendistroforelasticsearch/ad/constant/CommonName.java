@@ -58,6 +58,8 @@ public class CommonName {
     public static final String TOTAL_SIZE_IN_BYTES = "total_size_in_bytes";
     public static final String MODELS = "models";
     public static final String INIT_PROGRESS = "init_progress";
+    public static final String TOTAL_ENTITIES = "total_entities";
+    public static final String ACTIVE_ENTITIES = "active_entities";
 
     // Elastic mapping type
     public static final String MAPPING_TYPE = "_doc";
@@ -68,4 +70,6 @@ public class CommonName {
     public static final String KEYWORD_TYPE = "keyword";
 
     public static final String IP_TYPE = "ip";
+
+    public static final String TOTAL_UPDATES  = "total_updates";
 }

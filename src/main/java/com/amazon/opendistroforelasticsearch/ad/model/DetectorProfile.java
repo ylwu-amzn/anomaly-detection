@@ -34,6 +34,8 @@ public class DetectorProfile implements ToXContentObject, Mergeable {
     private String coordinatingNode;
     private long totalSizeInBytes;
     private InitProgressProfile initProgress;
+    private Long totalEntities;
+    private Long activeEntities;
 
     public XContentBuilder toXContent(XContentBuilder builder) throws IOException {
         return toXContent(builder, ToXContent.EMPTY_PARAMS);
@@ -49,6 +51,8 @@ public class DetectorProfile implements ToXContentObject, Mergeable {
         private String coordinatingNode = null;
         private long totalSizeInBytes = -1;
         private InitProgressProfile initProgress = null;
+        private Long totalEntities;
+        private Long activeEntities;
 
         public Builder() {}
 
@@ -87,6 +91,16 @@ public class DetectorProfile implements ToXContentObject, Mergeable {
             return this;
         }
 
+        public Builder totalEntities(Long totalEntities) {
+            this.totalEntities = totalEntities;
+            return this;
+        }
+
+        public Builder activeEntities(Long activeEntities) {
+            this.activeEntities = activeEntities;
+            return this;
+        }
+
         public DetectorProfile build() {
             DetectorProfile profile = new DetectorProfile();
             profile.state = this.state;
@@ -96,6 +110,8 @@ public class DetectorProfile implements ToXContentObject, Mergeable {
             profile.coordinatingNode = coordinatingNode;
             profile.totalSizeInBytes = totalSizeInBytes;
             profile.initProgress = initProgress;
+            profile.totalEntities = totalEntities;
+            profile.activeEntities = activeEntities;
 
             return profile;
         }
@@ -129,6 +145,12 @@ public class DetectorProfile implements ToXContentObject, Mergeable {
         }
         if (initProgress != null) {
             xContentBuilder.field(CommonName.INIT_PROGRESS, initProgress);
+        }
+        if (totalEntities != null) {
+            xContentBuilder.field(CommonName.TOTAL_ENTITIES, totalEntities);
+        }
+        if (activeEntities != null) {
+            xContentBuilder.field(CommonName.ACTIVE_ENTITIES, activeEntities);
         }
         return xContentBuilder.endObject();
     }
@@ -189,6 +211,22 @@ public class DetectorProfile implements ToXContentObject, Mergeable {
         this.initProgress = initProgress;
     }
 
+    public Long getTotalEntities() {
+        return totalEntities;
+    }
+
+    public void setTotalEntities(Long totalEntities) {
+        this.totalEntities = totalEntities;
+    }
+
+    public Long getActiveEntities() {
+        return activeEntities;
+    }
+
+    public void setActiveEntities(Long activeEntities) {
+        this.activeEntities = activeEntities;
+    }
+
     @Override
     public void merge(Mergeable other) {
         if (this == other || other == null || getClass() != other.getClass()) {
@@ -215,6 +253,12 @@ public class DetectorProfile implements ToXContentObject, Mergeable {
         }
         if (otherProfile.getInitProgress() != null) {
             this.initProgress = otherProfile.getInitProgress();
+        }
+        if (otherProfile.getTotalEntities() != null) {
+            this.totalEntities = otherProfile.getTotalEntities();
+        }
+        if (otherProfile.getActiveEntities() != null) {
+            this.activeEntities = otherProfile.getActiveEntities();
         }
     }
 
@@ -251,6 +295,12 @@ public class DetectorProfile implements ToXContentObject, Mergeable {
             if (initProgress != null) {
                 equalsBuilder.append(initProgress, other.initProgress);
             }
+            if (totalEntities != null) {
+                equalsBuilder.append(totalEntities, other.totalEntities);
+            }
+            if (activeEntities != null) {
+                equalsBuilder.append(activeEntities, other.activeEntities);
+            }
             return equalsBuilder.isEquals();
         }
         return false;
@@ -266,6 +316,8 @@ public class DetectorProfile implements ToXContentObject, Mergeable {
             .append(coordinatingNode)
             .append(totalSizeInBytes)
             .append(initProgress)
+            .append(totalEntities)
+            .append(activeEntities)
             .toHashCode();
     }
 
@@ -293,6 +345,12 @@ public class DetectorProfile implements ToXContentObject, Mergeable {
         }
         if (initProgress != null) {
             toStringBuilder.append(CommonName.INIT_PROGRESS, initProgress);
+        }
+        if (totalEntities != null) {
+            toStringBuilder.append(CommonName.TOTAL_ENTITIES, totalEntities);
+        }
+        if (activeEntities != null) {
+            toStringBuilder.append(CommonName.ACTIVE_ENTITIES, activeEntities);
         }
         return toStringBuilder.toString();
     }

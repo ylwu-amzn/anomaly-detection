@@ -67,4 +67,12 @@ public class CacheProvider implements EntityCache {
         return delegate.getInitProgress(detectorId, entityId);
     }
 
+    @Override
+    public long getTotalUpdates(String detectorId) {
+        return delegate.getTotalUpdates(detectorId);
+    }
+
+    @Override public long getTotalUpdates(String detectorId, String entityId) {
+        return delegate.getTotalUpdates(detectorId, entityId);
+    }
 }
