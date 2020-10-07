@@ -15,11 +15,13 @@
 
 package com.amazon.opendistroforelasticsearch.ad.model;
 
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.DEFAULT_MULTI_ENTITY_SHINGLE;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.DEFAULT_SHINGLE_SIZE;
 import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
 import static org.elasticsearch.index.query.AbstractQueryBuilder.parseInnerQueryBuilder;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -72,6 +74,7 @@ public class AnomalyDetector implements ToXContentObject {
     private static final String SHINGLE_SIZE_FIELD = "shingle_size";
     private static final String LAST_UPDATE_TIME_FIELD = "last_update_time";
     public static final String UI_METADATA_FIELD = "ui_metadata";
+    public static final String CATEGORY_FIELD = "category_field";
 
     private final String detectorId;
     private final Long version;
@@ -87,6 +90,7 @@ public class AnomalyDetector implements ToXContentObject {
     private final Map<String, Object> uiMetadata;
     private final Integer schemaVersion;
     private final Instant lastUpdateTime;
+    private final List<String> categoryField;
 
     /**
      * Constructor function.
@@ -105,6 +109,7 @@ public class AnomalyDetector implements ToXContentObject {
      * @param uiMetadata        metadata used by Kibana
      * @param schemaVersion     anomaly detector index mapping version
      * @param lastUpdateTime    detector's last update time
+     * @param categoryField     a list of partition fields
      */
     public AnomalyDetector(
         String detectorId,
@@ -120,7 +125,8 @@ public class AnomalyDetector implements ToXContentObject {
         Integer shingleSize,
         Map<String, Object> uiMetadata,
         Integer schemaVersion,
-        Instant lastUpdateTime
+        Instant lastUpdateTime,
+        List<String> categoryField
     ) {
         if (Strings.isBlank(name)) {
             throw new IllegalArgumentException("Detector name should be set");
@@ -137,6 +143,9 @@ public class AnomalyDetector implements ToXContentObject {
         if (shingleSize != null && shingleSize < 1) {
             throw new IllegalArgumentException("Shingle size must be a positive integer");
         }
+        if (categoryField != null && categoryField.size() > 1) {
+            throw new IllegalArgumentException("We only support filtering data by one categorical variable");
+        }
         this.detectorId = detectorId;
         this.version = version;
         this.name = name;
@@ -151,6 +160,7 @@ public class AnomalyDetector implements ToXContentObject {
         this.uiMetadata = uiMetadata;
         this.schemaVersion = schemaVersion;
         this.lastUpdateTime = lastUpdateTime;
+        this.categoryField = categoryField;
     }
 
     public XContentBuilder toXContent(XContentBuilder builder) throws IOException {
@@ -180,6 +190,9 @@ public class AnomalyDetector implements ToXContentObject {
         }
         if (lastUpdateTime != null) {
             xContentBuilder.timeField(LAST_UPDATE_TIME_FIELD, LAST_UPDATE_TIME_FIELD, lastUpdateTime.toEpochMilli());
+        }
+        if (categoryField != null) {
+            xContentBuilder.field(CATEGORY_FIELD, categoryField.toArray());
         }
         return xContentBuilder.endObject();
     }
@@ -249,6 +262,8 @@ public class AnomalyDetector implements ToXContentObject {
         Map<String, Object> uiMetadata = null;
         Instant lastUpdateTime = null;
 
+        List<String> categoryField = null;
+
         ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.currentToken(), parser::getTokenLocation);
         while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
             String fieldName = parser.currentName();
@@ -304,6 +319,9 @@ public class AnomalyDetector implements ToXContentObject {
                 case LAST_UPDATE_TIME_FIELD:
                     lastUpdateTime = ParseUtils.toInstant(parser);
                     break;
+                case CATEGORY_FIELD:
+                    categoryField = (List) parser.list();
+                    break;
                 default:
                     parser.skipChildren();
                     break;
@@ -323,7 +341,8 @@ public class AnomalyDetector implements ToXContentObject {
             shingleSize,
             uiMetadata,
             schemaVersion,
-            lastUpdateTime
+            lastUpdateTime,
+            categoryField
         );
     }
 
@@ -428,7 +447,9 @@ public class AnomalyDetector implements ToXContentObject {
     }
 
     public Integer getShingleSize() {
-        return shingleSize == null ? DEFAULT_SHINGLE_SIZE : shingleSize;
+        return shingleSize == null
+            ? (categoryField != null && categoryField.size() > 0 ? DEFAULT_MULTI_ENTITY_SHINGLE : DEFAULT_SHINGLE_SIZE)
+            : shingleSize;
     }
 
     public Map<String, Object> getUiMetadata() {
@@ -443,4 +464,19 @@ public class AnomalyDetector implements ToXContentObject {
         return lastUpdateTime;
     }
 
+    public List<String> getCategoryField() {
+        return this.categoryField;
+    }
+
+    public long getDetectorIntervalInMilliseconds() {
+        return ((IntervalTimeConfiguration) getDetectionInterval()).toDuration().toMillis();
+    }
+
+    public long getDetectorIntervalInSeconds() {
+        return getDetectorIntervalInMilliseconds() / 1000;
+    }
+
+    public Duration getDetectionIntervalDuration() {
+        return ((IntervalTimeConfiguration) getDetectionInterval()).toDuration();
+    }
 }

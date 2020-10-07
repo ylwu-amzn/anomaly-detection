@@ -66,11 +66,9 @@ import org.mockito.MockitoAnnotations;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.EndRunException;
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
-import com.amazon.opendistroforelasticsearch.ad.model.AnomalyResult;
 import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
-import com.amazon.opendistroforelasticsearch.ad.transport.TransportStateManager;
-import com.amazon.opendistroforelasticsearch.ad.transport.handler.AnomalyIndexHandler;
 import com.amazon.opendistroforelasticsearch.ad.transport.handler.DetectionStateHandler;
+import com.amazon.opendistroforelasticsearch.ad.transport.handler.MultitiEntityResultHandler;
 import com.amazon.opendistroforelasticsearch.ad.util.ClientUtil;
 import com.amazon.opendistroforelasticsearch.ad.util.IndexUtils;
 import com.amazon.opendistroforelasticsearch.ad.util.ThrowingConsumerWrapper;
@@ -111,7 +109,7 @@ public class AnomalyDetectorJobRunnerTests extends AbstractADTest {
     private Iterator<TimeValue> backoff;
 
     @Mock
-    private AnomalyIndexHandler<AnomalyResult> anomalyResultHandler;
+    private MultitiEntityResultHandler anomalyResultHandler;
 
     private DetectionStateHandler detectorStateHandler;
 
@@ -152,7 +150,7 @@ public class AnomalyDetectorJobRunnerTests extends AbstractADTest {
         AnomalyDetectionIndices anomalyDetectionIndices = mock(AnomalyDetectionIndices.class);
         IndexNameExpressionResolver indexNameResolver = mock(IndexNameExpressionResolver.class);
         IndexUtils indexUtils = new IndexUtils(client, clientUtil, clusterService, indexNameResolver);
-        TransportStateManager stateManager = mock(TransportStateManager.class);
+        NodeStateManager stateManager = mock(NodeStateManager.class);
         detectorStateHandler = new DetectionStateHandler(
             client,
             settings,

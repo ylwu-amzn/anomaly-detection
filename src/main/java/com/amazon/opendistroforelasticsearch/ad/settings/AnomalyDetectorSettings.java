@@ -27,8 +27,16 @@ public final class AnomalyDetectorSettings {
 
     private AnomalyDetectorSettings() {}
 
-    public static final Setting<Integer> MAX_ANOMALY_DETECTORS = Setting
+    public static final Setting<Integer> MAX_SINGLE_ENTITY_ANOMALY_DETECTORS = Setting
         .intSetting("opendistro.anomaly_detection.max_anomaly_detectors", 1000, Setting.Property.NodeScope, Setting.Property.Dynamic);
+
+    public static final Setting<Integer> MAX_MULTI_ENTITY_ANOMALY_DETECTORS = Setting
+        .intSetting(
+            "opendistro.anomaly_detection.max_multi_entity_anomaly_detectors",
+            10,
+            Setting.Property.NodeScope,
+            Setting.Property.Dynamic
+        );
 
     public static final Setting<Integer> MAX_ANOMALY_FEATURES = Setting
         .intSetting("opendistro.anomaly_detection.max_anomaly_features", 5, Setting.Property.NodeScope, Setting.Property.Dynamic);
@@ -76,10 +84,11 @@ public final class AnomalyDetectorSettings {
     public static final Setting<Long> AD_RESULT_HISTORY_MAX_DOCS = Setting
         .longSetting(
             "opendistro.anomaly_detection.ad_result_history_max_docs",
-            // Suppose generally per cluster has 200 detectors and all run with 1 minute interval.
-            // We will get 288,000 AD result docs. So set it as 9000k to avoid multiple roll overs
-            // per day.
-            9_000_000L,
+            // Total documents in primary replica.
+            // A single feature result is roughly 150 bytes. Suppose a doc is
+            // of 200 bytes, 250 million docs is of 50 GB. We choose 50 GB
+            // because we have 1 shard at least. One shard can have at most 50 GB.
+            250_000_000L,
             0L,
             Setting.Property.NodeScope,
             Setting.Property.Dynamic
@@ -88,7 +97,7 @@ public final class AnomalyDetectorSettings {
     public static final Setting<TimeValue> AD_RESULT_HISTORY_RETENTION_PERIOD = Setting
         .positiveTimeSetting(
             "opendistro.anomaly_detection.ad_result_history_retention_period",
-            TimeValue.timeValueDays(90),
+            TimeValue.timeValueDays(30),
             Setting.Property.NodeScope,
             Setting.Property.Dynamic
         );
@@ -142,10 +151,11 @@ public final class AnomalyDetectorSettings {
     public static final String ANOMALY_DETECTOR_JOBS_INDEX_MAPPING_FILE = "mappings/anomaly-detector-jobs.json";
     public static final String ANOMALY_RESULTS_INDEX_MAPPING_FILE = "mappings/anomaly-results.json";
     public static final String ANOMALY_DETECTION_STATE_INDEX_MAPPING_FILE = "mappings/anomaly-detection-state.json";
+    public static final String CHECKPOINT_INDEX_MAPPING_FILE = "mappings/checkpoint.json";
 
     public static final Duration HOURLY_MAINTENANCE = Duration.ofHours(1);
 
-    public static final Duration CHECKPOINT_TTL = Duration.ofDays(14);
+    public static final Duration CHECKPOINT_TTL = Duration.ofDays(3);
 
     // ======================================
     // ML parameters
@@ -214,4 +224,55 @@ public final class AnomalyDetectorSettings {
 
     // Thread pool
     public static final int AD_THEAD_POOL_QUEUE_SIZE = 1000;
+
+    // multi-entity caching
+    public static final int MAX_ACTIVE_STATES = 1000;
+
+    // the size of the cache for small states like last cold start time for an entity.
+    // At most, we have 10 multi-entity detector and each one can be hit by 1000 different entities each
+    // minute. Since these states' life time is hour, we keep its size 10 * 1000 = 10000.
+    public static final int MAX_SMALL_STATES = 10000;
+
+    // Multi-entity detector model setting:
+    // TODO (kaituo): change to 4
+    public static final int DEFAULT_MULTI_ENTITY_SHINGLE = 1;
+
+    public static final int MULTI_ENTITY_NUM_TREES = 10;
+
+    // cache related
+    public static final int DEDICATED_CACHE_SIZE = 10;
+
+    // We only keep priority (4 bytes float) in inactive cache. 1 million priorities
+    // take up 4 MB.
+    public static final int MAX_INACTIVE_ENTITIES = 1_000_000;
+
+    // TODO: check how much does 1 million insertion costs in memory
+    public static final int DOOR_KEEPER_MAX_INSERTION = 1_000_000;
+
+    public static final double DOOR_KEEPER_FAULSE_POSITIVE_RATE = 0.01;
+
+    // Increase the value will adding pressure to indexing anomaly results and our feature query
+    public static final Setting<Integer> MAX_ENTITIES_PER_QUERY = Setting
+        .intSetting(
+            "opendistro.anomaly_detection.max_retry_for_end_run_exception",
+            1000,
+            1,
+            Setting.Property.NodeScope,
+            Setting.Property.Dynamic
+        );
+
+    // save partial zero-anomaly grade results after indexing pressure reaching the limit
+    public static final Setting<Float> INDEX_PRESSURE_SOFT_LIMIT = Setting
+        .floatSetting(
+            "opendistro.anomaly_detection.index_pressure_soft_limit",
+            0.8f,
+            0.0f,
+            Setting.Property.NodeScope,
+            Setting.Property.Dynamic
+        );
+
+    // max number of primary shards of an AD index
+    public static final Setting<Integer> MAX_PRIMARY_SHARDS = Setting
+        .intSetting("opendistro.anomaly_detection.max_primary_shards", 10, 0, Setting.Property.NodeScope, Setting.Property.Dynamic);
+
 }

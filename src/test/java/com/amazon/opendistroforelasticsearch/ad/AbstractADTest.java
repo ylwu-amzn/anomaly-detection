@@ -18,6 +18,8 @@ package com.amazon.opendistroforelasticsearch.ad;
 import static org.hamcrest.Matchers.containsString;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -33,6 +35,8 @@ import org.apache.logging.log4j.util.StackLocatorUtil;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.xcontent.NamedXContentRegistry;
+import org.elasticsearch.search.SearchModule;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.threadpool.FixedExecutorBuilder;
 import org.elasticsearch.threadpool.TestThreadPool;
@@ -41,6 +45,11 @@ import org.elasticsearch.transport.TransportInterceptor;
 import org.elasticsearch.transport.TransportService;
 
 import test.com.amazon.opendistroforelasticsearch.ad.util.FakeNode;
+
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyResult;
+import com.amazon.opendistroforelasticsearch.ad.model.DetectorInternalState;
 
 public class AbstractADTest extends ESTestCase {
 
@@ -215,5 +224,22 @@ public class AbstractADTest extends ESTestCase {
     ) {
         Exception e = expectThrows(exceptionType, () -> listener.actionGet());
         assertThat(e.getMessage(), containsString(msg));
+    }
+
+    @Override
+    protected NamedXContentRegistry xContentRegistry() {
+        SearchModule searchModule = new SearchModule(Settings.EMPTY, false, Collections.emptyList());
+        List<NamedXContentRegistry.Entry> entries = searchModule.getNamedXContents();
+        entries
+            .addAll(
+                Arrays
+                    .asList(
+                        AnomalyDetector.XCONTENT_REGISTRY,
+                        AnomalyResult.XCONTENT_REGISTRY,
+                        DetectorInternalState.XCONTENT_REGISTRY,
+                        AnomalyDetectorJob.XCONTENT_REGISTRY
+                    )
+            );
+        return new NamedXContentRegistry(entries);
     }
 }

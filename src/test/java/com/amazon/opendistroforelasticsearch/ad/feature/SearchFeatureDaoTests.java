@@ -19,7 +19,7 @@ import static java.util.Arrays.asList;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.anyObject;
 import static org.mockito.Matchers.eq;
@@ -34,12 +34,15 @@ import java.time.temporal.ChronoUnit;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
 import java.util.function.BiConsumer;
 
 import junitparams.JUnitParamsRunner;
@@ -54,6 +57,9 @@ import org.elasticsearch.action.search.MultiSearchResponse.Item;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.settings.ClusterSettings;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.LoggingDeprecationHandler;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.common.xcontent.XContentType;
@@ -71,6 +77,7 @@ import org.elasticsearch.search.aggregations.metrics.Max;
 import org.elasticsearch.search.aggregations.metrics.NumericMetricsAggregation;
 import org.elasticsearch.search.aggregations.metrics.Percentile;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
+import org.elasticsearch.threadpool.ThreadPool;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -84,12 +91,14 @@ import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 import org.powermock.modules.junit4.PowerMockRunnerDelegate;
 
+import com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorPlugin;
+import com.amazon.opendistroforelasticsearch.ad.NodeStateManager;
 import com.amazon.opendistroforelasticsearch.ad.dataprocessor.Interpolator;
 import com.amazon.opendistroforelasticsearch.ad.dataprocessor.LinearUniformInterpolator;
 import com.amazon.opendistroforelasticsearch.ad.dataprocessor.SingleFeatureLinearUniformInterpolator;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
-import com.amazon.opendistroforelasticsearch.ad.transport.TransportStateManager;
+import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
 import com.amazon.opendistroforelasticsearch.ad.util.ClientUtil;
 import com.amazon.opendistroforelasticsearch.ad.util.ParseUtils;
 
@@ -128,19 +137,26 @@ public class SearchFeatureDaoTests {
     @Mock
     private Max max;
     @Mock
-    private TransportStateManager stateManager;
+    private NodeStateManager stateManager;
 
     @Mock
     private AnomalyDetector detector;
 
+    @Mock
+    private ThreadPool threadPool;
+
+    @Mock
+    private ClusterService clusterService;
+
     private SearchSourceBuilder featureQuery = new SearchSourceBuilder();
-    private Map<String, Object> searchRequestParams;
+    // private Map<String, Object> searchRequestParams;
     private SearchRequest searchRequest;
     private SearchSourceBuilder searchSourceBuilder;
     private MultiSearchRequest multiSearchRequest;
     private Map<String, Aggregation> aggsMap;
-    private List<Aggregation> aggsList;
+    // private List<Aggregation> aggsList;
     private IntervalTimeConfiguration detectionInterval;
+    // private Settings settings;
 
     @Before
     public void setup() throws Exception {
@@ -148,7 +164,23 @@ public class SearchFeatureDaoTests {
         PowerMockito.mockStatic(ParseUtils.class);
 
         Interpolator interpolator = new LinearUniformInterpolator(new SingleFeatureLinearUniformInterpolator());
-        searchFeatureDao = spy(new SearchFeatureDao(client, xContent, interpolator, clientUtil));
+
+        ExecutorService executorService = mock(ExecutorService.class);
+        when(threadPool.executor(AnomalyDetectorPlugin.AD_THREAD_POOL_NAME)).thenReturn(executorService);
+        doAnswer(invocation -> {
+            Runnable runnable = invocation.getArgument(0);
+            runnable.run();
+            return null;
+        }).when(executorService).execute(any(Runnable.class));
+
+        Settings settings = Settings.EMPTY;
+        ClusterSettings clusterSettings = new ClusterSettings(
+            Settings.EMPTY,
+            Collections.unmodifiableSet(new HashSet<>(Arrays.asList(AnomalyDetectorSettings.MAX_ENTITIES_PER_QUERY)))
+        );
+        when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
+
+        searchFeatureDao = spy(new SearchFeatureDao(client, xContent, interpolator, clientUtil, threadPool, settings, clusterService));
 
         detectionInterval = new IntervalTimeConfiguration(1, ChronoUnit.MINUTES);
         when(detector.getTimeField()).thenReturn("testTimeField");
@@ -158,10 +190,10 @@ public class SearchFeatureDaoTests {
 
         searchSourceBuilder = SearchSourceBuilder
             .fromXContent(XContentType.JSON.xContent().createParser(xContent, LoggingDeprecationHandler.INSTANCE, "{}"));
-        searchRequestParams = new HashMap<>();
+        // searchRequestParams = new HashMap<>();
         searchRequest = new SearchRequest(detector.getIndices().toArray(new String[0]));
         aggsMap = new HashMap<>();
-        aggsList = new ArrayList<>();
+        // aggsList = new ArrayList<>();
 
         when(max.getName()).thenReturn(SearchFeatureDao.AGG_NAME_MAX);
         List<Aggregation> list = new ArrayList<>();

@@ -114,7 +114,7 @@ public class HybridThresholdingModel implements ThresholdingModel {
         }
         if (maxRankError > (1.0 - minPvalueThreshold)) {
             throw new IllegalArgumentException(
-                "maxRankError must be smaller than 1 - minPvalueThreshold in order to accurately " + "estimate that threshold."
+                "maxRankError must be smaller than 1 - minPvalueThreshold in order to accurately estimate that threshold."
             );
         }
         if (maxRankError <= 0.0) {
@@ -131,7 +131,7 @@ public class HybridThresholdingModel implements ThresholdingModel {
         }
         if (downsampleNumSamples >= downsampleMaxNumObservations) {
             throw new IllegalArgumentException(
-                "The number of samples to downsample to must be less than the number of observations " + "before downsampling is triggered."
+                "The number of samples to downsample to must be less than the number of observations before downsampling is triggered."
             );
         }
 
@@ -238,7 +238,7 @@ public class HybridThresholdingModel implements ThresholdingModel {
           raw anomaly scores are positive and non-zero.
         */
         final double maxScorePvalue = computeLogNormalCdf(maxScore, mu, sigma);
-        final double pvalueStep = maxScorePvalue / ((double) numLogNormalQuantiles + 1.0);
+        final double pvalueStep = maxScorePvalue / (numLogNormalQuantiles + 1.0);
         for (double pvalue = pvalueStep; pvalue < maxScorePvalue; pvalue += pvalueStep) {
             double currentScore = computeLogNormalQuantile(pvalue, mu, sigma);
             update(currentScore);
@@ -343,7 +343,7 @@ public class HybridThresholdingModel implements ThresholdingModel {
      */
     private void downsample() {
         KllFloatsSketch downsampledQuantileSketch = new KllFloatsSketch(quantileSketch.getK());
-        double pvalueStep = 1.0 / ((double) downsampleNumSamples - 1.0);
+        double pvalueStep = 1.0 / (downsampleNumSamples - 1.0);
         for (double pvalue = 0.0; pvalue < 1.0; pvalue += pvalueStep) {
             float score = quantileSketch.getQuantile(pvalue);
             downsampledQuantileSketch.update(score);

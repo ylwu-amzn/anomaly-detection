@@ -26,15 +26,22 @@ import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpect
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
+import org.elasticsearch.action.admin.indices.mapping.get.GetFieldMappingsAction;
+import org.elasticsearch.action.admin.indices.mapping.get.GetFieldMappingsRequest;
+import org.elasticsearch.action.admin.indices.mapping.get.GetFieldMappingsResponse;
+import org.elasticsearch.action.admin.indices.mapping.get.GetFieldMappingsResponse.FieldMappingMetadata;
 import org.elasticsearch.action.get.GetRequest;
 import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
+import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.action.support.WriteRequest;
 import org.elasticsearch.client.node.NodeClient;
 import org.elasticsearch.common.unit.TimeValue;
@@ -44,6 +51,7 @@ import org.elasticsearch.rest.BytesRestResponse;
 import org.elasticsearch.rest.RestChannel;
 import org.elasticsearch.rest.RestStatus;
 
+import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
@@ -59,6 +67,10 @@ import com.amazon.opendistroforelasticsearch.jobscheduler.spi.schedule.Schedule;
  * Anomaly detector job REST action handler to process POST/PUT request.
  */
 public class IndexAnomalyDetectorJobActionHandler extends AbstractActionHandler {
+
+    static final String ONLY_ONE_CATEGORICAL_FIELD_ERR_MSG = "We can have only one categorical field.";
+    public static final String CATEGORICAL_FIELD_TYPE_ERR_MSG = "A categorical field must be of type keyword or ip.";
+    static final String NOT_FOUND_ERR_MSG = "Cannot found the categorical field %s";
 
     private final AnomalyDetectionIndices anomalyDetectionIndices;
     private final String detectorId;
@@ -151,27 +163,96 @@ public class IndexAnomalyDetectorJobActionHandler extends AbstractActionHandler 
                 return;
             }
 
-            IntervalTimeConfiguration interval = (IntervalTimeConfiguration) detector.getDetectionInterval();
-            Schedule schedule = new IntervalSchedule(Instant.now(), (int) interval.getInterval(), interval.getUnit());
-            Duration duration = Duration.of(interval.getInterval(), interval.getUnit());
-
-            AnomalyDetectorJob job = new AnomalyDetectorJob(
-                detector.getDetectorId(),
-                schedule,
-                detector.getWindowDelay(),
-                true,
-                Instant.now(),
-                null,
-                Instant.now(),
-                duration.getSeconds()
-            );
-
-            getAnomalyDetectorJobForWrite(job);
+            validateCategoricalField(detector);
         } catch (IOException e) {
             String message = "Failed to parse anomaly detector job " + detectorId;
             logger.error(message, e);
             channel.sendResponse(new BytesRestResponse(RestStatus.INTERNAL_SERVER_ERROR, message));
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void validateCategoricalField(AnomalyDetector detector) {
+        List<String> categoryField = detector.getCategoryField();
+        if (categoryField == null) {
+            writeJob(detector);
+            return;
+        }
+
+        // we only support one categorical field
+        // If there is more than 1 field or none, AnomalyDetector's constructor
+        // throws IllegalArgumentException before reaching this line
+        if (categoryField.size() != 1) {
+            channel.sendResponse(new BytesRestResponse(RestStatus.BAD_REQUEST, ONLY_ONE_CATEGORICAL_FIELD_ERR_MSG));
+            return;
+        }
+
+        String categoryField0 = categoryField.get(0);
+
+        GetFieldMappingsRequest getMappingsRequest = new GetFieldMappingsRequest();
+        getMappingsRequest.indices(detector.getIndices().toArray(new String[0])).fields(categoryField.toArray(new String[0]));
+        getMappingsRequest.indicesOptions(IndicesOptions.strictExpand());
+
+        ActionListener<GetFieldMappingsResponse> mappingsListener = ActionListener.wrap(getMappingsResponse -> {
+            // example getMappingsResponse:
+            // GetFieldMappingsResponse{mappings={server-metrics={_doc={service=FieldMappingMetadata{fullName='service',
+            // source=org.elasticsearch.common.bytes.BytesArray@7ba87dbd}}}}}
+            boolean foundField = false;
+            Map<String, Map<String, Map<String, FieldMappingMetadata>>> mappingsByIndex = getMappingsResponse.mappings();
+
+            for (Map<String, Map<String, FieldMappingMetadata>> mappingsByType : mappingsByIndex.values()) {
+                for (Map<String, FieldMappingMetadata> mappingsByField : mappingsByType.values()) {
+                    for (Map.Entry<String, FieldMappingMetadata> field2Metadata : mappingsByField.entrySet()) {
+                        FieldMappingMetadata fieldMetadata = field2Metadata.getValue();
+
+                        if (fieldMetadata != null) {
+                            Object metadata = fieldMetadata.sourceAsMap().get(categoryField0);
+                            if (metadata != null && metadata instanceof Map) {
+                                foundField = true;
+                                Map<String, Object> metadataMap = (Map<String, Object>) metadata;
+                                String typeName = (String) metadataMap.get(CommonName.TYPE);
+                                if (!typeName.equals(CommonName.KEYWORD_TYPE) && !typeName.equals(CommonName.IP_TYPE)) {
+                                    channel.sendResponse(new BytesRestResponse(RestStatus.BAD_REQUEST, CATEGORICAL_FIELD_TYPE_ERR_MSG));
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (foundField == false) {
+                channel.sendResponse(new BytesRestResponse(RestStatus.BAD_REQUEST, String.format(NOT_FOUND_ERR_MSG, categoryField0)));
+                return;
+            }
+
+            writeJob(detector);
+        }, error -> {
+            String message = String.format("Fail to get the index mapping of %s", detector.getIndices());
+            logger.error(message, error);
+            channel.sendResponse(new BytesRestResponse(RestStatus.INTERNAL_SERVER_ERROR, message));
+        });
+
+        client.execute(GetFieldMappingsAction.INSTANCE, getMappingsRequest, mappingsListener);
+    }
+
+    private void writeJob(AnomalyDetector detector) {
+        IntervalTimeConfiguration interval = (IntervalTimeConfiguration) detector.getDetectionInterval();
+        Schedule schedule = new IntervalSchedule(Instant.now(), (int) interval.getInterval(), interval.getUnit());
+        Duration duration = Duration.of(interval.getInterval(), interval.getUnit());
+
+        AnomalyDetectorJob job = new AnomalyDetectorJob(
+            detector.getDetectorId(),
+            schedule,
+            detector.getWindowDelay(),
+            true,
+            Instant.now(),
+            null,
+            Instant.now(),
+            duration.getSeconds()
+        );
+
+        getAnomalyDetectorJobForWrite(job);
     }
 
     private void getAnomalyDetectorJobForWrite(AnomalyDetectorJob job) {

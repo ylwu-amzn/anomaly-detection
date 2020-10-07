@@ -15,6 +15,7 @@
 
 package com.amazon.opendistroforelasticsearch.ad.ml;
 
+import static com.amazon.opendistroforelasticsearch.ad.ml.CheckpointDao.FIELD_MODEL;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -27,6 +28,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -45,14 +47,24 @@ import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.client.Client;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.mockito.Answers;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Matchers;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.powermock.api.mockito.PowerMockito;
+import org.powermock.core.classloader.annotations.PrepareForTest;
+import org.powermock.modules.junit4.PowerMockRunner;
 
+import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
+import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
 import com.amazon.opendistroforelasticsearch.ad.util.ClientUtil;
+import com.amazon.randomcutforest.serialize.RandomCutForestSerDe;
+import com.google.gson.Gson;
 
+@RunWith(PowerMockRunner.class)
+@PrepareForTest({ Gson.class })
 public class CheckpointDaoTests {
 
     private CheckpointDao checkpointDao;
@@ -67,6 +79,15 @@ public class CheckpointDaoTests {
     @Mock
     private GetResponse getResponse;
 
+    @Mock
+    private RandomCutForestSerDe rcfSerde;
+
+    @Mock
+    private Clock clock;
+
+    @Mock
+    private AnomalyDetectionIndices indexUtil;
+
     // configuration
     private String indexName;
 
@@ -75,18 +96,37 @@ public class CheckpointDaoTests {
     private String model;
     private Map<String, Object> docSource;
 
+    private Gson gson;
+    private Class<? extends ThresholdingModel> thresholdingModelClass;
+
     @Before
     public void setup() {
         MockitoAnnotations.initMocks(this);
 
         indexName = "testIndexName";
 
-        checkpointDao = new CheckpointDao(client, clientUtil, indexName);
+        gson = PowerMockito.mock(Gson.class);
+
+        thresholdingModelClass = HybridThresholdingModel.class;
+
+        checkpointDao = new CheckpointDao(
+            client,
+            clientUtil,
+            indexName,
+            gson,
+            rcfSerde,
+            thresholdingModelClass,
+            clock,
+            AnomalyDetectorSettings.HOURLY_MAINTENANCE,
+            indexUtil
+        );
+
+        when(indexUtil.doesCheckpointIndexExist()).thenReturn(true);
 
         modelId = "testModelId";
         model = "testModel";
         docSource = new HashMap<>();
-        docSource.put(CheckpointDao.FIELD_MODEL, model);
+        docSource.put(FIELD_MODEL, model);
     }
 
     @Test
@@ -102,11 +142,10 @@ public class CheckpointDaoTests {
             );
         IndexRequest indexRequest = indexRequestCaptor.getValue();
         assertEquals(indexName, indexRequest.index());
-        assertEquals(CheckpointDao.DOC_TYPE, indexRequest.type());
         assertEquals(modelId, indexRequest.id());
-        Set<String> expectedSourceKeys = new HashSet<String>(Arrays.asList(CheckpointDao.FIELD_MODEL, CheckpointDao.TIMESTAMP));
+        Set<String> expectedSourceKeys = new HashSet<String>(Arrays.asList(FIELD_MODEL, CheckpointDao.TIMESTAMP));
         assertEquals(expectedSourceKeys, indexRequest.sourceAsMap().keySet());
-        assertEquals(model, indexRequest.sourceAsMap().get(CheckpointDao.FIELD_MODEL));
+        assertEquals(model, indexRequest.sourceAsMap().get(FIELD_MODEL));
         assertNotNull(indexRequest.sourceAsMap().get(CheckpointDao.TIMESTAMP));
     }
 
@@ -129,7 +168,6 @@ public class CheckpointDaoTests {
         assertEquals(model, result.get());
         GetRequest getRequest = getRequestCaptor.getValue();
         assertEquals(indexName, getRequest.index());
-        assertEquals(CheckpointDao.DOC_TYPE, getRequest.type());
         assertEquals(modelId, getRequest.id());
     }
 
@@ -158,7 +196,6 @@ public class CheckpointDaoTests {
             );
         DeleteRequest deleteRequest = deleteRequestCaptor.getValue();
         assertEquals(indexName, deleteRequest.index());
-        assertEquals(CheckpointDao.DOC_TYPE, deleteRequest.type());
         assertEquals(modelId, deleteRequest.id());
     }
 
@@ -177,11 +214,10 @@ public class CheckpointDaoTests {
 
         IndexRequest indexRequest = requestCaptor.getValue();
         assertEquals(indexName, indexRequest.index());
-        assertEquals(CheckpointDao.DOC_TYPE, indexRequest.type());
         assertEquals(modelId, indexRequest.id());
-        Set<String> expectedSourceKeys = new HashSet<String>(Arrays.asList(CheckpointDao.FIELD_MODEL, CheckpointDao.TIMESTAMP));
+        Set<String> expectedSourceKeys = new HashSet<String>(Arrays.asList(FIELD_MODEL, CheckpointDao.TIMESTAMP));
         assertEquals(expectedSourceKeys, indexRequest.sourceAsMap().keySet());
-        assertEquals(model, indexRequest.sourceAsMap().get(CheckpointDao.FIELD_MODEL));
+        assertEquals(model, indexRequest.sourceAsMap().get(FIELD_MODEL));
         assertNotNull(indexRequest.sourceAsMap().get(CheckpointDao.TIMESTAMP));
 
         ArgumentCaptor<Void> responseCaptor = ArgumentCaptor.forClass(Void.class);
@@ -207,7 +243,6 @@ public class CheckpointDaoTests {
 
         GetRequest getRequest = requestCaptor.getValue();
         assertEquals(indexName, getRequest.index());
-        assertEquals(CheckpointDao.DOC_TYPE, getRequest.type());
         assertEquals(modelId, getRequest.id());
         ArgumentCaptor<Optional<String>> responseCaptor = ArgumentCaptor.forClass(Optional.class);
         verify(listener).onResponse(responseCaptor.capture());
@@ -232,7 +267,6 @@ public class CheckpointDaoTests {
 
         GetRequest getRequest = requestCaptor.getValue();
         assertEquals(indexName, getRequest.index());
-        assertEquals(CheckpointDao.DOC_TYPE, getRequest.type());
         assertEquals(modelId, getRequest.id());
         ArgumentCaptor<Optional<String>> responseCaptor = ArgumentCaptor.forClass(Optional.class);
         verify(listener).onResponse(responseCaptor.capture());
@@ -255,7 +289,6 @@ public class CheckpointDaoTests {
 
         DeleteRequest deleteRequest = requestCaptor.getValue();
         assertEquals(indexName, deleteRequest.index());
-        assertEquals(CheckpointDao.DOC_TYPE, deleteRequest.type());
         assertEquals(modelId, deleteRequest.id());
 
         ArgumentCaptor<Void> responseCaptor = ArgumentCaptor.forClass(Void.class);

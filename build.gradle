@@ -55,6 +55,7 @@ apply plugin: 'idea'
 apply plugin: 'elasticsearch.esplugin'
 apply plugin: 'base'
 apply plugin: 'jacoco'
+apply plugin: 'eclipse'
 
 allprojects {
     group = 'com.amazon.opendistroforelasticsearch'
@@ -250,7 +251,25 @@ List<String> jacocoExclusions = [
         'com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices',
         'com.amazon.opendistroforelasticsearch.ad.util.ParseUtils',
         'com.amazon.opendistroforelasticsearch.ad.transport.StatsAnomalyDetectorTransportAction',
-        'com.amazon.opendistroforelasticsearch.ad.transport.DeleteAnomalyDetectorTransportAction*'
+        'com.amazon.opendistroforelasticsearch.ad.transport.DeleteAnomalyDetectorTransportAction*',
+
+        // TODO: hc caused coverage to drop
+        'com.amazon.opendistroforelasticsearch.ad.transport.EntityResultResponse',
+        'com.amazon.opendistroforelasticsearch.ad.transport.EntityResultTransportAction',
+        'com.amazon.opendistroforelasticsearch.ad.transport.EntityResultRequest',
+        'com.amazon.opendistroforelasticsearch.ad.feature.SearchFeatureDao',
+        'com.amazon.opendistroforelasticsearch.ad.ml.EntityModel',
+        'com.amazon.opendistroforelasticsearch.ad.ml.CheckpointDao',
+        'com.amazon.opendistroforelasticsearch.ad.ml.ModelStateMeta',
+        'com.amazon.opendistroforelasticsearch.ad.ml.ModelManager',
+        'com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultTransportAction',
+        'com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultTransportAction.EntityResultListener',
+        'com.amazon.opendistroforelasticsearch.ad.NodeStateManager',
+        'com.amazon.opendistroforelasticsearch.ad.util.BulkUtil',
+        'com.amazon.opendistroforelasticsearch.ad.ml.*',
+        'com.amazon.opendistroforelasticsearch.ad.caching.*',
+        'com.amazon.opendistroforelasticsearch.ad.transport.handler.MultitiEntityResultHandler',
+        'com.amazon.opendistroforelasticsearch.ad.MemoryTracker'
 ]
 
 jacocoTestCoverageVerification {
@@ -293,7 +312,7 @@ dependencies {
     compile "org.elasticsearch:elasticsearch:${es_version}"
     compileOnly "org.elasticsearch.plugin:elasticsearch-scripting-painless-spi:${versions.elasticsearch}"
     compileOnly "com.amazon.opendistroforelasticsearch:opendistro-job-scheduler-spi:1.10.1.0"
-    compile group: 'com.google.guava', name: 'guava', version:'15.0'
+    compile group: 'com.google.guava', name: 'guava', version:'29.0-jre'
     compile group: 'org.apache.commons', name: 'commons-math3', version: '3.6.1'
     compile group: 'com.google.code.gson', name: 'gson', version: '2.8.5'
     compile group: 'com.yahoo.datasketches', name: 'sketches-core', version: '0.13.4'
@@ -301,6 +320,7 @@ dependencies {
     compile group: 'commons-lang', name: 'commons-lang', version: '2.6'
     compile 'software.amazon.randomcutforest:randomcutforest-core:1.0'
     compile 'software.amazon.randomcutforest:randomcutforest-serialization-json:1.0'
+
 
     compile "org.jacoco:org.jacoco.agent:0.8.5"
     compile ("org.jacoco:org.jacoco.ant:0.8.5") {

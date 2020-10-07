@@ -48,12 +48,8 @@ import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.io.stream.NotSerializableExceptionWrapper;
-import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.TransportAddress;
-import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.index.IndexNotFoundException;
-import org.elasticsearch.search.SearchModule;
-import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.transport.RemoteTransportException;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -63,7 +59,6 @@ import com.amazon.opendistroforelasticsearch.ad.common.exception.ResourceNotFoun
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
-import com.amazon.opendistroforelasticsearch.ad.model.AnomalyResult;
 import com.amazon.opendistroforelasticsearch.ad.model.DetectorInternalState;
 import com.amazon.opendistroforelasticsearch.ad.model.DetectorProfile;
 import com.amazon.opendistroforelasticsearch.ad.model.DetectorState;
@@ -78,7 +73,7 @@ import com.amazon.opendistroforelasticsearch.ad.transport.RCFPollingAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.RCFPollingResponse;
 import com.amazon.opendistroforelasticsearch.ad.util.DiscoveryNodeFilterer;
 
-public class AnomalyDetectorProfileRunnerTests extends ESTestCase {
+public class AnomalyDetectorProfileRunnerTests extends AbstractADTest {
     private AnomalyDetectorProfileRunner runner;
     private Client client;
     private DiscoveryNodeFilterer nodeFilter;
@@ -114,23 +109,6 @@ public class AnomalyDetectorProfileRunnerTests extends ESTestCase {
     private int detectorIntervalMin;
     private GetResponse detectorGetReponse;
     private String messaingExceptionError = "blah";
-
-    @Override
-    protected NamedXContentRegistry xContentRegistry() {
-        SearchModule searchModule = new SearchModule(Settings.EMPTY, false, Collections.emptyList());
-        List<NamedXContentRegistry.Entry> entries = searchModule.getNamedXContents();
-        entries
-            .addAll(
-                Arrays
-                    .asList(
-                        AnomalyDetector.XCONTENT_REGISTRY,
-                        AnomalyResult.XCONTENT_REGISTRY,
-                        DetectorInternalState.XCONTENT_REGISTRY,
-                        AnomalyDetectorJob.XCONTENT_REGISTRY
-                    )
-            );
-        return new NamedXContentRegistry(entries);
-    }
 
     @BeforeClass
     public static void setUpOnce() {

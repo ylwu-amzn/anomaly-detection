@@ -22,6 +22,7 @@ import static org.elasticsearch.common.xcontent.ToXContent.EMPTY_PARAMS;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
 
@@ -75,7 +76,8 @@ public class IndexAnomalyDetectorActionHandler extends AbstractActionHandler {
 
     private final Logger logger = LogManager.getLogger(IndexAnomalyDetectorActionHandler.class);
     private final TimeValue requestTimeout;
-    private final Integer maxAnomalyDetectors;
+    private final Integer maxSingleEntityAnomalyDetectors;
+    private final Integer maxMultiEntityAnomalyDetectors;
     private final Integer maxAnomalyFeatures;
     private final AnomalyDetectorActionHandler handler = new AnomalyDetectorActionHandler();
 
@@ -93,7 +95,8 @@ public class IndexAnomalyDetectorActionHandler extends AbstractActionHandler {
      * @param refreshPolicy           refresh policy
      * @param anomalyDetector         anomaly detector instance
      * @param requestTimeout          request time out configuration
-     * @param maxAnomalyDetectors     max anomaly detector allowed
+     * @param maxSingleEntityAnomalyDetectors     max single-entity anomaly detectors allowed
+     * @param maxMultiEntityAnomalyDetectors      max multi-entity detectors allowed
      * @param maxAnomalyFeatures      max features allowed per detector
      */
     public IndexAnomalyDetectorActionHandler(
@@ -108,7 +111,8 @@ public class IndexAnomalyDetectorActionHandler extends AbstractActionHandler {
         WriteRequest.RefreshPolicy refreshPolicy,
         AnomalyDetector anomalyDetector,
         TimeValue requestTimeout,
-        Integer maxAnomalyDetectors,
+        Integer maxSingleEntityAnomalyDetectors,
+        Integer maxMultiEntityAnomalyDetectors,
         Integer maxAnomalyFeatures
     ) {
         super(client, channel);
@@ -120,7 +124,8 @@ public class IndexAnomalyDetectorActionHandler extends AbstractActionHandler {
         this.refreshPolicy = refreshPolicy;
         this.anomalyDetector = anomalyDetector;
         this.requestTimeout = requestTimeout;
-        this.maxAnomalyDetectors = maxAnomalyDetectors;
+        this.maxSingleEntityAnomalyDetectors = maxSingleEntityAnomalyDetectors;
+        this.maxMultiEntityAnomalyDetectors = maxMultiEntityAnomalyDetectors;
         this.maxAnomalyFeatures = maxAnomalyFeatures;
     }
 
@@ -183,20 +188,49 @@ public class IndexAnomalyDetectorActionHandler extends AbstractActionHandler {
 
     private void createAnomalyDetector() {
         try {
-            QueryBuilder query = QueryBuilders.matchAllQuery();
-            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().query(query).size(0).timeout(requestTimeout);
+            List<String> categoricalFields = anomalyDetector.getCategoryField();
+            if (categoricalFields != null && categoricalFields.size() > 0) {
+                QueryBuilder query = QueryBuilders.boolQuery().filter(QueryBuilders.existsQuery(AnomalyDetector.CATEGORY_FIELD));
 
-            SearchRequest searchRequest = new SearchRequest(ANOMALY_DETECTORS_INDEX).source(searchSourceBuilder);
+                SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().query(query).size(0).timeout(requestTimeout);
 
-            client.search(searchRequest, ActionListener.wrap(response -> onSearchAdResponse(response), exception -> onFailure(exception)));
+                SearchRequest searchRequest = new SearchRequest(ANOMALY_DETECTORS_INDEX).source(searchSourceBuilder);
+
+                client
+                    .search(
+                        searchRequest,
+                        ActionListener.wrap(response -> onSearchMultiEntityAdResponse(response), exception -> onFailure(exception))
+                    );
+            } else {
+                QueryBuilder query = QueryBuilders.matchAllQuery();
+                SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().query(query).size(0).timeout(requestTimeout);
+
+                SearchRequest searchRequest = new SearchRequest(ANOMALY_DETECTORS_INDEX).source(searchSourceBuilder);
+
+                client
+                    .search(
+                        searchRequest,
+                        ActionListener.wrap(response -> onSearchSingleEntityAdResponse(response), exception -> onFailure(exception))
+                    );
+            }
         } catch (Exception e) {
             onFailure(e);
         }
     }
 
-    private void onSearchAdResponse(SearchResponse response) throws IOException {
-        if (response.getHits().getTotalHits().value >= maxAnomalyDetectors) {
-            String errorMsg = "Can't create anomaly detector more than " + maxAnomalyDetectors;
+    private void onSearchSingleEntityAdResponse(SearchResponse response) throws IOException {
+        if (response.getHits().getTotalHits().value >= maxSingleEntityAnomalyDetectors) {
+            String errorMsg = "Can't create single-entity anomaly detectors more than " + maxSingleEntityAnomalyDetectors;
+            logger.error(errorMsg);
+            onFailure(new IllegalArgumentException(errorMsg));
+        } else {
+            searchAdInputIndices(null);
+        }
+    }
+
+    private void onSearchMultiEntityAdResponse(SearchResponse response) throws IOException {
+        if (response.getHits().getTotalHits().value >= maxMultiEntityAnomalyDetectors) {
+            String errorMsg = "Can't create multi-entity anomaly detectors more than " + maxMultiEntityAnomalyDetectors;
             logger.error(errorMsg);
             onFailure(new IllegalArgumentException(errorMsg));
         } else {
@@ -282,7 +316,8 @@ public class IndexAnomalyDetectorActionHandler extends AbstractActionHandler {
             anomalyDetector.getShingleSize(),
             anomalyDetector.getUiMetadata(),
             anomalyDetector.getSchemaVersion(),
-            Instant.now()
+            Instant.now(),
+            anomalyDetector.getCategoryField()
         );
         IndexRequest indexRequest = new IndexRequest(ANOMALY_DETECTORS_INDEX)
             .setRefreshPolicy(refreshPolicy)

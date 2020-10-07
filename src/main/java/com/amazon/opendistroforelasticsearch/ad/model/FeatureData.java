@@ -19,6 +19,9 @@ import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpect
 
 import java.io.IOException;
 
+import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.common.io.stream.Writeable;
 import org.elasticsearch.common.xcontent.ToXContentObject;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
@@ -29,7 +32,7 @@ import com.google.common.base.Objects;
 /**
  * Feature data used by RCF model.
  */
-public class FeatureData implements ToXContentObject {
+public class FeatureData implements ToXContentObject, Writeable {
 
     public static final String FEATURE_ID_FIELD = "feature_id";
     public static final String FEATURE_NAME_FIELD = "feature_name";
@@ -43,6 +46,12 @@ public class FeatureData implements ToXContentObject {
         this.featureId = featureId;
         this.featureName = featureName;
         this.data = data;
+    }
+
+    public FeatureData(StreamInput input) throws IOException {
+        this.featureId = input.readString();
+        this.featureName = input.readString();
+        this.data = input.readDouble();
     }
 
     @Override
@@ -114,5 +123,12 @@ public class FeatureData implements ToXContentObject {
     @Generated
     public String getFeatureName() {
         return featureName;
+    }
+
+    @Override
+    public void writeTo(StreamOutput out) throws IOException {
+        out.writeString(featureId);
+        out.writeString(featureName);
+        out.writeDouble(data);
     }
 }
