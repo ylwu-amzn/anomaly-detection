@@ -15,6 +15,8 @@
 
 package com.amazon.opendistroforelasticsearch.ad.model;
 
+import java.io.IOException;
+
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.commons.lang.builder.ToStringBuilder;
@@ -23,8 +25,6 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-
-import java.io.IOException;
 
 /**
  * Profile output for detector entity.

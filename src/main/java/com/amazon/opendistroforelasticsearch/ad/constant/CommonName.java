@@ -71,5 +71,5 @@ public class CommonName {
 
     public static final String IP_TYPE = "ip";
 
-    public static final String TOTAL_UPDATES  = "total_updates";
+    public static final String TOTAL_UPDATES = "total_updates";
 }

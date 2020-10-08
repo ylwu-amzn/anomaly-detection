@@ -269,7 +269,13 @@ List<String> jacocoExclusions = [
         'com.amazon.opendistroforelasticsearch.ad.ml.*',
         'com.amazon.opendistroforelasticsearch.ad.caching.*',
         'com.amazon.opendistroforelasticsearch.ad.transport.handler.MultitiEntityResultHandler',
-        'com.amazon.opendistroforelasticsearch.ad.MemoryTracker'
+        'com.amazon.opendistroforelasticsearch.ad.MemoryTracker',
+        'com.amazon.opendistroforelasticsearch.ad.transport.EntityProfileTransportAction*',
+        'com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorProfileRunner',
+        'com.amazon.opendistroforelasticsearch.ad.transport.EntityProfileResponse',
+        'com.amazon.opendistroforelasticsearch.ad.transport.EntityProfileRequest',
+        'com.amazon.opendistroforelasticsearch.ad.util.MultiResponsesDelegateActionListener',
+
 ]
 
 jacocoTestCoverageVerification {

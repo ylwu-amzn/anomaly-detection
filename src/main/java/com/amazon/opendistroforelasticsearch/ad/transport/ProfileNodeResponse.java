@@ -18,13 +18,14 @@ package com.amazon.opendistroforelasticsearch.ad.transport;
 import java.io.IOException;
 import java.util.Map;
 
-import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
 import org.elasticsearch.action.support.nodes.BaseNodeResponse;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.ToXContentFragment;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+
+import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
 
 /**
  * Profile response on a node
@@ -49,6 +50,7 @@ public class ProfileNodeResponse extends BaseNodeResponse implements ToXContentF
         modelSize = in.readMap(StreamInput::readString, StreamInput::readLong);
         shingleSize = in.readInt();
         activeEntities = in.readVLong();
+        totalUpdates = in.readVLong();
     }
 
     /**
@@ -57,9 +59,10 @@ public class ProfileNodeResponse extends BaseNodeResponse implements ToXContentF
      * @param node DiscoveryNode object
      * @param modelSize Mapping of model id to its memory consumption in bytes
      * @param shingleSize shingle size
+     * @param activeEntity active entity count
+     * @param totalUpdates RCF model total updates
      */
-    public ProfileNodeResponse(DiscoveryNode node, Map<String, Long> modelSize, int shingleSize, long activeEntity,
-        long totalUpdates) {
+    public ProfileNodeResponse(DiscoveryNode node, Map<String, Long> modelSize, int shingleSize, long activeEntity, long totalUpdates) {
         super(node);
         this.modelSize = modelSize;
         this.shingleSize = shingleSize;

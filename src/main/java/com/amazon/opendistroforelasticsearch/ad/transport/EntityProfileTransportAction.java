@@ -15,13 +15,9 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
-import com.amazon.opendistroforelasticsearch.ad.caching.CacheProvider;
-import com.amazon.opendistroforelasticsearch.ad.caching.PriorityCache;
-import com.amazon.opendistroforelasticsearch.ad.cluster.HashRing;
-import com.amazon.opendistroforelasticsearch.ad.common.exception.AnomalyDetectionException;
-import com.amazon.opendistroforelasticsearch.ad.ml.ModelManager;
-import com.amazon.opendistroforelasticsearch.ad.ml.ModelPartitioner;
-import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
+import java.io.IOException;
+import java.util.Optional;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
@@ -39,8 +35,12 @@ import org.elasticsearch.transport.TransportRequestOptions;
 import org.elasticsearch.transport.TransportResponseHandler;
 import org.elasticsearch.transport.TransportService;
 
-import java.io.IOException;
-import java.util.Optional;
+import com.amazon.opendistroforelasticsearch.ad.caching.CacheProvider;
+import com.amazon.opendistroforelasticsearch.ad.cluster.HashRing;
+import com.amazon.opendistroforelasticsearch.ad.common.exception.AnomalyDetectionException;
+import com.amazon.opendistroforelasticsearch.ad.ml.ModelManager;
+import com.amazon.opendistroforelasticsearch.ad.ml.ModelPartitioner;
+import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
 
 /**
  * Transport action to get entity profile.
@@ -67,7 +67,9 @@ public class EntityProfileTransportAction extends HandledTransportAction<EntityP
         ModelManager modelManager,
         ModelPartitioner modelPartitioner,
         HashRing hashRing,
-        ClusterService clusterService, CacheProvider cacheProvider) {
+        ClusterService clusterService,
+        CacheProvider cacheProvider
+    ) {
         super(EntityProfileAction.NAME, transportService, actionFilters, EntityProfileRequest::new);
         this.transportService = transportService;
         this.modelManager = modelManager;
@@ -108,29 +110,35 @@ public class EntityProfileTransportAction extends HandledTransportAction<EntityP
 
             try {
                 transportService
-                    .sendRequest(node.get(), EntityProfileAction.NAME, request, option, new TransportResponseHandler<EntityProfileResponse>() {
+                    .sendRequest(
+                        node.get(),
+                        EntityProfileAction.NAME,
+                        request,
+                        option,
+                        new TransportResponseHandler<EntityProfileResponse>() {
 
-                        @Override
-                        public EntityProfileResponse read(StreamInput in) throws IOException {
-                            return new EntityProfileResponse(in);
+                            @Override
+                            public EntityProfileResponse read(StreamInput in) throws IOException {
+                                return new EntityProfileResponse(in);
+                            }
+
+                            @Override
+                            public void handleResponse(EntityProfileResponse response) {
+                                listener.onResponse(response);
+                            }
+
+                            @Override
+                            public void handleException(TransportException exp) {
+                                listener.onFailure(exp);
+                            }
+
+                            @Override
+                            public String executor() {
+                                return ThreadPool.Names.SAME;
+                            }
+
                         }
-
-                        @Override
-                        public void handleResponse(EntityProfileResponse response) {
-                            listener.onResponse(response);
-                        }
-
-                        @Override
-                        public void handleException(TransportException exp) {
-                            listener.onFailure(exp);
-                        }
-
-                        @Override
-                        public String executor() {
-                            return ThreadPool.Names.SAME;
-                        }
-
-                    });
+                    );
             } catch (Exception e) {
                 LOG.error(String.format("Fail to get entity profile for detector {}, entity {}", adID, entityValue), e);
                 listener.onFailure(new AnomalyDetectionException(adID, FAIL_TO_GET_ENTITY_PROFILE_MSG, e));

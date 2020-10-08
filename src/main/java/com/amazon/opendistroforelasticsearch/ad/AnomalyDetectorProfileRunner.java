@@ -25,9 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.amazon.opendistroforelasticsearch.ad.model.EntityProfile;
-import com.amazon.opendistroforelasticsearch.ad.transport.EntityProfileAction;
-import com.amazon.opendistroforelasticsearch.ad.transport.EntityProfileRequest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.util.Throwables;
@@ -44,6 +41,10 @@ import org.elasticsearch.common.xcontent.XContentParseException;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.IndexNotFoundException;
+import org.elasticsearch.search.aggregations.Aggregation;
+import org.elasticsearch.search.aggregations.metrics.CardinalityAggregationBuilder;
+import org.elasticsearch.search.aggregations.metrics.InternalCardinality;
+import org.elasticsearch.search.builder.SearchSourceBuilder;
 
 import com.amazon.opendistroforelasticsearch.ad.common.exception.ResourceNotFoundException;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
@@ -52,9 +53,12 @@ import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
 import com.amazon.opendistroforelasticsearch.ad.model.DetectorInternalState;
 import com.amazon.opendistroforelasticsearch.ad.model.DetectorProfile;
 import com.amazon.opendistroforelasticsearch.ad.model.DetectorState;
+import com.amazon.opendistroforelasticsearch.ad.model.EntityProfile;
 import com.amazon.opendistroforelasticsearch.ad.model.InitProgressProfile;
 import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
 import com.amazon.opendistroforelasticsearch.ad.model.ProfileName;
+import com.amazon.opendistroforelasticsearch.ad.transport.EntityProfileAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.EntityProfileRequest;
 import com.amazon.opendistroforelasticsearch.ad.transport.ProfileAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ProfileRequest;
 import com.amazon.opendistroforelasticsearch.ad.transport.ProfileResponse;
@@ -64,10 +68,6 @@ import com.amazon.opendistroforelasticsearch.ad.transport.RCFPollingResponse;
 import com.amazon.opendistroforelasticsearch.ad.util.DiscoveryNodeFilterer;
 import com.amazon.opendistroforelasticsearch.ad.util.ExceptionUtil;
 import com.amazon.opendistroforelasticsearch.ad.util.MultiResponsesDelegateActionListener;
-import org.elasticsearch.search.aggregations.Aggregation;
-import org.elasticsearch.search.aggregations.metrics.CardinalityAggregationBuilder;
-import org.elasticsearch.search.aggregations.metrics.InternalCardinality;
-import org.elasticsearch.search.builder.SearchSourceBuilder;
 
 public class AnomalyDetectorProfileRunner {
     private final Logger logger = LogManager.getLogger(AnomalyDetectorProfileRunner.class);
@@ -166,9 +166,17 @@ public class AnomalyDetectorProfileRunner {
                             try (
                                 XContentParser xContentParser = XContentType.JSON
                                     .xContent()
-                                    .createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, getDetectorResponse.getSourceAsString())
+                                    .createParser(
+                                        xContentRegistry,
+                                        LoggingDeprecationHandler.INSTANCE,
+                                        getDetectorResponse.getSourceAsString()
+                                    )
                             ) {
-                                ensureExpectedToken(XContentParser.Token.START_OBJECT, xContentParser.nextToken(), xContentParser::getTokenLocation);
+                                ensureExpectedToken(
+                                    XContentParser.Token.START_OBJECT,
+                                    xContentParser.nextToken(),
+                                    xContentParser::getTokenLocation
+                                );
                                 AnomalyDetector detector = AnomalyDetector.parse(xContentParser, detectorId);
                                 boolean isHCDetector = detector.getCategoryField() != null;
                                 if (!isHCDetector
@@ -205,9 +213,7 @@ public class AnomalyDetectorProfileRunner {
                         } else {
                             listener.failImmediately(FAIL_TO_FIND_DETECTOR_MSG + detectorId);
                         }
-                    }, exception -> {
-                        listener.failImmediately(FAIL_TO_FIND_DETECTOR_MSG + detectorId, exception);
-                    }));
+                    }, exception -> { listener.failImmediately(FAIL_TO_FIND_DETECTOR_MSG + detectorId, exception); }));
                 } catch (IOException | XContentParseException | NullPointerException e) {
                     logger.error(e);
                     listener.failImmediately(FAIL_TO_GET_PROFILE_MSG, e);
@@ -228,7 +234,6 @@ public class AnomalyDetectorProfileRunner {
         }));
     }
 
-
     public void profileEntity(String detectorId, String entityValue, ActionListener<EntityProfile> listener) {
         GetRequest getDetectorRequest = new GetRequest(ANOMALY_DETECTORS_INDEX, detectorId);
         client.get(getDetectorRequest, ActionListener.wrap(getResponse -> {
@@ -245,11 +250,16 @@ public class AnomalyDetectorProfileRunner {
                         listener.onResponse(new EntityProfile(categoryField.get(0), entityValue, false));
                     } else {
                         EntityProfileRequest request = new EntityProfileRequest(detectorId, entityValue);
-                        client.execute(EntityProfileAction.INSTANCE, request, ActionListener.wrap(r -> {
-                            listener.onResponse(new EntityProfile(categoryField.get(0), entityValue, r.isActive()));
-                        }, e->{
-                            listener.onFailure(e);
-                        }));
+                        client
+                            .execute(
+                                EntityProfileAction.INSTANCE,
+                                request,
+                                ActionListener
+                                    .wrap(
+                                        r -> { listener.onResponse(new EntityProfile(categoryField.get(0), entityValue, r.isActive())); },
+                                        e -> { listener.onFailure(e); }
+                                    )
+                            );
                     }
                 } catch (Exception t) {
                     listener.onFailure(t);
@@ -257,9 +267,7 @@ public class AnomalyDetectorProfileRunner {
             } else {
                 listener.onFailure(new InvalidParameterException("Can't find detector"));
             }
-        }, exception -> {
-            listener.onFailure(exception);
-        }));
+        }, exception -> { listener.onFailure(exception); }));
     }
 
     private void profileEntityStats(MultiResponsesDelegateActionListener<DetectorProfile> listener, AnomalyDetector detector) {
@@ -275,14 +283,12 @@ public class AnomalyDetectorProfileRunner {
             SearchRequest request = new SearchRequest(detector.getIndices().toArray(new String[0]), searchSourceBuilder);
             client.search(request, ActionListener.wrap(searchResponse -> {
                 Map<String, Aggregation> aggMap = searchResponse.getAggregations().asMap();
-                InternalCardinality totalEntities = (InternalCardinality)aggMap.get(CommonName.TOTAL_ENTITIES);
+                InternalCardinality totalEntities = (InternalCardinality) aggMap.get(CommonName.TOTAL_ENTITIES);
                 long value = totalEntities.getValue();
                 DetectorProfile.Builder profileBuilder = new DetectorProfile.Builder();
                 DetectorProfile profile = profileBuilder.totalEntities(value).build();
                 listener.onResponse(profile);
-            }, searchException -> {
-                listener.failImmediately("Failed to get total entities for detector " + detector.getDetectorId());
-            }));
+            }, searchException -> { listener.failImmediately("Failed to get total entities for detector " + detector.getDetectorId()); }));
         }
     }
 
@@ -388,7 +394,7 @@ public class AnomalyDetectorProfileRunner {
 
     private InitProgressProfile computeInitProgressProfile(long totalUpdates, long intervalMins) {
         float percent = (100.0f * totalUpdates) / requiredSamples;
-        percent = percent > 1? 100 : percent;
+        percent = percent > 100 ? 100 : percent;
         int neededPoints = (int) (requiredSamples - totalUpdates);
         return new InitProgressProfile(
             // rounding: 93.456 => 93%, 93.556 => 94%
@@ -413,7 +419,8 @@ public class AnomalyDetectorProfileRunner {
         AnomalyDetector detector,
         Set<ProfileName> profiles,
         boolean enabled,
-        MultiResponsesDelegateActionListener<DetectorProfile> listener) {
+        MultiResponsesDelegateActionListener<DetectorProfile> listener
+    ) {
         return ActionListener.wrap(profileResponse -> {
             DetectorProfile.Builder profile = new DetectorProfile.Builder();
             if (profiles.contains(ProfileName.COORDINATING_NODE)) {
@@ -433,7 +440,9 @@ public class AnomalyDetectorProfileRunner {
             }
             if (profiles.contains(ProfileName.INIT_PROGRESS)) {
                 long totalUpdates = profileResponse.getTotalUpdates();
-                long intervalMins = totalUpdates == 0 ? 0 : ((IntervalTimeConfiguration) detector.getDetectionInterval()).toDuration().toMinutes();
+                long intervalMins = totalUpdates == 0
+                    ? 0
+                    : ((IntervalTimeConfiguration) detector.getDetectionInterval()).toDuration().toMinutes();
                 InitProgressProfile initProgress = computeInitProgressProfile(totalUpdates, intervalMins);
                 profile.initProgress(initProgress);
             }
@@ -495,7 +504,11 @@ public class AnomalyDetectorProfileRunner {
                 // data exists.
                 processInitResponse(detector, profilesToCollect, listener, 0L, true);
             } else {
-                logger.error(new ParameterizedMessage("Fail to get init progress through messaging for {}", detector.getDetectorId()), exception);
+                logger
+                    .error(
+                        new ParameterizedMessage("Fail to get init progress through messaging for {}", detector.getDetectorId()),
+                        exception
+                    );
                 listener.failImmediately(FAIL_TO_GET_PROFILE_MSG + detector.getDetectorId(), exception);
             }
         });

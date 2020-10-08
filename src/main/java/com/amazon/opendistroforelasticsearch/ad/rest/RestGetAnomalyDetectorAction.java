@@ -102,12 +102,16 @@ public class RestGetAnomalyDetectorAction extends BaseRestHandler {
         if (!Strings.isEmpty(typesStr) || rawPath.endsWith(PROFILE) || rawPath.endsWith(PROFILE + "/")) {
             if (request.params().containsKey(ENTITY)) {
                 String entityValue = request.param(ENTITY);
-                return channel -> profileRunner.profileEntity(detectorId, entityValue, ActionListener.wrap(r -> {
-                    channel.sendResponse(new BytesRestResponse(RestStatus.OK, r.toXContent(channel.newBuilder())));
-                }, e ->
-                {
-                    channel.sendResponse(buildInternalServerErrorResponse(e, e.getMessage()));
-                }));
+                return channel -> profileRunner
+                    .profileEntity(
+                        detectorId,
+                        entityValue,
+                        ActionListener
+                            .wrap(
+                                r -> { channel.sendResponse(new BytesRestResponse(RestStatus.OK, r.toXContent(channel.newBuilder()))); },
+                                e -> { channel.sendResponse(buildInternalServerErrorResponse(e, e.getMessage())); }
+                            )
+                    );
             } else {
                 boolean all = request.paramAsBoolean("_all", false);
                 return channel -> profileRunner

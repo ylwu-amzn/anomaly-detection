@@ -120,11 +120,13 @@ public class LRUCache implements EntityCache {
         throw new UnsupportedOperationException("not supported");
     }
 
-    @Override public long getTotalUpdates(String detectorId) {
+    @Override
+    public long getTotalUpdates(String detectorId) {
         throw new UnsupportedOperationException("not supported");
     }
 
-    @Override public long getTotalUpdates(String detectorId, String entityId) {
+    @Override
+    public long getTotalUpdates(String detectorId, String entityId) {
         throw new UnsupportedOperationException("not supported");
     }
 }

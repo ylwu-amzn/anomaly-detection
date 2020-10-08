@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.amazon.opendistroforelasticsearch.ad.caching.CacheProvider;
 import org.elasticsearch.action.FailedNodeException;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.nodes.TransportNodesAction;
@@ -31,6 +30,7 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
+import com.amazon.opendistroforelasticsearch.ad.caching.CacheProvider;
 import com.amazon.opendistroforelasticsearch.ad.feature.FeatureManager;
 import com.amazon.opendistroforelasticsearch.ad.ml.ModelManager;
 import com.amazon.opendistroforelasticsearch.ad.model.ProfileName;
@@ -53,6 +53,7 @@ public class ProfileTransportAction extends TransportNodesAction<ProfileRequest,
      * @param actionFilters Action Filters
      * @param modelManager model manager object
      * @param featureManager feature manager object
+     * @param cacheProvider cache provider
      */
     @Inject
     public ProfileTransportAction(

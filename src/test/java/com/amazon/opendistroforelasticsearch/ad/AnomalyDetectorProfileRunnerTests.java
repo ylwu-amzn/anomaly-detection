@@ -173,14 +173,25 @@ public class AnomalyDetectorProfileRunnerTests extends AbstractADTest {
         STOPPED_ERROR
     }
 
-    @SuppressWarnings("unchecked")
     private void setUpClientGet(
         DetectorStatus detectorStatus,
         JobStatus jobStatus,
         RCFPollingStatus rcfPollingStatus,
         ErrorResultStatus errorResultStatus
     ) throws IOException {
-        detector = TestHelpers.randomAnomalyDetectorWithInterval(new IntervalTimeConfiguration(detectorIntervalMin, ChronoUnit.MINUTES));
+        setUpClientGet(detectorStatus, jobStatus, rcfPollingStatus, errorResultStatus, false);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void setUpClientGet(
+        DetectorStatus detectorStatus,
+        JobStatus jobStatus,
+        RCFPollingStatus rcfPollingStatus,
+        ErrorResultStatus errorResultStatus,
+        boolean hcDetector
+    ) throws IOException {
+        detector = TestHelpers
+            .randomAnomalyDetectorWithInterval(new IntervalTimeConfiguration(detectorIntervalMin, ChronoUnit.MINUTES), hcDetector);
         doAnswer(invocation -> {
             Object[] args = invocation.getArguments();
             GetRequest request = (GetRequest) args[0];
@@ -482,8 +493,20 @@ public class AnomalyDetectorProfileRunnerTests extends AbstractADTest {
                 }
             };
 
-            ProfileNodeResponse profileNodeResponse1 = new ProfileNodeResponse(discoveryNode1, modelSizeMap1, shingleSize,0, 0);
-            ProfileNodeResponse profileNodeResponse2 = new ProfileNodeResponse(discoveryNode2, modelSizeMap2, -1, 0, 0);
+            ProfileNodeResponse profileNodeResponse1 = new ProfileNodeResponse(
+                discoveryNode1,
+                modelSizeMap1,
+                shingleSize,
+                10,
+                requiredSamples - neededSamples
+            );
+            ProfileNodeResponse profileNodeResponse2 = new ProfileNodeResponse(
+                discoveryNode2,
+                modelSizeMap2,
+                -1,
+                20,
+                requiredSamples - neededSamples - 1
+            );
             List<ProfileNodeResponse> profileNodeResponses = Arrays.asList(profileNodeResponse1, profileNodeResponse2);
             List<FailedNodeException> failures = Collections.emptyList();
             ProfileResponse profileResponse = new ProfileResponse(new ClusterName(clusterName), profileNodeResponses, failures);
@@ -584,6 +607,26 @@ public class AnomalyDetectorProfileRunnerTests extends AbstractADTest {
 
     public void testInitProgress() throws IOException, InterruptedException {
         setUpClientGet(DetectorStatus.EXIST, JobStatus.ENABLED, RCFPollingStatus.INITTING, ErrorResultStatus.NO_ERROR);
+        DetectorProfile expectedProfile = new DetectorProfile.Builder().state(DetectorState.INIT).build();
+
+        // 123 / 128 rounded to 96%
+        InitProgressProfile profile = new InitProgressProfile("96%", neededSamples * detectorIntervalMin, neededSamples);
+        expectedProfile.setInitProgress(profile);
+        final CountDownLatch inProgressLatch = new CountDownLatch(1);
+
+        runner.profile(detector.getDetectorId(), ActionListener.wrap(response -> {
+            assertEquals(expectedProfile, response);
+            inProgressLatch.countDown();
+        }, exception -> {
+            assertTrue("Should not reach here ", false);
+            inProgressLatch.countDown();
+        }), stateInitProgress);
+        assertTrue(inProgressLatch.await(100, TimeUnit.SECONDS));
+    }
+
+    public void testInitProgressForHCDetector() throws IOException, InterruptedException {
+        setUpClientGet(DetectorStatus.EXIST, JobStatus.ENABLED, RCFPollingStatus.INITTING, ErrorResultStatus.NO_ERROR, true);
+        setUpClientExecuteProfileAction();
         DetectorProfile expectedProfile = new DetectorProfile.Builder().state(DetectorState.INIT).build();
 
         // 123 / 128 rounded to 96%

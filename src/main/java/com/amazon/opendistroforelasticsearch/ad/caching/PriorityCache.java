@@ -503,14 +503,15 @@ public class PriorityCache implements EntityCache {
         return false;
     }
 
-    @Override public long getTotalUpdates(String detectorId) {
+    @Override
+    public long getTotalUpdates(String detectorId) {
         return Optional
             .of(activeEnities)
             .map(entities -> entities.get(detectorId))
             .map(buffer -> buffer.getHighestPriorityEntityId())
             .map(entityIdOptional -> entityIdOptional.get())
             .map(entityId -> getTotalUpdates(detectorId, entityId))
-            .orElse(0l);
+            .orElse(0L);
     }
 
     @Override
@@ -527,6 +528,6 @@ public class PriorityCache implements EntityCache {
                 );
             return accumulatedShingles;
         }
-        return 0l;
+        return 0L;
     }
 }

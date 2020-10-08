@@ -30,8 +30,6 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.amazon.opendistroforelasticsearch.ad.transport.EntityProfileAction;
-import com.amazon.opendistroforelasticsearch.ad.transport.EntityProfileTransportAction;
 import org.elasticsearch.SpecialPermission;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
@@ -120,6 +118,8 @@ import com.amazon.opendistroforelasticsearch.ad.transport.DeleteAnomalyDetectorA
 import com.amazon.opendistroforelasticsearch.ad.transport.DeleteAnomalyDetectorTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.DeleteModelAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.DeleteModelTransportAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.EntityProfileAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.EntityProfileTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.EntityResultAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.EntityResultTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ProfileAction;
@@ -456,11 +456,13 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 new ADStat<>(true, new IndexStatusSupplier(indexUtils, CommonName.CHECKPOINT_INDEX_NAME))
             )
             .put(
-               StatNames.ANOMALY_DETECTION_JOB_INDEX_STATUS.getName(),
-               new ADStat<>(true, new IndexStatusSupplier(indexUtils, AnomalyDetectorJob.ANOMALY_DETECTOR_JOB_INDEX)))
-           .put(
-               StatNames.ANOMALY_DETECTION_STATE_STATUS.getName(),
-               new ADStat<>(true, new IndexStatusSupplier(indexUtils, DetectorInternalState.DETECTOR_STATE_INDEX)))
+                StatNames.ANOMALY_DETECTION_JOB_INDEX_STATUS.getName(),
+                new ADStat<>(true, new IndexStatusSupplier(indexUtils, AnomalyDetectorJob.ANOMALY_DETECTOR_JOB_INDEX))
+            )
+            .put(
+                StatNames.ANOMALY_DETECTION_STATE_STATUS.getName(),
+                new ADStat<>(true, new IndexStatusSupplier(indexUtils, DetectorInternalState.DETECTOR_STATE_INDEX))
+            )
             .put(StatNames.DETECTOR_COUNT.getName(), new ADStat<>(true, new SettableSupplier()))
             .build();
 

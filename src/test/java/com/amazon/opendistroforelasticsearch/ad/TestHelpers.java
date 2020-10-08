@@ -271,6 +271,11 @@ public class TestHelpers {
     }
 
     public static AnomalyDetector randomAnomalyDetectorWithInterval(TimeConfiguration interval) throws IOException {
+        return randomAnomalyDetectorWithInterval(interval, false);
+    }
+
+    public static AnomalyDetector randomAnomalyDetectorWithInterval(TimeConfiguration interval, boolean hcDetector) throws IOException {
+        List<String> categoryField = hcDetector ? ImmutableList.of(randomAlphaOfLength(5)) : null;
         return new AnomalyDetector(
             randomAlphaOfLength(10),
             randomLong(),
@@ -286,7 +291,7 @@ public class TestHelpers {
             null,
             randomInt(),
             Instant.now().truncatedTo(ChronoUnit.SECONDS),
-            null
+            categoryField
         );
     }
 

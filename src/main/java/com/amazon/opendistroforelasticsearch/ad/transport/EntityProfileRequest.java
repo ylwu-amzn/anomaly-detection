@@ -15,8 +15,10 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
-import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
-import com.amazon.opendistroforelasticsearch.ad.constant.CommonMessageAttributes;
+import static org.elasticsearch.action.ValidateActions.addValidationError;
+
+import java.io.IOException;
+
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.common.Strings;
@@ -25,9 +27,8 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.ToXContentObject;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 
-import java.io.IOException;
-
-import static org.elasticsearch.action.ValidateActions.addValidationError;
+import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
+import com.amazon.opendistroforelasticsearch.ad.constant.CommonMessageAttributes;
 
 public class EntityProfileRequest extends ActionRequest implements ToXContentObject {
     private String adID;
