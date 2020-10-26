@@ -19,7 +19,6 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -116,7 +115,7 @@ public final class AnomalyDetectorRunner {
 
     private void onFailure(Exception e, ActionListener<List<AnomalyResult>> listener, String detectorId) {
         logger.info("Fail to preview anomaly detector " + detectorId, e);
-        listener.onResponse(Collections.emptyList());
+        listener.onFailure(e);
     }
 
     private List<AnomalyResult> parsePreviewResult(

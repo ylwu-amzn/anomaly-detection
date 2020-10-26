@@ -36,6 +36,7 @@ import org.elasticsearch.client.node.NodeClient;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.common.xcontent.LoggingDeprecationHandler;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
@@ -168,7 +169,12 @@ public class RestExecuteAnomalyDetectorAction extends BaseRestHandler {
     private void preivewAnomalyDetector(NodeClient client, RestChannel channel, AnomalyDetectorExecutionInput input) {
         if (!StringUtils.isBlank(input.getDetectorId())) {
             GetRequest getRequest = new GetRequest(AnomalyDetector.ANOMALY_DETECTORS_INDEX).id(input.getDetectorId());
-            client.get(getRequest, onGetAnomalyDetectorResponse(channel, input));
+            try (ThreadContext.StoredContext context = client.threadPool().getThreadContext().stashContext()) {
+                client.get(getRequest, onGetAnomalyDetectorResponse(channel, input));
+            } catch (Exception e) {
+                logger.error("Fail to get detector for preview", e);
+                channel.sendResponse(new BytesRestResponse(RestStatus.FORBIDDEN, e.getMessage()));
+            }
         } else {
             channel.sendResponse(new BytesRestResponse(RestStatus.NOT_FOUND, "Wrong input, no detector id"));
         }
@@ -221,8 +227,13 @@ public class RestExecuteAnomalyDetectorAction extends BaseRestHandler {
         }, exception -> {
             logger.error("Unexpected error running anomaly detector " + detector.getDetectorId(), exception);
             try {
-                XContentBuilder builder = channel.newBuilder().startObject().field(ANOMALY_DETECTOR, detector).endObject();
-                channel.sendResponse(new BytesRestResponse(RestStatus.INTERNAL_SERVER_ERROR, builder));
+                String errorMessage = exception.getMessage();
+                if (errorMessage != null && errorMessage.contains("No data to preview anomaly detection")) {
+                    XContentBuilder builder = channel.newBuilder().startObject().field(ANOMALY_DETECTOR, detector).endObject();
+                    channel.sendResponse(new BytesRestResponse(RestStatus.INTERNAL_SERVER_ERROR, builder));
+                } else {
+                    channel.sendResponse(new BytesRestResponse(channel, RestStatus.INTERNAL_SERVER_ERROR, exception));
+                }
             } catch (IOException e) {
                 logger.error("Fail to send back exception message" + detector.getDetectorId(), exception);
             }
