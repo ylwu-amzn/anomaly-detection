@@ -90,7 +90,8 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
 //                handler.startAnomalyDetectorJob();
                 adTaskManager.startDetector(detectorId, handler, listener);
             } else if (rawPath.endsWith(RestHandlerUtils.STOP_JOB)) {
-                handler.stopAnomalyDetectorJob(detectorId);
+//                handler.stopAnomalyDetectorJob(detectorId);
+                adTaskManager.stopDetector(detectorId, handler, listener);
             }
         } catch (Exception e) {
             logger.error(e);

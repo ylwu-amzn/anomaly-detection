@@ -18,12 +18,12 @@ package com.amazon.opendistroforelasticsearch.ad.transport;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonValue;
 import org.elasticsearch.action.ActionType;
 
-public class BatchAnomalyResultAction extends ActionType<BatchAnomalyResultResponse> {
-    public static final String NAME = CommonValue.EXTERNAL_ACTION_PREFIX + "detector/batchrun";
-    public static final BatchAnomalyResultAction INSTANCE = new BatchAnomalyResultAction();
+public class ADBatchAnomalyResultAction extends ActionType<ADBatchAnomalyResultResponse> {
+    public static final String NAME = CommonValue.EXTERNAL_ACTION_PREFIX + "detector/batch_run";
+    public static final ADBatchAnomalyResultAction INSTANCE = new ADBatchAnomalyResultAction();
 
-    private BatchAnomalyResultAction() {
-        super(NAME, BatchAnomalyResultResponse::new);
+    private ADBatchAnomalyResultAction() {
+        super(NAME, ADBatchAnomalyResultResponse::new);
     }
 
 }

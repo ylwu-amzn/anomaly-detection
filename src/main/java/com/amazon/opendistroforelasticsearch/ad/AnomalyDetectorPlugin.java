@@ -29,9 +29,12 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.amazon.opendistroforelasticsearch.ad.task.ADBatchTaskRunner;
 import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
-import com.amazon.opendistroforelasticsearch.ad.transport.BatchAnomalyResultAction;
-import com.amazon.opendistroforelasticsearch.ad.transport.BatchAnomalyResultTransportAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultTransportAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchTaskRemoteExecutionAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchTaskRemoteExecutionTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.handler.AnomalyResultBulkIndexHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -185,6 +188,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
     private AnomalyDetectionIndices anomalyDetectionIndices;
     private AnomalyDetectorRunner anomalyDetectorRunner;
     private ADTaskManager adTaskManager;
+    private ADBatchTaskRunner adBatchTaskRunner;
     private Client client;
     private ClusterService clusterService;
     private ThreadPool threadPool;
@@ -500,7 +504,12 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             xContentRegistry,
             stateManager
         );
-        adTaskManager = new ADTaskManager(threadPool, clusterService, client, anomalyDetectionIndices, xContentRegistry, nodeFilter, anomalyDetectionIndices, detectorStateHandler);
+        adTaskManager = new ADTaskManager(threadPool, clusterService, client, anomalyDetectionIndices,
+                xContentRegistry, nodeFilter, anomalyDetectionIndices, detectorStateHandler,
+                adStats);
+        adBatchTaskRunner = new ADBatchTaskRunner(settings, threadPool, clusterService,
+                client, nodeFilter, indexNameExpressionResolver, adCircuitBreakerService,
+                featureManager, adTaskManager, adStats, anomalyResultBulkIndexHandler);
 
         MultiEntityResultHandler multiEntityResultHandler = new MultiEntityResultHandler(
             client,
@@ -538,8 +547,9 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 checkpoint,
                 modelPartitioner,
                 cacheProvider,
+                    anomalyResultBulkIndexHandler,
                     adTaskManager,
-                    anomalyResultBulkIndexHandler
+                    adBatchTaskRunner
             );
     }
 
@@ -642,7 +652,8 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 new ActionHandler<>(EntityResultAction.INSTANCE, EntityResultTransportAction.class),
                 new ActionHandler<>(EntityProfileAction.INSTANCE, EntityProfileTransportAction.class),
                 new ActionHandler<>(SearchAnomalyDetectorInfoAction.INSTANCE, SearchAnomalyDetectorInfoTransportAction.class),
-                new ActionHandler<>(BatchAnomalyResultAction.INSTANCE, BatchAnomalyResultTransportAction.class)
+                new ActionHandler<>(ADBatchAnomalyResultAction.INSTANCE, ADBatchAnomalyResultTransportAction.class),
+                new ActionHandler<>(ADBatchTaskRemoteExecutionAction.INSTANCE, ADBatchTaskRemoteExecutionTransportAction.class)
             );
     }
 

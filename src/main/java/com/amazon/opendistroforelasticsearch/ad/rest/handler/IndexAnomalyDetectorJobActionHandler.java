@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 
+import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyDetectionBatchTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchStatusException;
@@ -120,6 +121,34 @@ public class IndexAnomalyDetectorJobActionHandler {
         }
     }
 
+    public void startAnomalyDetectorJob(AnomalyDetector detector) {
+        if (!anomalyDetectionIndices.doesAnomalyDetectorJobIndexExist()) {
+            anomalyDetectionIndices
+                    .initAnomalyDetectorJobIndex(
+                            ActionListener.wrap(response -> onCreateJobIndexResponse(detector, response),
+                                    exception -> listener.onFailure(exception))
+                    );
+        } else {
+            createJob(detector);
+        }
+    }
+
+    private void onCreateJobIndexResponse(AnomalyDetector detector, CreateIndexResponse response) throws IOException {
+        if (response.isAcknowledged()) {
+            logger.info("Created {} with mappings.", ANOMALY_DETECTORS_INDEX);
+            createJob(detector);
+        } else {
+            logger.warn("Created {} with mappings call not acknowledged.", ANOMALY_DETECTORS_INDEX);
+            listener
+                    .onFailure(
+                            new ElasticsearchStatusException(
+                                    "Created " + ANOMALY_DETECTORS_INDEX + " with mappings call not acknowledged.",
+                                    RestStatus.INTERNAL_SERVER_ERROR
+                            )
+                    );
+        }
+    }
+
     private void onCreateMappingsResponse(CreateIndexResponse response) throws IOException {
         if (response.isAcknowledged()) {
             logger.info("Created {} with mappings.", ANOMALY_DETECTORS_INDEX);
@@ -143,6 +172,40 @@ public class IndexAnomalyDetectorJobActionHandler {
                 getRequest,
                 ActionListener.wrap(response -> onGetAnomalyDetectorResponse(response), exception -> listener.onFailure(exception))
             );
+    }
+
+    private void createJob(AnomalyDetector detector) {
+        try  {
+            if (detector.getFeatureAttributes().size() == 0) {
+                listener
+                        .onFailure(
+                                new ElasticsearchStatusException("Can't start detector job as no features configured", RestStatus.BAD_REQUEST)
+                        );
+                return;
+            }
+
+            IntervalTimeConfiguration interval = (IntervalTimeConfiguration) detector.getDetectionInterval();
+            Schedule schedule = new IntervalSchedule(Instant.now(), (int) interval.getInterval(), interval.getUnit());
+            Duration duration = Duration.of(interval.getInterval(), interval.getUnit());
+
+            AnomalyDetectorJob job = new AnomalyDetectorJob(
+                    detector.getDetectorId(),
+                    schedule,
+                    detector.getWindowDelay(),
+                    true,
+                    Instant.now(),
+                    null,
+                    Instant.now(),
+                    duration.getSeconds(),
+                    detector.getUser()
+            );
+
+            getAnomalyDetectorJobForWrite(job);
+        } catch (Exception e) {
+            String message = "Failed to parse anomaly detector job " + detectorId;
+            logger.error(message, e);
+            listener.onFailure(new ElasticsearchStatusException(message, RestStatus.INTERNAL_SERVER_ERROR));
+        }
     }
 
     private void onGetAnomalyDetectorResponse(GetResponse response) throws IOException {

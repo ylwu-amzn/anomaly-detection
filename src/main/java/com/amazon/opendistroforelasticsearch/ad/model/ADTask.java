@@ -242,13 +242,13 @@ public class ADTask implements ToXContentObject, Writeable {
             xContentBuilder.field(PROGRESS_FIELD, progress);
         }
         if (currentPiece != null) {
-            xContentBuilder.field(CURRENT_PIECE_FIELD, currentPiece);
+            xContentBuilder.field(CURRENT_PIECE_FIELD, currentPiece.toEpochMilli());
         }
         if (executionStartTime != null) {
-            xContentBuilder.field(EXECUTION_START_TIME_FIELD, executionStartTime);
+            xContentBuilder.field(EXECUTION_START_TIME_FIELD, executionStartTime.toEpochMilli());
         }
         if (executionEndTime != null) {
-            xContentBuilder.field(EXECUTION_END_TIME_FIELD, executionEndTime);
+            xContentBuilder.field(EXECUTION_END_TIME_FIELD, executionEndTime.toEpochMilli());
         }
         if (isLatest != null) {
             xContentBuilder.field(IS_LATEST_FIELD, isLatest);
