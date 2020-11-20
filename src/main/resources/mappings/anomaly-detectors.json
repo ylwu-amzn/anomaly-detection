@@ -144,6 +144,18 @@
     },
     "category_field": {
       "type": "keyword"
+    },
+    "detection_date_range": {
+      "properties": {
+        "start_time": {
+          "type": "date",
+          "format": "strict_date_time||epoch_millis"
+        },
+        "end_time": {
+          "type": "date",
+          "format": "strict_date_time||epoch_millis"
+        }
+      }
     }
   }
 }

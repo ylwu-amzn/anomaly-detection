@@ -448,7 +448,8 @@ public class IndexAnomalyDetectorActionHandler {
             anomalyDetector.getSchemaVersion(),
             Instant.now(),
             anomalyDetector.getCategoryField(),
-            user
+            user,
+            anomalyDetector.getDetectionDateRange()
         );
         IndexRequest indexRequest = new IndexRequest(ANOMALY_DETECTORS_INDEX)
             .setRefreshPolicy(refreshPolicy)

@@ -17,8 +17,7 @@ package com.amazon.opendistroforelasticsearch.ad.transport;
 
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.REQUEST_TIMEOUT;
 
-import java.io.IOException;
-
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
@@ -44,6 +43,7 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
     private final Settings settings;
     private final AnomalyDetectionIndices anomalyDetectionIndices;
     private final NamedXContentRegistry xContentRegistry;
+    private final ADTaskManager adTaskManager;
 
     @Inject
     public AnomalyDetectorJobTransportAction(
@@ -52,13 +52,15 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
         Client client,
         Settings settings,
         AnomalyDetectionIndices anomalyDetectionIndices,
-        NamedXContentRegistry xContentRegistry
+        NamedXContentRegistry xContentRegistry,
+        ADTaskManager adTaskManager
     ) {
         super(AnomalyDetectorJobAction.NAME, transportService, actionFilters, AnomalyDetectorJobRequest::new);
         this.client = client;
         this.settings = settings;
         this.anomalyDetectionIndices = anomalyDetectionIndices;
         this.xContentRegistry = xContentRegistry;
+        this.adTaskManager = adTaskManager;
     }
 
     @Override
@@ -85,11 +87,12 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
                 xContentRegistry
             );
             if (rawPath.endsWith(RestHandlerUtils.START_JOB)) {
-                handler.startAnomalyDetectorJob();
+//                handler.startAnomalyDetectorJob();
+                adTaskManager.startDetector(detectorId, handler, listener);
             } else if (rawPath.endsWith(RestHandlerUtils.STOP_JOB)) {
                 handler.stopAnomalyDetectorJob(detectorId);
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             logger.error(e);
             listener.onFailure(e);
         }
