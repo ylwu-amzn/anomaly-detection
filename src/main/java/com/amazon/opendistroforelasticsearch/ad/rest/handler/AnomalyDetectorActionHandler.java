@@ -20,6 +20,7 @@ import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpect
 
 import java.io.IOException;
 
+import com.amazon.opendistroforelasticsearch.ad.function.AnomalyDetectorFunction;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchStatusException;

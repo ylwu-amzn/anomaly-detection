@@ -17,6 +17,7 @@ package com.amazon.opendistroforelasticsearch.ad.transport;
 
 import java.io.IOException;
 
+import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -39,11 +40,13 @@ public class GetAnomalyDetectorResponse extends ActionResponse implements ToXCon
     private long seqNo;
     private AnomalyDetector detector;
     private AnomalyDetectorJob adJob;
+    private ADTask adTask;
     private RestStatus restStatus;
     private DetectorProfile detectorProfile;
     private EntityProfile entityProfile;
     private boolean profileResponse;
     private boolean returnJob;
+    private boolean returnTask;
 
     public GetAnomalyDetectorResponse(StreamInput in) throws IOException {
         super(in);
@@ -55,7 +58,6 @@ public class GetAnomalyDetectorResponse extends ActionResponse implements ToXCon
             } else {
                 entityProfile = new EntityProfile(in);
             }
-
         } else {
             detectorProfile = null;
             id = in.readString();
@@ -70,6 +72,12 @@ public class GetAnomalyDetectorResponse extends ActionResponse implements ToXCon
             } else {
                 adJob = null;
             }
+            returnTask = in.readBoolean();
+            if (returnTask) {
+                adTask = new ADTask(in);
+            } else {
+                adTask = null;
+            }
         }
     }
 
@@ -81,6 +89,8 @@ public class GetAnomalyDetectorResponse extends ActionResponse implements ToXCon
         AnomalyDetector detector,
         AnomalyDetectorJob adJob,
         boolean returnJob,
+        ADTask adTask,
+        boolean returnTask,
         RestStatus restStatus,
         DetectorProfile detectorProfile,
         EntityProfile entityProfile,
@@ -93,10 +103,17 @@ public class GetAnomalyDetectorResponse extends ActionResponse implements ToXCon
         this.detector = detector;
         this.restStatus = restStatus;
         this.returnJob = returnJob;
+
         if (this.returnJob) {
             this.adJob = adJob;
         } else {
             this.adJob = null;
+        }
+        this.returnTask = returnTask;
+        if (this.returnTask) {
+            this.adTask = adTask;
+        } else {
+            this.adTask = null;
         }
         this.detectorProfile = detectorProfile;
         this.entityProfile = entityProfile;
@@ -128,6 +145,12 @@ public class GetAnomalyDetectorResponse extends ActionResponse implements ToXCon
             } else {
                 out.writeBoolean(false); // returnJob is false
             }
+            if (returnTask) {
+                out.writeBoolean(true);
+                adTask.writeTo(out);
+            } else {
+                out.writeBoolean(false);
+            }
         }
     }
 
@@ -148,6 +171,9 @@ public class GetAnomalyDetectorResponse extends ActionResponse implements ToXCon
             builder.field(RestHandlerUtils.ANOMALY_DETECTOR, detector);
             if (returnJob) {
                 builder.field(RestHandlerUtils.ANOMALY_DETECTOR_JOB, adJob);
+            }
+            if (returnTask) {
+                builder.field(RestHandlerUtils.ANOMALY_DETECTION_TASK, adTask);
             }
             builder.endObject();
         }

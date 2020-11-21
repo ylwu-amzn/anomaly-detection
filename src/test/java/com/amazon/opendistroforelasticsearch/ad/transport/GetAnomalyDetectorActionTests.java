@@ -17,6 +17,7 @@ package com.amazon.opendistroforelasticsearch.ad.transport;
 
 import java.io.IOException;
 
+import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.rest.RestStatus;
@@ -44,7 +45,7 @@ public class GetAnomalyDetectorActionTests {
     @Test
     public void testGetRequest() throws IOException {
         BytesStreamOutput out = new BytesStreamOutput();
-        GetAnomalyDetectorRequest request = new GetAnomalyDetectorRequest("1234", 4321, false, "nonempty", "", false, null);
+        GetAnomalyDetectorRequest request = new GetAnomalyDetectorRequest("1234", 4321, false, false, "nonempty", "", false, null);
         request.writeTo(out);
         StreamInput input = out.bytes().streamInput();
         GetAnomalyDetectorRequest newRequest = new GetAnomalyDetectorRequest(input);
@@ -57,6 +58,7 @@ public class GetAnomalyDetectorActionTests {
         BytesStreamOutput out = new BytesStreamOutput();
         AnomalyDetector detector = Mockito.mock(AnomalyDetector.class);
         AnomalyDetectorJob detectorJob = Mockito.mock(AnomalyDetectorJob.class);
+        ADTask adTask = Mockito.mock(ADTask.class);
         Mockito.doNothing().when(detector).writeTo(out);
         GetAnomalyDetectorResponse response = new GetAnomalyDetectorResponse(
             1234,
@@ -65,6 +67,8 @@ public class GetAnomalyDetectorActionTests {
             2345,
             detector,
             detectorJob,
+            false,
+            adTask,
             false,
             RestStatus.OK,
             Mockito.mock(DetectorProfile.class),

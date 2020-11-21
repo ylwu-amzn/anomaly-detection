@@ -24,7 +24,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 
-import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyDetectionBatchTask;
+import com.amazon.opendistroforelasticsearch.ad.function.AnomalyDetectorFunction;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchStatusException;

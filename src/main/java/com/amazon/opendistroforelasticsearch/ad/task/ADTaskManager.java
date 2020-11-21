@@ -24,9 +24,9 @@ import java.util.stream.Collectors;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.ResourceNotFoundException;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
-import com.amazon.opendistroforelasticsearch.ad.rest.handler.ADTaskFunction;
-import com.amazon.opendistroforelasticsearch.ad.rest.handler.AnomalyDetectorFunction;
-import com.amazon.opendistroforelasticsearch.ad.rest.handler.DetectorFunction;
+import com.amazon.opendistroforelasticsearch.ad.function.ADTaskFunction;
+import com.amazon.opendistroforelasticsearch.ad.function.AnomalyDetectorFunction;
+import com.amazon.opendistroforelasticsearch.ad.function.DetectorFunction;
 import com.amazon.opendistroforelasticsearch.ad.rest.handler.IndexAnomalyDetectorJobActionHandler;
 import com.amazon.opendistroforelasticsearch.ad.stats.ADStats;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyDetectorJobResponse;
@@ -58,6 +58,7 @@ import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentParser;
+import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.TermQueryBuilder;
 import org.elasticsearch.index.reindex.UpdateByQueryAction;
@@ -166,7 +167,6 @@ public class ADTaskManager {
         searchRequest.indices(ADTask.DETECTOR_STATE_INDEX);
 
         client.search(searchRequest, ActionListener.wrap(r -> {
-
             long totalTasks = r.getHits().getTotalHits().value;
             if (totalTasks == 1) {
                 SearchHit searchHit = r.getHits().getAt(0);
@@ -185,10 +185,16 @@ public class ADTaskManager {
                 //TODO: handle multiple running lastest task. Iterate and cancel all of them
                 listener.onFailure(new ElasticsearchStatusException("Multiple", RestStatus.INTERNAL_SERVER_ERROR));
             }
-        }, e -> listener.onFailure(e)));
+        }, e -> {
+            if (e instanceof IndexNotFoundException) {
+                function.execute(null);
+            }
+            listener.onFailure(e);
+        }));
     }
 
     public void stopTask(ADTask task, ActionListener<AnomalyDetectorJobResponse> listener) {
+        assert task != null;
         String taskId = task.getTaskId();
         ListTasksRequest listTasksRequest = new ListTasksRequest();
         listTasksRequest.setActions("*detector/batch_run*");

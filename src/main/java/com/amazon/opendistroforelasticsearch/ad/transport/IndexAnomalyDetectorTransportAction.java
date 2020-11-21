@@ -42,7 +42,7 @@ import org.elasticsearch.transport.TransportService;
 
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
-import com.amazon.opendistroforelasticsearch.ad.rest.handler.AnomalyDetectorFunction;
+import com.amazon.opendistroforelasticsearch.ad.function.AnomalyDetectorFunction;
 import com.amazon.opendistroforelasticsearch.ad.rest.handler.IndexAnomalyDetectorActionHandler;
 import com.amazon.opendistroforelasticsearch.commons.authuser.User;
 

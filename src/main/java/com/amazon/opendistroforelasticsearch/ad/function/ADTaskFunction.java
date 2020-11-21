@@ -13,15 +13,17 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.opendistroforelasticsearch.ad.rest.handler;
+package com.amazon.opendistroforelasticsearch.ad.function;
+
+import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 
 @FunctionalInterface
-public interface AnomalyDetectorFunction {
+public interface ADTaskFunction {
 
     /**
      * Performs this operation.
      *
      * Notes: don't forget to send back responses via channel if you process response with this method.
      */
-    void execute();
+    void execute(ADTask task);
 }

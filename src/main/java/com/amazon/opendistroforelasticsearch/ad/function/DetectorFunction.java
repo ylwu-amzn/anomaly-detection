@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.opendistroforelasticsearch.ad.rest.handler;
+package com.amazon.opendistroforelasticsearch.ad.function;
 
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 

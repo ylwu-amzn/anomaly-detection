@@ -46,7 +46,7 @@ import org.elasticsearch.transport.TransportService;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
 import com.amazon.opendistroforelasticsearch.ad.model.DetectorInternalState;
-import com.amazon.opendistroforelasticsearch.ad.rest.handler.AnomalyDetectorFunction;
+import com.amazon.opendistroforelasticsearch.ad.function.AnomalyDetectorFunction;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 
 public class DeleteAnomalyDetectorTransportAction extends HandledTransportAction<DeleteAnomalyDetectorRequest, DeleteResponse> {
