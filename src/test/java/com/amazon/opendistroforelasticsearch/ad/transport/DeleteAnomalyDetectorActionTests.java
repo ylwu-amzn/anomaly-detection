@@ -19,6 +19,7 @@ import static org.mockito.Mockito.mock;
 
 import java.io.IOException;
 
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.delete.DeleteResponse;
@@ -45,7 +46,8 @@ public class DeleteAnomalyDetectorActionTests extends ESIntegTestCase {
             mock(ActionFilters.class),
             client(),
             clusterService(),
-            xContentRegistry()
+            xContentRegistry(),
+                mock(ADTaskManager.class)
         );
         response = new ActionListener<DeleteResponse>() {
             @Override

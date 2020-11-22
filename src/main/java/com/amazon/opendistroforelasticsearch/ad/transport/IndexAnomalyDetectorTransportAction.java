@@ -20,6 +20,7 @@ import static com.amazon.opendistroforelasticsearch.ad.util.ParseUtils.getUserCo
 import java.io.IOException;
 import java.util.List;
 
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
@@ -52,6 +53,7 @@ public class IndexAnomalyDetectorTransportAction extends HandledTransportAction<
     private final AnomalyDetectionIndices anomalyDetectionIndices;
     private final ClusterService clusterService;
     private final NamedXContentRegistry xContentRegistry;
+    private final ADTaskManager adTaskManager;
 
     @Inject
     public IndexAnomalyDetectorTransportAction(
@@ -61,13 +63,15 @@ public class IndexAnomalyDetectorTransportAction extends HandledTransportAction<
         ClusterService clusterService,
         Settings settings,
         AnomalyDetectionIndices anomalyDetectionIndices,
-        NamedXContentRegistry xContentRegistry
+        NamedXContentRegistry xContentRegistry,
+        ADTaskManager adTaskManager
     ) {
         super(IndexAnomalyDetectorAction.NAME, transportService, actionFilters, IndexAnomalyDetectorRequest::new);
         this.client = client;
         this.clusterService = clusterService;
         this.anomalyDetectionIndices = anomalyDetectionIndices;
         this.xContentRegistry = xContentRegistry;
+        this.adTaskManager = adTaskManager;
     }
 
     @Override
@@ -103,7 +107,8 @@ public class IndexAnomalyDetectorTransportAction extends HandledTransportAction<
                     maxAnomalyFeatures,
                     method,
                     xContentRegistry,
-                    user
+                    user,
+                        adTaskManager
                 );
                 try {
                     indexAnomalyDetectorActionHandler.start();

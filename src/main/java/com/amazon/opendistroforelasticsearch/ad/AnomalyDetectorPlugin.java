@@ -504,7 +504,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             xContentRegistry,
             stateManager
         );
-        adTaskManager = new ADTaskManager(threadPool, clusterService, client, anomalyDetectionIndices,
+        adTaskManager = new ADTaskManager(threadPool, clusterService, client,
                 xContentRegistry, nodeFilter, anomalyDetectionIndices, detectorStateHandler,
                 adStats);
         adBatchTaskRunner = new ADBatchTaskRunner(settings, threadPool, clusterService,

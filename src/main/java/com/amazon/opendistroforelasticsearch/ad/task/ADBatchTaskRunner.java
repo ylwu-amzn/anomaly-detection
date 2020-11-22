@@ -90,7 +90,6 @@ import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorS
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.TIME_DECAY;
 
 public class ADBatchTaskRunner {
-    public static final String GET_TASK_RESPONSE = "getTaskResponse";
     private final Logger logger = LogManager.getLogger(this.getClass());
     private static final String TASK_ID_HEADER = "anomaly_detection_task_id";
     private final Integer PIECE_SIZE = 1000;
@@ -244,8 +243,7 @@ public class ADBatchTaskRunner {
         }));
     }
 
-
-    public void executeADBatchTask(ADTask adTask, Task task, ActionListener<ADBatchAnomalyResultResponse> actionListener) {
+    private void executeADBatchTask(ADTask adTask, Task task, ActionListener<ADBatchAnomalyResultResponse> actionListener) {
         String taskId = adTask.getTaskId();
         AnomalyDetector detector = adTask.getDetector();
         putADTaskInCache(adTask, (AnomalyDetectionBatchTask) task);

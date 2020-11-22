@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskState;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -97,6 +99,7 @@ public class IndexAnomalyDetectorActionHandler {
     private final NamedXContentRegistry xContentRegistry;
     private final ActionListener<IndexAnomalyDetectorResponse> listener;
     private final User user;
+    private final ADTaskManager adTaskManager;
 
     /**
      * Constructor function.
@@ -134,7 +137,8 @@ public class IndexAnomalyDetectorActionHandler {
         Integer maxAnomalyFeatures,
         RestRequest.Method method,
         NamedXContentRegistry xContentRegistry,
-        User user
+        User user,
+        ADTaskManager adTaskManager
     ) {
         this.clusterService = clusterService;
         this.client = client;
@@ -152,6 +156,7 @@ public class IndexAnomalyDetectorActionHandler {
         this.method = method;
         this.xContentRegistry = xContentRegistry;
         this.user = user;
+        this.adTaskManager = adTaskManager;
     }
 
     /**
@@ -213,10 +218,16 @@ public class IndexAnomalyDetectorActionHandler {
         try (XContentParser parser = RestHandlerUtils.createXContentParserFromRegistry(xContentRegistry, response.getSourceAsBytesRef())) {
             ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser::getTokenLocation);
             AnomalyDetector existingDetector = AnomalyDetector.parse(parser, response.getId(), response.getVersion());
-            if (!hasCategoryField(existingDetector) && hasCategoryField(this.anomalyDetector)) {
-                validateAgainstExistingMultiEntityAnomalyDetector(detectorId);
+            if (existingDetector.isRealTimeDetector()) {
+                validateDetector(existingDetector);
             } else {
-                validateCategoricalField(detectorId);
+                adTaskManager.getLatestADTask(detectorId, (adTask) -> {
+                    if (adTask == null || !ADTaskState.RUNNING.name().equals(adTask.getState())) {
+                        validateDetector(existingDetector);
+                    } else {
+                        listener.onFailure(new ElasticsearchStatusException("Detector is running", RestStatus.INTERNAL_SERVER_ERROR));
+                    }
+                }, listener);
             }
         } catch (IOException e) {
             String message = "Failed to parse anomaly detector " + detectorId;
@@ -224,6 +235,14 @@ public class IndexAnomalyDetectorActionHandler {
             listener.onFailure(new ElasticsearchStatusException(message, RestStatus.INTERNAL_SERVER_ERROR));
         }
 
+    }
+
+    private void validateDetector(AnomalyDetector detector) {
+        if (!hasCategoryField(detector) && hasCategoryField(this.anomalyDetector)) {
+            validateAgainstExistingMultiEntityAnomalyDetector(detectorId);
+        } else {
+            validateCategoricalField(detectorId);
+        }
     }
 
     private boolean hasCategoryField(AnomalyDetector detector) {

@@ -89,7 +89,6 @@ public class ADTaskManager {
     private final Logger logger = LogManager.getLogger(this.getClass());
     private static final String TASK_ID_HEADER = "anomaly_detection_task_id";
 
-    private final AnomalyDetectionIndices anomalyDetectionIndices;
     private final ThreadPool threadPool;
     private final Client client;
     private final ADStats adStats;
@@ -104,7 +103,6 @@ public class ADTaskManager {
             ThreadPool threadPool,
             ClusterService clusterService,
             Client client,
-            AnomalyDetectionIndices anomalyDetectionIndices,
             NamedXContentRegistry xContentRegistry,
             DiscoveryNodeFilterer nodeFilter,
             AnomalyDetectionIndices detectionIndices,
@@ -113,7 +111,6 @@ public class ADTaskManager {
         this.threadPool = threadPool;
         this.clusterService = clusterService;
         this.client = client;
-        this.anomalyDetectionIndices = anomalyDetectionIndices;
         this.xContentRegistry = xContentRegistry;
         this.nodeFilter = nodeFilter;
         this.detectionIndices = detectionIndices;
@@ -125,35 +122,41 @@ public class ADTaskManager {
                               ActionListener<AnomalyDetectorJobResponse> listener) {
         getDetector(detectorId, (detector) -> handler.startAnomalyDetectorJob(detector),
                 (detector) -> createADTaskIndex(detector, listener), listener);
-//        GetRequest getRequest = new GetRequest(AnomalyDetector.ANOMALY_DETECTORS_INDEX).id(detectorId);
-//        client.get(getRequest, ActionListener.wrap(response -> {
-//            if (!response.isExists()) {
-//                listener.onFailure(new ElasticsearchStatusException("AnomalyDetector is not found with id: " + detectorId, RestStatus.NOT_FOUND));
-//                return;
-//            }
-//            try (XContentParser parser = RestHandlerUtils.createXContentParserFromRegistry(xContentRegistry, response.getSourceAsBytesRef())) {
-//                ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser::getTokenLocation);
-//                AnomalyDetector detector = AnomalyDetector.parse(parser, response.getId(), response.getVersion());
-//
-//                if (!detector.isRealTimeDetector()) {
-//                    // execute historical detector
-//                    createADTaskIndex(detector, listener);
-//                } else {
-//                    // create schedule job for realtime detector
-//                   handler.startAnomalyDetectorJob();
-//                }
-//            } catch (Exception e) {
-//                String message = "Failed to parse anomaly detector job " + detectorId;
-//                logger.error(message, e);
-//                listener.onFailure(new ElasticsearchStatusException(message, RestStatus.INTERNAL_SERVER_ERROR));
-//            }
-//        }, exception -> listener.onFailure(exception)));
     }
 
     public void stopDetector(String detectorId, IndexAnomalyDetectorJobActionHandler handler,
                              ActionListener<AnomalyDetectorJobResponse> listener) {
         getDetector(detectorId, (detector) -> handler.stopAnomalyDetectorJob(detectorId),
                 (detector) -> getLatestADTask(detectorId, (task) -> stopTask(task, listener), listener), listener);
+    }
+
+    public void getDetector(String detectorId,
+                            DetectorFunction realTimeDetectorFunction,
+                            DetectorFunction historicalDetectorFunction,
+                            ActionListener listener) {
+        GetRequest getRequest = new GetRequest(AnomalyDetector.ANOMALY_DETECTORS_INDEX).id(detectorId);
+        client.get(getRequest, ActionListener.wrap(response -> {
+            if (!response.isExists()) {
+                listener.onFailure(new ElasticsearchStatusException("AnomalyDetector is not found with id: " + detectorId, RestStatus.NOT_FOUND));
+                return;
+            }
+            try (XContentParser parser = RestHandlerUtils.createXContentParserFromRegistry(xContentRegistry, response.getSourceAsBytesRef())) {
+                ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser::getTokenLocation);
+                AnomalyDetector detector = AnomalyDetector.parse(parser, response.getId(), response.getVersion());
+
+                if (detector.isRealTimeDetector()) {
+                    // create schedule job for realtime detector
+                    realTimeDetectorFunction.execute(detector);
+                } else {
+                    // execute historical detector
+                    historicalDetectorFunction.execute(detector);
+                }
+            } catch (Exception e) {
+                String message = "Failed to parse anomaly detector job " + detectorId;
+                logger.error(message, e);
+                listener.onFailure(new ElasticsearchStatusException(message, RestStatus.INTERNAL_SERVER_ERROR));
+            }
+        }, exception -> listener.onFailure(exception)));
     }
 
     public void getLatestADTask(String detectorId, ADTaskFunction function, ActionListener listener) {
@@ -188,12 +191,13 @@ public class ADTaskManager {
         }, e -> {
             if (e instanceof IndexNotFoundException) {
                 function.execute(null);
+            } else {
+                listener.onFailure(e);
             }
-            listener.onFailure(e);
         }));
     }
 
-    public void stopTask(ADTask task, ActionListener<AnomalyDetectorJobResponse> listener) {
+    private void stopTask(ADTask task, ActionListener<AnomalyDetectorJobResponse> listener) {
         assert task != null;
         String taskId = task.getTaskId();
         ListTasksRequest listTasksRequest = new ListTasksRequest();
@@ -235,35 +239,7 @@ public class ADTaskManager {
         }));
     }
 
-    private void getDetector(String detectorId, DetectorFunction realTimeDetectorFunction,
-                             DetectorFunction historicalDetectorFunction,
-                             ActionListener<AnomalyDetectorJobResponse> listener) {
-        GetRequest getRequest = new GetRequest(AnomalyDetector.ANOMALY_DETECTORS_INDEX).id(detectorId);
-        client.get(getRequest, ActionListener.wrap(response -> {
-            if (!response.isExists()) {
-                listener.onFailure(new ElasticsearchStatusException("AnomalyDetector is not found with id: " + detectorId, RestStatus.NOT_FOUND));
-                return;
-            }
-            try (XContentParser parser = RestHandlerUtils.createXContentParserFromRegistry(xContentRegistry, response.getSourceAsBytesRef())) {
-                ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser::getTokenLocation);
-                AnomalyDetector detector = AnomalyDetector.parse(parser, response.getId(), response.getVersion());
-
-                if (detector.isRealTimeDetector()) {
-                    // create schedule job for realtime detector
-                    realTimeDetectorFunction.execute(detector);
-                } else {
-                    // execute historical detector
-                    historicalDetectorFunction.execute(detector);
-                }
-            } catch (Exception e) {
-                String message = "Failed to parse anomaly detector job " + detectorId;
-                logger.error(message, e);
-                listener.onFailure(new ElasticsearchStatusException(message, RestStatus.INTERNAL_SERVER_ERROR));
-            }
-        }, exception -> listener.onFailure(exception)));
-    }
-
-    public void createADTaskIndex(AnomalyDetector detector, ActionListener<AnomalyDetectorJobResponse> listener) {
+    private void createADTaskIndex(AnomalyDetector detector, ActionListener<AnomalyDetectorJobResponse> listener) {
         if (detectionIndices.doesDetectorStateIndexExist()) {
             checkCurrentTaskState(detector, listener);
         } else {
