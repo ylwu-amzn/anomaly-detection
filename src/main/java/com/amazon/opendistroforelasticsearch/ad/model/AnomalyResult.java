@@ -47,9 +47,9 @@ public class AnomalyResult implements ToXContentObject, Writeable {
 
     public static final String PARSE_FIELD_NAME = "AnomalyResult";
     public static final NamedXContentRegistry.Entry XCONTENT_REGISTRY = new NamedXContentRegistry.Entry(
-        AnomalyResult.class,
-        new ParseField(PARSE_FIELD_NAME),
-        it -> parse(it)
+            AnomalyResult.class,
+            new ParseField(PARSE_FIELD_NAME),
+            it -> parse(it)
     );
 
     public static final String DETECTOR_ID_FIELD = "detector_id";
@@ -64,8 +64,10 @@ public class AnomalyResult implements ToXContentObject, Writeable {
     public static final String ERROR_FIELD = "error";
     public static final String ENTITY_FIELD = "entity";
     public static final String USER_FIELD = "user";
+    public static final String TASK_ID_FIELD = "task_id";
 
     private final String detectorId;
+    private final String taskId;
     private final Double anomalyScore;
     private final Double anomalyGrade;
     private final Double confidence;
@@ -80,52 +82,74 @@ public class AnomalyResult implements ToXContentObject, Writeable {
     private final Integer schemaVersion;
 
     public AnomalyResult(
-        String detectorId,
-        Double anomalyScore,
-        Double anomalyGrade,
-        Double confidence,
-        List<FeatureData> featureData,
-        Instant dataStartTime,
-        Instant dataEndTime,
-        Instant executionStartTime,
-        Instant executionEndTime,
-        String error,
-        User user,
-        Integer schemaVersion
+            String detectorId,
+            Double anomalyScore,
+            Double anomalyGrade,
+            Double confidence,
+            List<FeatureData> featureData,
+            Instant dataStartTime,
+            Instant dataEndTime,
+            Instant executionStartTime,
+            Instant executionEndTime,
+            String error,
+            User user,
+            Integer schemaVersion
     ) {
         this(
-            detectorId,
-            anomalyScore,
-            anomalyGrade,
-            confidence,
-            featureData,
-            dataStartTime,
-            dataEndTime,
-            executionStartTime,
-            executionEndTime,
-            error,
-            null,
-            user,
-            schemaVersion
+                detectorId,
+                anomalyScore,
+                anomalyGrade,
+                confidence,
+                featureData,
+                dataStartTime,
+                dataEndTime,
+                executionStartTime,
+                executionEndTime,
+                error,
+                null,
+                user,
+                schemaVersion
         );
     }
 
     public AnomalyResult(
-        String detectorId,
-        Double anomalyScore,
-        Double anomalyGrade,
-        Double confidence,
-        List<FeatureData> featureData,
-        Instant dataStartTime,
-        Instant dataEndTime,
-        Instant executionStartTime,
-        Instant executionEndTime,
-        String error,
-        List<Entity> entity,
-        User user,
-        Integer schemaVersion
+            String detectorId,
+            Double anomalyScore,
+            Double anomalyGrade,
+            Double confidence,
+            List<FeatureData> featureData,
+            Instant dataStartTime,
+            Instant dataEndTime,
+            Instant executionStartTime,
+            Instant executionEndTime,
+            String error,
+            List<Entity> entity,
+            User user,
+            Integer schemaVersion
+    ) {
+        this(detectorId, null, anomalyScore, anomalyGrade, confidence, featureData,
+                dataStartTime, dataEndTime, executionStartTime, executionEndTime, error,
+                entity, user, schemaVersion);
+    }
+
+    public AnomalyResult(
+            String detectorId,
+            String taskId,
+            Double anomalyScore,
+            Double anomalyGrade,
+            Double confidence,
+            List<FeatureData> featureData,
+            Instant dataStartTime,
+            Instant dataEndTime,
+            Instant executionStartTime,
+            Instant executionEndTime,
+            String error,
+            List<Entity> entity,
+            User user,
+            Integer schemaVersion
     ) {
         this.detectorId = detectorId;
+        this.taskId = taskId;
         this.anomalyScore = anomalyScore;
         this.anomalyGrade = anomalyGrade;
         this.confidence = confidence;
@@ -166,16 +190,17 @@ public class AnomalyResult implements ToXContentObject, Writeable {
             user = null;
         }
         this.schemaVersion = input.readInt();
+        this.taskId = input.readOptionalString();
     }
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         XContentBuilder xContentBuilder = builder
-            .startObject()
-            .field(DETECTOR_ID_FIELD, detectorId)
-            .field(DATA_START_TIME_FIELD, dataStartTime.toEpochMilli())
-            .field(DATA_END_TIME_FIELD, dataEndTime.toEpochMilli())
-            .field(CommonName.SCHEMA_VERSION_FIELD, schemaVersion);
+                .startObject()
+                .field(DETECTOR_ID_FIELD, detectorId)
+                .field(DATA_START_TIME_FIELD, dataStartTime.toEpochMilli())
+                .field(DATA_END_TIME_FIELD, dataEndTime.toEpochMilli())
+                .field(CommonName.SCHEMA_VERSION_FIELD, schemaVersion);
         if (featureData != null) {
             // can be null during preview
             xContentBuilder.field(FEATURE_DATA_FIELD, featureData.toArray());
@@ -206,6 +231,9 @@ public class AnomalyResult implements ToXContentObject, Writeable {
         if (user != null) {
             xContentBuilder.field(USER_FIELD, user);
         }
+        if (taskId != null) {
+            xContentBuilder.field(TASK_ID_FIELD, taskId);
+        }
         return xContentBuilder.endObject();
     }
 
@@ -223,6 +251,7 @@ public class AnomalyResult implements ToXContentObject, Writeable {
         List<Entity> entityList = null;
         User user = null;
         Integer schemaVersion = CommonValue.NO_SCHEMA_VERSION;
+        String taskId = null;
 
         ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.currentToken(), parser);
         while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
@@ -276,25 +305,29 @@ public class AnomalyResult implements ToXContentObject, Writeable {
                 case CommonName.SCHEMA_VERSION_FIELD:
                     schemaVersion = parser.intValue();
                     break;
+                case TASK_ID_FIELD:
+                    taskId = parser.text();
+                    break;
                 default:
                     parser.skipChildren();
                     break;
             }
         }
         return new AnomalyResult(
-            detectorId,
-            anomalyScore,
-            anomalyGrade,
-            confidence,
-            featureData,
-            dataStartTime,
-            dataEndTime,
-            executionStartTime,
-            executionEndTime,
-            error,
-            entityList,
-            user,
-            schemaVersion
+                detectorId,
+                taskId,
+                anomalyScore,
+                anomalyGrade,
+                confidence,
+                featureData,
+                dataStartTime,
+                dataEndTime,
+                executionStartTime,
+                executionEndTime,
+                error,
+                entityList,
+                user,
+                schemaVersion
         );
     }
 
@@ -307,57 +340,64 @@ public class AnomalyResult implements ToXContentObject, Writeable {
             return false;
         AnomalyResult that = (AnomalyResult) o;
         return Objects.equal(getDetectorId(), that.getDetectorId())
-            && Objects.equal(getAnomalyScore(), that.getAnomalyScore())
-            && Objects.equal(getAnomalyGrade(), that.getAnomalyGrade())
-            && Objects.equal(getConfidence(), that.getConfidence())
-            && Objects.equal(getFeatureData(), that.getFeatureData())
-            && Objects.equal(getDataStartTime(), that.getDataStartTime())
-            && Objects.equal(getDataEndTime(), that.getDataEndTime())
-            && Objects.equal(getExecutionStartTime(), that.getExecutionStartTime())
-            && Objects.equal(getExecutionEndTime(), that.getExecutionEndTime())
-            && Objects.equal(getError(), that.getError())
-            && Objects.equal(getEntity(), that.getEntity());
+                && Objects.equal(getTaskId(), that.getTaskId())
+                && Objects.equal(getAnomalyScore(), that.getAnomalyScore())
+                && Objects.equal(getAnomalyGrade(), that.getAnomalyGrade())
+                && Objects.equal(getConfidence(), that.getConfidence())
+                && Objects.equal(getFeatureData(), that.getFeatureData())
+                && Objects.equal(getDataStartTime(), that.getDataStartTime())
+                && Objects.equal(getDataEndTime(), that.getDataEndTime())
+                && Objects.equal(getExecutionStartTime(), that.getExecutionStartTime())
+                && Objects.equal(getExecutionEndTime(), that.getExecutionEndTime())
+                && Objects.equal(getError(), that.getError())
+                && Objects.equal(getEntity(), that.getEntity());
     }
 
     @Generated
     @Override
     public int hashCode() {
         return Objects
-            .hashCode(
-                getDetectorId(),
-                getAnomalyScore(),
-                getAnomalyGrade(),
-                getConfidence(),
-                getFeatureData(),
-                getDataStartTime(),
-                getDataEndTime(),
-                getExecutionStartTime(),
-                getExecutionEndTime(),
-                getError(),
-                getEntity()
-            );
+                .hashCode(
+                        getDetectorId(),
+                        getTaskId(),
+                        getAnomalyScore(),
+                        getAnomalyGrade(),
+                        getConfidence(),
+                        getFeatureData(),
+                        getDataStartTime(),
+                        getDataEndTime(),
+                        getExecutionStartTime(),
+                        getExecutionEndTime(),
+                        getError(),
+                        getEntity()
+                );
     }
 
     @Generated
     @Override
     public String toString() {
         return new ToStringBuilder(this)
-            .append("detectorId", detectorId)
-            .append("anomalyScore", anomalyScore)
-            .append("anomalyGrade", anomalyGrade)
-            .append("confidence", confidence)
-            .append("featureData", featureData)
-            .append("dataStartTime", dataStartTime)
-            .append("dataEndTime", dataEndTime)
-            .append("executionStartTime", executionStartTime)
-            .append("executionEndTime", executionEndTime)
-            .append("error", error)
-            .append("entity", entity)
-            .toString();
+                .append("detectorId", detectorId)
+                .append("taskId", taskId)
+                .append("anomalyScore", anomalyScore)
+                .append("anomalyGrade", anomalyGrade)
+                .append("confidence", confidence)
+                .append("featureData", featureData)
+                .append("dataStartTime", dataStartTime)
+                .append("dataEndTime", dataEndTime)
+                .append("executionStartTime", executionStartTime)
+                .append("executionEndTime", executionEndTime)
+                .append("error", error)
+                .append("entity", entity)
+                .toString();
     }
 
     public String getDetectorId() {
         return detectorId;
+    }
+
+    private String getTaskId() {
+        return taskId;
     }
 
     public Double getAnomalyScore() {
@@ -426,5 +466,6 @@ public class AnomalyResult implements ToXContentObject, Writeable {
             out.writeBoolean(false); // user does not exist
         }
         out.writeInt(schemaVersion);
+        out.writeOptionalString(taskId);
     }
 }

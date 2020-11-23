@@ -19,6 +19,7 @@ import static org.mockito.Mockito.mock;
 
 import java.io.IOException;
 
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
@@ -50,7 +51,7 @@ public class AnomalyDetectorJobActionTests extends ESIntegTestCase {
             client(),
             indexSettings(),
             mock(AnomalyDetectionIndices.class),
-            xContentRegistry()
+            xContentRegistry(), mock(ADTaskManager.class)
         );
         task = mock(Task.class);
         request = new AnomalyDetectorJobRequest("1234", 4567, 7890, "_start");

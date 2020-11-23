@@ -39,6 +39,8 @@ import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
+import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
+import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
@@ -187,6 +189,38 @@ public class FeatureManager implements CleanState {
             .filter(time -> !featuresMap.containsKey(time))
             .mapToObj(time -> new SimpleImmutableEntry<>(time - intervalMilli, time))
             .collect(Collectors.toList());
+    }
+
+    public void getFeatures(AnomalyDetector detector, long startTime, long endTime,
+                            ActionListener<List<SinglePointFeatures>> listener) {
+        try {
+            int shingleSize = detector.getShingleSize();
+            List<double[]> features = new ArrayList<>();
+            long interval = ((IntervalTimeConfiguration) detector.getDetectionInterval()).toDuration().toMillis();
+            searchFeatureDao.getFeaturesForPeriodByBatch(detector, startTime, endTime, ActionListener.wrap(points -> {
+                for (int i = 0; i < points.size(); i++) { // TODO: process missing values, by default missing values will not returned.
+                    Optional<double[]> point = points.get(i);
+                    features.add(point.get());
+                }
+                logger.info("features size: {}", features.size());
+                List<SinglePointFeatures> featureList = new ArrayList<>();
+                if (features.size() > 0) {
+                    Optional<double[][]> featureData = batchShingle(features, shingleSize);
+                    for (int i = 0; i < featureData.get().length; i++) {
+                        SinglePointFeatures feature = new SinglePointFeatures(
+                                points.get(i + shingleSize - 1),
+                                Optional.ofNullable(featureData.get()[i]),
+                                Instant.ofEpochMilli(startTime + (i + shingleSize - 1) * interval),
+                                Instant.ofEpochMilli(startTime + (i + shingleSize) * interval)
+                        );
+                        featureList.add(feature);
+                    }
+                }
+                listener.onResponse(featureList);
+            }, listener::onFailure));
+        } catch (Exception e) {
+            logger.error("Failed to get features for detector: " + detector.getDetectorId());
+        }
     }
 
     /**
@@ -414,6 +448,13 @@ public class FeatureManager implements CleanState {
             .rangeClosed(1, numSamples)
             .mapToObj(i -> new SimpleImmutableEntry<>(endMillis - (numSamples - i + 1) * interval, endMillis - (numSamples - i) * interval))
             .collect(Collectors.toList());
+    }
+
+    private Optional<double[][]> batchShingle(List<double[]> points, int shingleSize) {
+        return Optional
+                .ofNullable(points)
+                .filter(p -> p.size() >= shingleSize)
+                .map(p -> batchShingle(p.toArray(new double[0][0]), shingleSize));
     }
 
     /**

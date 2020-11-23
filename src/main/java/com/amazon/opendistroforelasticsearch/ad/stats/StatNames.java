@@ -32,7 +32,13 @@ public enum StatNames {
     MODELS_CHECKPOINT_INDEX_STATUS("models_checkpoint_index_status"),
     ANOMALY_DETECTION_JOB_INDEX_STATUS("anomaly_detection_job_index_status"),
     ANOMALY_DETECTION_STATE_STATUS("anomaly_detection_state_status"),
-    MODEL_INFORMATION("models");
+    ANOMALY_DETECTION_TASK_INDEX_STATUS("anomaly_detection_task_index_status"),
+    MODEL_INFORMATION("models"),
+    HISTORICAL_DETECTOR_COUNT("historical_detector_count"),
+    AD_EXECUTING_BATCH_TASK_COUNT("ad_executing_batch_task_count"),
+    AD_CANCELED_BATCH_TASK_COUNT("ad_canceled_batch_task_count"),
+    AD_TOTAL_BATCH_TASK_COUNT("ad_total_batch_task_count"),
+    AD_BATCH_TASK_FAILURE_COUNT("ad_batch_task_failure_count");
 
     private String name;
 

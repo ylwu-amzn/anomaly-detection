@@ -29,6 +29,10 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
+import com.amazon.opendistroforelasticsearch.ad.transport.BatchAnomalyResultAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.BatchAnomalyResultTransportAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.handler.AnomalyResultBulkIndexHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.SpecialPermission;
@@ -175,9 +179,12 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
     public static final String AD_BASE_DETECTORS_URI = AD_BASE_URI + "/detectors";
     public static final String AD_THREAD_POOL_NAME = "ad-threadpool";
     public static final String AD_JOB_TYPE = "opendistro_anomaly_detector";
+    public static final String AD_THREAD_POOL_PREFIX = "opendistro.ad.";
+    public static final String AD_BATCh_TASK_THREAD_POOL_NAME = "ad-batch-task-threadpool";
     private static Gson gson;
     private AnomalyDetectionIndices anomalyDetectionIndices;
     private AnomalyDetectorRunner anomalyDetectorRunner;
+    private ADTaskManager adTaskManager;
     private Client client;
     private ClusterService clusterService;
     private ThreadPool threadPool;
@@ -460,15 +467,32 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 new ADStat<>(true, new IndexStatusSupplier(indexUtils, DetectorInternalState.DETECTOR_STATE_INDEX))
             )
             .put(StatNames.DETECTOR_COUNT.getName(), new ADStat<>(true, new SettableSupplier()))
+            .put(StatNames.HISTORICAL_DETECTOR_COUNT.getName(), new ADStat<>(true, new SettableSupplier()))
+                .put(StatNames.AD_TOTAL_BATCH_TASK_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
+                .put(StatNames.AD_CANCELED_BATCH_TASK_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
+                .put(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
+                .put(StatNames.AD_BATCH_TASK_FAILURE_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
             .build();
 
         adStats = new ADStats(indexUtils, modelManager, stats);
+        AnomalyResultBulkIndexHandler anomalyResultBulkIndexHandler = new AnomalyResultBulkIndexHandler(
+                client,
+                settings,
+                threadPool,
+                CommonName.ANOMALY_RESULT_INDEX_ALIAS,
+                ThrowingConsumerWrapper.throwingConsumerWrapper(anomalyDetectionIndices::initAnomalyResultIndexDirectly),
+                anomalyDetectionIndices::doesAnomalyResultIndexExist,
+                this.clientUtil,
+                this.indexUtils,
+                clusterService,
+                anomalyDetectionIndices
+        );
         ADCircuitBreakerService adCircuitBreakerService = new ADCircuitBreakerService(jvmService).init();
         this.detectorStateHandler = new DetectionStateHandler(
             client,
             settings,
             threadPool,
-            ThrowingConsumerWrapper.throwingConsumerWrapper(anomalyDetectionIndices::initDetectorStateIndex),
+            ThrowingConsumerWrapper.throwingConsumerWrapper(anomalyDetectionIndices::initDetectionStateIndex),
             anomalyDetectionIndices::doesDetectorStateIndexExist,
             this.clientUtil,
             this.indexUtils,
@@ -476,6 +500,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             xContentRegistry,
             stateManager
         );
+        adTaskManager = new ADTaskManager(threadPool, clusterService, client, anomalyDetectionIndices, xContentRegistry, nodeFilter, anomalyDetectionIndices, detectorStateHandler);
 
         MultiEntityResultHandler multiEntityResultHandler = new MultiEntityResultHandler(
             client,
@@ -512,7 +537,9 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 multiEntityResultHandler,
                 checkpoint,
                 modelPartitioner,
-                cacheProvider
+                cacheProvider,
+                    adTaskManager,
+                    anomalyResultBulkIndexHandler
             );
     }
 
@@ -527,16 +554,23 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
 
     @Override
     public List<ExecutorBuilder<?>> getExecutorBuilders(Settings settings) {
-        return Collections
-            .singletonList(
-                new FixedExecutorBuilder(
-                    settings,
-                    AD_THREAD_POOL_NAME,
-                    Math.max(1, EsExecutors.allocatedProcessors(settings) / 4),
-                    AnomalyDetectorSettings.AD_THEAD_POOL_QUEUE_SIZE,
-                    "opendistro.ad." + AD_THREAD_POOL_NAME
-                )
-            );
+        return Arrays
+                .asList(
+                        new FixedExecutorBuilder(
+                                settings,
+                                AD_THREAD_POOL_NAME,
+                                Math.max(1, EsExecutors.allocatedProcessors(settings) / 4),
+                                AnomalyDetectorSettings.AD_THEAD_POOL_QUEUE_SIZE,
+                                AD_THREAD_POOL_PREFIX + AD_THREAD_POOL_NAME
+                        ),
+                        new FixedExecutorBuilder(
+                                settings,
+                                AD_BATCh_TASK_THREAD_POOL_NAME,
+                                Math.max(1, EsExecutors.allocatedProcessors(settings) / 4),
+                                AnomalyDetectorSettings.AD_THEAD_POOL_QUEUE_SIZE,
+                                AD_THREAD_POOL_PREFIX + AD_BATCh_TASK_THREAD_POOL_NAME
+                        )
+                );
     }
 
     @Override
@@ -607,7 +641,8 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 new ActionHandler<>(ADResultBulkAction.INSTANCE, ADResultBulkTransportAction.class),
                 new ActionHandler<>(EntityResultAction.INSTANCE, EntityResultTransportAction.class),
                 new ActionHandler<>(EntityProfileAction.INSTANCE, EntityProfileTransportAction.class),
-                new ActionHandler<>(SearchAnomalyDetectorInfoAction.INSTANCE, SearchAnomalyDetectorInfoTransportAction.class)
+                new ActionHandler<>(SearchAnomalyDetectorInfoAction.INSTANCE, SearchAnomalyDetectorInfoTransportAction.class),
+                new ActionHandler<>(BatchAnomalyResultAction.INSTANCE, BatchAnomalyResultTransportAction.class)
             );
     }
 

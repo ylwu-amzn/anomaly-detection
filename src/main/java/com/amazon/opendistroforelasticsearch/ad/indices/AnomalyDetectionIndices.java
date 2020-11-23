@@ -211,7 +211,7 @@ public class AnomalyDetectionIndices implements LocalNodeMasterListener {
      * @return anomaly detector state index mapping
      * @throws IOException IOException if mapping file can't be read correctly
      */
-    public static String getDetectorStateMappings() throws IOException {
+    public static String getDetectionStateMappings() throws IOException {
         URL url = AnomalyDetectionIndices.class.getClassLoader().getResource(ANOMALY_DETECTION_STATE_INDEX_MAPPING_FILE);
         return Resources.toString(url, Charsets.UTF_8);
     }
@@ -390,11 +390,11 @@ public class AnomalyDetectionIndices implements LocalNodeMasterListener {
      * Create the state index.
      *
      * @param actionListener action called after create index
-     * @throws IOException IOException from {@link AnomalyDetectionIndices#getDetectorStateMappings}
+     * @throws IOException IOException from {@link AnomalyDetectionIndices#getDetectionStateMappings}
      */
-    public void initDetectorStateIndex(ActionListener<CreateIndexResponse> actionListener) throws IOException {
+    public void initDetectionStateIndex(ActionListener<CreateIndexResponse> actionListener) throws IOException {
         CreateIndexRequest request = new CreateIndexRequest(DetectorInternalState.DETECTOR_STATE_INDEX)
-            .mapping(AnomalyDetector.TYPE, getDetectorStateMappings(), XContentType.JSON);
+            .mapping(AnomalyDetector.TYPE, getDetectionStateMappings(), XContentType.JSON);
         adminClient.indices().create(request, markMappingUpToDate(ADIndex.STATE, actionListener));
     }
 

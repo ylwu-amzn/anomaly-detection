@@ -84,6 +84,7 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
     public static final String UI_METADATA_FIELD = "ui_metadata";
     public static final String CATEGORY_FIELD = "category_field";
     public static final String USER_FIELD = "user";
+    public static final String DETECTION_DATE_RANGE_FIELD = "detection_date_range";
 
     private final String detectorId;
     private final Long version;
@@ -101,6 +102,7 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
     private final Instant lastUpdateTime;
     private final List<String> categoryFields;
     private User user;
+    private DetectionDateRange detectionDateRange;
 
     /**
      * Constructor function.
@@ -176,6 +178,62 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         this.user = user;
     }
 
+    public AnomalyDetector(
+            String detectorId,
+            Long version,
+            String name,
+            String description,
+            String timeField,
+            List<String> indices,
+            List<Feature> features,
+            QueryBuilder filterQuery,
+            TimeConfiguration detectionInterval,
+            TimeConfiguration windowDelay,
+            Integer shingleSize,
+            Map<String, Object> uiMetadata,
+            Integer schemaVersion,
+            Instant lastUpdateTime,
+            List<String> categoryFields,
+            User user,
+            DetectionDateRange detectionDateRange
+    ) {
+        if (Strings.isBlank(name)) {
+            throw new IllegalArgumentException("Detector name should be set");
+        }
+        if (timeField == null) {
+            throw new IllegalArgumentException("Time field should be set");
+        }
+        if (indices == null || indices.isEmpty()) {
+            throw new IllegalArgumentException("Indices should be set");
+        }
+        if (detectionInterval == null) {
+            throw new IllegalArgumentException("Detection interval should be set");
+        }
+        if (shingleSize != null && shingleSize < 1) {
+            throw new IllegalArgumentException("Shingle size must be a positive integer");
+        }
+        if (categoryFields != null && categoryFields.size() > CATEGORY_FIELD_LIMIT) {
+            throw new IllegalArgumentException(CommonErrorMessages.CATEGORICAL_FIELD_NUMBER_SURPASSED + CATEGORY_FIELD_LIMIT);
+        }
+        this.detectorId = detectorId;
+        this.version = version;
+        this.name = name;
+        this.description = description;
+        this.timeField = timeField;
+        this.indices = indices;
+        this.featureAttributes = features;
+        this.filterQuery = filterQuery;
+        this.detectionInterval = detectionInterval;
+        this.windowDelay = windowDelay;
+        this.shingleSize = getShingleSize(shingleSize, categoryFields);
+        this.uiMetadata = uiMetadata;
+        this.schemaVersion = schemaVersion;
+        this.lastUpdateTime = lastUpdateTime;
+        this.categoryFields = categoryFields;
+        this.user = user;
+        this.detectionDateRange = detectionDateRange;
+    }
+
     public AnomalyDetector(StreamInput input) throws IOException {
         detectorId = input.readString();
         version = input.readLong();
@@ -213,6 +271,11 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         } else {
             user = null;
         }
+        if (input.readBoolean()) {
+            this.detectionDateRange = new DetectionDateRange(input);
+        } else {
+            detectionDateRange = null;
+        }
     }
 
     public XContentBuilder toXContent(XContentBuilder builder) throws IOException {
@@ -241,6 +304,12 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
             user.writeTo(output);
         } else {
             output.writeBoolean(false); // user does not exist
+        }
+        if (detectionDateRange != null) {
+            output.writeBoolean(true); // detectionDateRange exists
+            detectionDateRange.writeTo(output);
+        } else {
+            output.writeBoolean(false); // detectionDateRange does not exist
         }
     }
 
@@ -273,6 +342,9 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         }
         if (user != null) {
             xContentBuilder.field(USER_FIELD, user);
+        }
+        if (detectionDateRange != null) {
+            xContentBuilder.field(DETECTION_DATE_RANGE_FIELD, detectionDateRange);
         }
         return xContentBuilder.endObject();
     }
@@ -340,6 +412,7 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         Map<String, Object> uiMetadata = null;
         Instant lastUpdateTime = null;
         User user = null;
+        DetectionDateRange detectionDateRange = null;
 
         List<String> categoryField = null;
 
@@ -404,6 +477,9 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
                 case USER_FIELD:
                     user = User.parse(parser);
                     break;
+                case DETECTION_DATE_RANGE_FIELD:
+                    detectionDateRange = DetectionDateRange.parse(parser);
+                    break;
                 default:
                     parser.skipChildren();
                     break;
@@ -425,7 +501,8 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
             schemaVersion,
             lastUpdateTime,
             categoryField,
-            user
+            user,
+            detectionDateRange
         );
     }
 
@@ -453,7 +530,8 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
             && Objects.equal(getFilterQuery(), detector.getFilterQuery())
             && Objects.equal(getDetectionInterval(), detector.getDetectionInterval())
             && Objects.equal(getWindowDelay(), detector.getWindowDelay())
-            && Objects.equal(getSchemaVersion(), detector.getSchemaVersion());
+            && Objects.equal(getSchemaVersion(), detector.getSchemaVersion())
+            && Objects.equal(getDetectionDateRange(), detector.getDetectionDateRange());
     }
 
     @Generated
@@ -472,7 +550,9 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
                 shingleSize,
                 uiMetadata,
                 schemaVersion,
-                lastUpdateTime
+                lastUpdateTime,
+                user,
+                detectionDateRange
             );
     }
 
@@ -586,7 +666,15 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         this.user = user;
     }
 
+    public DetectionDateRange getDetectionDateRange() {
+        return detectionDateRange;
+    }
+
     public boolean isMultientityDetector() {
         return getCategoryField() != null && getCategoryField().size() > 0;
+    }
+
+    public boolean isRealTimeDetector() {
+        return detectionDateRange == null || detectionDateRange.getEndTime() == null;
     }
 }
