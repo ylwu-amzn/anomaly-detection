@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.security.InvalidParameterException;
 import java.util.Collections;
 
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.get.GetRequest;
 import org.elasticsearch.action.get.GetResponse;
@@ -46,6 +47,7 @@ public class GetAnomalyDetectorTests extends AbstractADTest {
     private TransportService transportService;
     private DiscoveryNodeFilterer nodeFilter;
     private ActionFilters actionFilters;
+    private ADTaskManager adTaskManger;
     private Client client;
     private GetAnomalyDetectorRequest request;
     private String detectorId = "yecrdnUBqurvo9uKU_d8";
@@ -81,11 +83,12 @@ public class GetAnomalyDetectorTests extends AbstractADTest {
         nodeFilter = mock(DiscoveryNodeFilterer.class);
 
         actionFilters = mock(ActionFilters.class);
+        adTaskManger = mock(ADTaskManager.class);
 
         client = mock(Client.class);
         when(client.threadPool()).thenReturn(threadPool);
 
-        action = new GetAnomalyDetectorTransportAction(transportService, nodeFilter, actionFilters, client, xContentRegistry());
+        action = new GetAnomalyDetectorTransportAction(transportService, nodeFilter, actionFilters, client, xContentRegistry(), adTaskManger);
     }
 
     public void testInvalidRequest() throws IOException {

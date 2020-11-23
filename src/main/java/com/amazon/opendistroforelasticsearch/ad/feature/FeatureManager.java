@@ -166,6 +166,7 @@ public class FeatureManager implements CleanState {
                     for (int i = 0; i < points.size(); i++) {
                         Optional<double[]> point = points.get(i);
                         long rangeEndTime = missingRanges.get(i).getValue();
+                        // now the feature map has all latest shingle_size data points
                         featuresMap.put(rangeEndTime, new SimpleImmutableEntry<>(rangeEndTime, point));
                     }
                     updateUnprocessedFeatures(detector, shingle, featuresMap, endTime, listener);
@@ -270,6 +271,8 @@ public class FeatureManager implements CleanState {
                 new SinglePointFeatures(
                     currentPoint,
                     Optional
+                            // if current point is not present or current shingle has more missing data points than
+                            // max  missing rate, will return null
                         .ofNullable(currentPoint.isPresent() ? filterAndFill(shingle, endTime, detector) : null)
                         .map(points -> batchShingle(points, shingleSize)[0])
                 )
@@ -283,9 +286,11 @@ public class FeatureManager implements CleanState {
             .filter(e -> e.getValue().isPresent())
             .collect(Collectors.toCollection(ArrayDeque::new));
         double[][] result = null;
+        // Check if the missing size exceeds max missing rate;
         if (filteredShingle.size() >= shingleSize - getMaxMissingPoints(shingleSize)) {
             // Imputes missing data points with the values of neighboring data points.
             long maxMillisecondsDifference = maxNeighborDistance * detector.getDetectorIntervalInMilliseconds();
+            //If less than max missing points, will fill with neighbors
             result = getNearbyPointsForShingle(detector, filteredShingle, endTime, maxMillisecondsDifference)
                 .map(e -> e.getValue().getValue().orElse(null))
                 .filter(d -> d != null)
@@ -295,6 +300,7 @@ public class FeatureManager implements CleanState {
                 result = null;
             }
         }
+        // If exceed max missing points, return null
         return result;
     }
 

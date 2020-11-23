@@ -17,7 +17,6 @@ package com.amazon.opendistroforelasticsearch.ad.task;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -85,6 +84,7 @@ import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.ERROR_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.EXECUTION_END_TIME_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.PROGRESS_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.STATE_FIELD;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_MIN_SAMPLES;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_SAMPLES_PER_TREE;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_TREES;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.TIME_DECAY;
@@ -94,6 +94,7 @@ public class ADBatchTaskRunner {
     private static final String TASK_ID_HEADER = "anomaly_detection_task_id";
     private final Integer PIECE_SIZE = 1000;
     private final int PIECES_PER_MINUTE = 10;
+    //TODO: tune threshold model training size
     private final Integer THRESHOLD_MODEL_TRAINING_SIZE = 1000;
 
     // TODO: test performance
@@ -294,7 +295,7 @@ public class ADBatchTaskRunner {
             ActionListener<ADBatchAnomalyResultResponse> listener
     ) {
         try {
-            if (!EnabledSetting.isADPluginEnabled()) {// TODO check AD plugin enable or not at more places
+            if (!EnabledSetting.isADPluginEnabled()) {// TODO check AD plugin enable or not at other places
                 throw new EndRunException(adTask.getDetectorId(), CommonErrorMessages.DISABLED_ERR_MSG, true);
             }
             adStats.getStat(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName()).increment();
@@ -313,36 +314,27 @@ public class ADBatchTaskRunner {
                                     ),
                             ActionListener.wrap(r -> {
                                 try {
-                                    isADTaskCancelled(adTask.getTaskId());
+                                    checkIfADTaskCancelled(adTask.getTaskId());
                                     if (!shouldStart(listener, adTask)) {
                                         return;
                                     }
                                     DetectionDateRange detectionDateRange = adTask.getDetector().getDetectionDateRange();
                                     long dataStartTime = detectionDateRange.getStartTime().toEpochMilli();
                                     long dataEndTime = detectionDateRange.getEndTime().toEpochMilli();
-                                    // Step2. get feature data
                                     long interval = ((IntervalTimeConfiguration) adTask.getDetector().getDetectionInterval())
                                             .toDuration()
                                             .toMillis();
                                     // normalize start time to make it consistent with feature data agg result
                                     dataStartTime = dataStartTime - dataStartTime % interval;
-                                    long timeStamp = dataStartTime + PIECE_SIZE * interval > dataEndTime
-                                            ? dataEndTime
-                                            : dataStartTime + PIECE_SIZE * interval;
-                                    logger
-                                            .info(
-                                                    "start first piece from {} to {}, interval {}, dataStartTime {}, dataEndTime {}",
-                                                    dataStartTime,
-                                                    timeStamp,
-                                                    interval,
-                                                    dataStartTime,
-                                                    dataEndTime
-                                            );
+                                    long expectedPieceEndTime = dataStartTime + PIECE_SIZE * interval;
+                                    long firstPieceEndTime = expectedPieceEndTime > dataEndTime ? dataEndTime : expectedPieceEndTime;
+                                    logger.info("start first piece from {} to {}, interval {}, dataStartTime {}, dataEndTime {}",
+                                            dataStartTime, firstPieceEndTime, interval, dataStartTime, dataEndTime);
                                     getFeatureData(
                                             listener,
                                             adTask,
-                                            dataStartTime,
-                                            timeStamp,
+                                            dataStartTime, // first piece start time
+                                            firstPieceEndTime, // first piece end time
                                             dataStartTime,
                                             dataEndTime,
                                             interval,
@@ -373,34 +365,27 @@ public class ADBatchTaskRunner {
             long interval,
             Instant executeStartTime
     ) {
-        try {
-            isADTaskCancelled(task.getTaskId());
-            featureManager
-                    .getFeatures(
-                            task.getDetector(),
-                            pieceStartTime,
-                            pieceEndTime,
-                            onFeatureResponseLocalRCF(
-                                    task,
-                                    listener,
-                                    pieceStartTime,
-                                    pieceEndTime,
-                                    dataStartTime,
-                                    dataEndTime,
-                                    interval,
-                                    executeStartTime
-                            )
-                    );
-        } catch (Exception e) {
-            handleExecuteException(task.getDetectorId(), e, listener);
-        }
-
+        checkIfADTaskCancelled(task.getTaskId());
+        featureManager
+                .getFeatures(
+                        task.getDetector(),
+                        pieceStartTime,
+                        pieceEndTime,
+                        onGetFeatureDataResponse(
+                                task,
+                                listener,
+                                pieceEndTime,
+                                dataStartTime,
+                                dataEndTime,
+                                interval,
+                                executeStartTime
+                        )
+                );
     }
 
-    private ActionListener<List<SinglePointFeatures>> onFeatureResponseLocalRCF(
+    private ActionListener<List<SinglePointFeatures>> onGetFeatureDataResponse(
             ADTask task,
             ActionListener<ADBatchAnomalyResultResponse> listener,
-            long pieceStartTime,
             long pieceEndTime,
             long dataStartTime,
             long dataEndTime,
@@ -412,7 +397,6 @@ public class ADBatchTaskRunner {
                 logger.error("No data in current window.");
                 runNextPiece(
                         task,
-                        pieceStartTime,
                         pieceEndTime,
                         dataStartTime,
                         dataEndTime,
@@ -423,7 +407,6 @@ public class ADBatchTaskRunner {
                 logger.error("No full shingle in current detection window");
                 runNextPiece(
                         task,
-                        pieceStartTime,
                         pieceEndTime,
                         dataStartTime,
                         dataEndTime,
@@ -435,7 +418,6 @@ public class ADBatchTaskRunner {
                         task,
                         task.getDetector().getEnabledFeatureIds().size(),
                         featureList,
-                        pieceStartTime,
                         pieceEndTime,
                         dataStartTime,
                         dataEndTime,
@@ -456,7 +438,6 @@ public class ADBatchTaskRunner {
             ADTask task,
             int enabledFeatureSize,
             List<SinglePointFeatures> featureList,
-            long pieceStartTime,
             long pieceEndTime,
             long dataStartTime,
             long dataEndTime,
@@ -470,10 +451,10 @@ public class ADBatchTaskRunner {
             RandomCutForest rcf = RandomCutForest
                     .builder()
                     .dimensions(task.getDetector().getShingleSize() * enabledFeatureSize)
-                    .sampleSize(NUM_SAMPLES_PER_TREE)
                     .numberOfTrees(NUM_TREES)
                     .lambda(TIME_DECAY)
-                    .outputAfter(NUM_SAMPLES_PER_TREE)
+                    .sampleSize(NUM_SAMPLES_PER_TREE)
+                    .outputAfter(NUM_MIN_SAMPLES)
                     .parallelExecutionEnabled(false)
                     .build();
             taskRcfMap.putIfAbsent(taskId, rcf);
@@ -574,7 +555,6 @@ public class ADBatchTaskRunner {
                                         response -> {
                                             runNextPiece(
                                                     task,
-                                                    pieceStartTime,
                                                     pieceEndTime,
                                                     dataStartTime,
                                                     dataEndTime,
@@ -593,45 +573,43 @@ public class ADBatchTaskRunner {
 
     private void runNextPiece(
             ADTask task,
-            long pieceStartTime,
-            long pieceEndTime,
+            long previousPieceEndTime,
             long dataStartTime,
             long dataEndTime,
             long interval,
             ActionListener<ADBatchAnomalyResultResponse> listener
     ) {
         String taskId = task.getTaskId();
-        if (pieceEndTime < dataEndTime) {
-            long endTimeStamp = pieceEndTime + (PIECE_SIZE - task.getDetector().getShingleSize() + 1) * interval > dataEndTime
-                    ? dataEndTime
-                    : pieceEndTime + (PIECE_SIZE - task.getDetector().getShingleSize() + 1) * interval;
+        Integer shingleSize = task.getDetector().getShingleSize();
+        if (previousPieceEndTime < dataEndTime) {
+            long pieceStartTime = previousPieceEndTime - (shingleSize - 1) * interval;
+            long expectedPieceEndTime = previousPieceEndTime + (PIECE_SIZE - shingleSize + 1) * interval;
+            long pieceEndTime =  expectedPieceEndTime> dataEndTime ? dataEndTime : expectedPieceEndTime;
             // TODO: add limiter later
             rateLimiter.acquire(60 / PIECES_PER_MINUTE);
-            logger.info("start next piece start from {} to {}, interval {}", pieceEndTime, endTimeStamp, interval);
-            adTaskManager
-                    .updateADTask(
+            logger.info("start next piece start from {} to {}, interval {}", previousPieceEndTime, pieceEndTime, interval);
+            adTaskManager.updateADTask(
                             taskId,
                             ImmutableMap
                                     .of(
                                             STATE_FIELD,
                                             ADTaskState.RUNNING.name(),
                                             CURRENT_PIECE_FIELD,
-                                            pieceEndTime,
+                                            previousPieceEndTime,
                                             PROGRESS_FIELD,
-                                            (float) (pieceEndTime - dataStartTime) / (dataEndTime - dataStartTime)
+                                            (float) (previousPieceEndTime - dataStartTime) / (dataEndTime - dataStartTime)
                                     ),
-                            ActionListener.wrap(r -> {
+                            ActionListener.wrap(r ->
                                 getFeatureData(
                                         listener,
                                         task,
-                                        pieceEndTime - (task.getDetector().getShingleSize() - 1) * interval,
-                                        endTimeStamp,
+                                        pieceStartTime,
+                                        pieceEndTime,
                                         dataStartTime,
                                         dataEndTime,
                                         interval,
                                         Instant.now()
-                                );
-                            }, e -> { listener.onFailure(e); })
+                                ), e ->  listener.onFailure(e))
                     );
         } else {
             adTaskManager
@@ -765,7 +743,7 @@ public class ADBatchTaskRunner {
         return null;
     }
 
-    private void isADTaskCancelled(String taskId) {
+    private void checkIfADTaskCancelled(String taskId) {
         if (adBatchTasks.containsKey(taskId) && adBatchTasks.get(taskId).isCancelled()) {
             removeADTaskFromCache(taskId);
             throw new TaskCancelledException("cancelled");

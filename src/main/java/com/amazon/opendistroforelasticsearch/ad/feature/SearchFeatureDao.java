@@ -291,6 +291,7 @@ public class SearchFeatureDao {
             ActionListener<List<Optional<double[]>>> listener
     ) throws IOException {
         SearchSourceBuilder searchSourceBuilder = generateFeatureQuerySearchRequest(detector, startTime, endTime, xContent);
+        logger.info("query AD data: " + searchSourceBuilder);
 
         SearchRequest searchRequest = new SearchRequest(detector.getIndices().toArray(new String[0])).source(searchSourceBuilder);
         client

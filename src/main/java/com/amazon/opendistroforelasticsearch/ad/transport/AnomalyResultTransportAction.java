@@ -408,6 +408,7 @@ public class AnomalyResultTransportAction extends HandledTransportAction<ActionR
                 featureInResponse = ParseUtils.getFeatureData(featureOptional.getUnprocessedFeatures().get(), detector);
             }
 
+            //Data not present, will skip current interval.
             if (!featureOptional.getProcessedFeatures().isPresent()) {
                 Optional<AnomalyDetectionException> exception = coldStartIfNoCheckPoint(detector);
                 if (exception.isPresent()) {
