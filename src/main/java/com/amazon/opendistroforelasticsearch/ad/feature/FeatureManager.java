@@ -39,8 +39,6 @@ import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
-import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
-import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
@@ -53,6 +51,7 @@ import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
 import com.amazon.opendistroforelasticsearch.ad.dataprocessor.Interpolator;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.Entity;
+import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
 
 /**
  * A facade managing feature data operations and buffers.
@@ -166,6 +165,7 @@ public class FeatureManager implements CleanState {
                     for (int i = 0; i < points.size(); i++) {
                         Optional<double[]> point = points.get(i);
                         long rangeEndTime = missingRanges.get(i).getValue();
+                        // now the feature map has all latest shingle_size data points
                         featuresMap.put(rangeEndTime, new SimpleImmutableEntry<>(rangeEndTime, point));
                     }
                     updateUnprocessedFeatures(detector, shingle, featuresMap, endTime, listener);
@@ -191,8 +191,7 @@ public class FeatureManager implements CleanState {
             .collect(Collectors.toList());
     }
 
-    public void getFeatures(AnomalyDetector detector, long startTime, long endTime,
-                            ActionListener<List<SinglePointFeatures>> listener) {
+    public void getFeatures(AnomalyDetector detector, long startTime, long endTime, ActionListener<List<SinglePointFeatures>> listener) {
         try {
             int shingleSize = detector.getShingleSize();
             List<double[]> features = new ArrayList<>();
@@ -208,10 +207,10 @@ public class FeatureManager implements CleanState {
                     Optional<double[][]> featureData = batchShingle(features, shingleSize);
                     for (int i = 0; i < featureData.get().length; i++) {
                         SinglePointFeatures feature = new SinglePointFeatures(
-                                points.get(i + shingleSize - 1),
-                                Optional.ofNullable(featureData.get()[i]),
-                                Instant.ofEpochMilli(startTime + (i + shingleSize - 1) * interval),
-                                Instant.ofEpochMilli(startTime + (i + shingleSize) * interval)
+                            points.get(i + shingleSize - 1),
+                            Optional.ofNullable(featureData.get()[i]),
+                            Instant.ofEpochMilli(startTime + (i + shingleSize - 1) * interval),
+                            Instant.ofEpochMilli(startTime + (i + shingleSize) * interval)
                         );
                         featureList.add(feature);
                     }
@@ -270,6 +269,8 @@ public class FeatureManager implements CleanState {
                 new SinglePointFeatures(
                     currentPoint,
                     Optional
+                        // if current point is not present or current shingle has more missing data points than
+                        // max missing rate, will return null
                         .ofNullable(currentPoint.isPresent() ? filterAndFill(shingle, endTime, detector) : null)
                         .map(points -> batchShingle(points, shingleSize)[0])
                 )
@@ -283,9 +284,11 @@ public class FeatureManager implements CleanState {
             .filter(e -> e.getValue().isPresent())
             .collect(Collectors.toCollection(ArrayDeque::new));
         double[][] result = null;
+        // Check if the missing size exceeds max missing rate;
         if (filteredShingle.size() >= shingleSize - getMaxMissingPoints(shingleSize)) {
             // Imputes missing data points with the values of neighboring data points.
             long maxMillisecondsDifference = maxNeighborDistance * detector.getDetectorIntervalInMilliseconds();
+            // If less than max missing points, will fill with neighbors
             result = getNearbyPointsForShingle(detector, filteredShingle, endTime, maxMillisecondsDifference)
                 .map(e -> e.getValue().getValue().orElse(null))
                 .filter(d -> d != null)
@@ -295,6 +298,7 @@ public class FeatureManager implements CleanState {
                 result = null;
             }
         }
+        // If exceed max missing points, return null
         return result;
     }
 
@@ -452,9 +456,9 @@ public class FeatureManager implements CleanState {
 
     private Optional<double[][]> batchShingle(List<double[]> points, int shingleSize) {
         return Optional
-                .ofNullable(points)
-                .filter(p -> p.size() >= shingleSize)
-                .map(p -> batchShingle(p.toArray(new double[0][0]), shingleSize));
+            .ofNullable(points)
+            .filter(p -> p.size() >= shingleSize)
+            .map(p -> batchShingle(p.toArray(new double[0][0]), shingleSize));
     }
 
     /**

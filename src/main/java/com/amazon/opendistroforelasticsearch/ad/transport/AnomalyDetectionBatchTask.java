@@ -15,10 +15,10 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
+import java.util.Map;
+
 import org.elasticsearch.tasks.CancellableTask;
 import org.elasticsearch.tasks.TaskId;
-
-import java.util.Map;
 
 public class AnomalyDetectionBatchTask extends CancellableTask {
 

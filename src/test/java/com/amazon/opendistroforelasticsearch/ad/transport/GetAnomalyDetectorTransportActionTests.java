@@ -27,6 +27,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.util.DiscoveryNodeFilterer;
 
 public class GetAnomalyDetectorTransportActionTests extends ESIntegTestCase {
@@ -43,7 +44,8 @@ public class GetAnomalyDetectorTransportActionTests extends ESIntegTestCase {
             Mockito.mock(DiscoveryNodeFilterer.class),
             Mockito.mock(ActionFilters.class),
             client(),
-            xContentRegistry()
+            xContentRegistry(),
+            Mockito.mock(ADTaskManager.class)
         );
         task = Mockito.mock(Task.class);
         response = new ActionListener<GetAnomalyDetectorResponse>() {
@@ -64,6 +66,7 @@ public class GetAnomalyDetectorTransportActionTests extends ESIntegTestCase {
             "1234",
             4321,
             false,
+            false,
             "nonempty",
             "",
             false,
@@ -74,7 +77,16 @@ public class GetAnomalyDetectorTransportActionTests extends ESIntegTestCase {
 
     @Test
     public void testGetTransportActionWithReturnJob() throws IOException {
-        GetAnomalyDetectorRequest getAnomalyDetectorRequest = new GetAnomalyDetectorRequest("1234", 4321, true, "", "abcd", false, null);
+        GetAnomalyDetectorRequest getAnomalyDetectorRequest = new GetAnomalyDetectorRequest(
+            "1234",
+            4321,
+            true,
+            false,
+            "",
+            "abcd",
+            false,
+            null
+        );
         action.doExecute(task, getAnomalyDetectorRequest, response);
     }
 

@@ -19,7 +19,6 @@ import static org.mockito.Mockito.mock;
 
 import java.io.IOException;
 
-import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
@@ -33,6 +32,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 
 public class AnomalyDetectorJobActionTests extends ESIntegTestCase {
     private AnomalyDetectorJobTransportAction action;
@@ -51,7 +51,8 @@ public class AnomalyDetectorJobActionTests extends ESIntegTestCase {
             client(),
             indexSettings(),
             mock(AnomalyDetectionIndices.class),
-            xContentRegistry(), mock(ADTaskManager.class)
+            xContentRegistry(),
+            mock(ADTaskManager.class)
         );
         task = mock(Task.class);
         request = new AnomalyDetectorJobRequest("1234", 4567, 7890, "_start");

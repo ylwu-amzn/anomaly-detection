@@ -15,9 +15,11 @@
 
 package com.amazon.opendistroforelasticsearch.ad.model;
 
-import com.amazon.opendistroforelasticsearch.ad.annotation.Generated;
-import com.amazon.opendistroforelasticsearch.ad.util.ParseUtils;
-import com.google.common.base.Objects;
+import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
+
+import java.io.IOException;
+import java.time.Instant;
+
 import org.apache.commons.lang.builder.ToStringBuilder;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -26,10 +28,9 @@ import org.elasticsearch.common.xcontent.ToXContentObject;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
 
-import java.io.IOException;
-import java.time.Instant;
-
-import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
+import com.amazon.opendistroforelasticsearch.ad.annotation.Generated;
+import com.amazon.opendistroforelasticsearch.ad.util.ParseUtils;
+import com.google.common.base.Objects;
 
 /**
  * Include result returned from RCF model and feature data.
@@ -43,10 +44,7 @@ public class DetectionDateRange implements ToXContentObject, Writeable {
     private final Instant startTime;
     private final Instant endTime;
 
-    public DetectionDateRange(
-        Instant startTime,
-        Instant endTime
-    ) {
+    public DetectionDateRange(Instant startTime, Instant endTime) {
         this.startTime = startTime;
         this.endTime = endTime;
     }
@@ -58,8 +56,7 @@ public class DetectionDateRange implements ToXContentObject, Writeable {
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        XContentBuilder xContentBuilder = builder
-            .startObject();
+        XContentBuilder xContentBuilder = builder.startObject();
         if (startTime != null) {
             xContentBuilder.field(START_TIME_FIELD, startTime.toEpochMilli());
         }
@@ -101,27 +98,19 @@ public class DetectionDateRange implements ToXContentObject, Writeable {
         if (o == null || getClass() != o.getClass())
             return false;
         DetectionDateRange that = (DetectionDateRange) o;
-        return Objects.equal(getStartTime(), that.getStartTime())
-            && Objects.equal(getEndTime(), that.getEndTime());
+        return Objects.equal(getStartTime(), that.getStartTime()) && Objects.equal(getEndTime(), that.getEndTime());
     }
 
     @Generated
     @Override
     public int hashCode() {
-        return Objects
-            .hashCode(
-                getStartTime(),
-                getEndTime()
-            );
+        return Objects.hashCode(getStartTime(), getEndTime());
     }
 
     @Generated
     @Override
     public String toString() {
-        return new ToStringBuilder(this)
-            .append("startTime", startTime)
-            .append("endTime", endTime)
-            .toString();
+        return new ToStringBuilder(this).append("startTime", startTime).append("endTime", endTime).toString();
     }
 
     public Instant getStartTime() {

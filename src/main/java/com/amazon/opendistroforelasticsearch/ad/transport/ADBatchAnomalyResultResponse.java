@@ -15,24 +15,24 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
+import java.io.IOException;
+
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.ToXContentObject;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 
-import java.io.IOException;
-
-public class BatchAnomalyResultResponse extends ActionResponse implements ToXContentObject {
+public class ADBatchAnomalyResultResponse extends ActionResponse implements ToXContentObject {
     public static final String MESSAGE_KEY = "message";
 
     private String message;
 
-    public BatchAnomalyResultResponse(String message) {
+    public ADBatchAnomalyResultResponse(String message) {
         this.message = message;
     }
 
-    public BatchAnomalyResultResponse(StreamInput in) throws IOException {
+    public ADBatchAnomalyResultResponse(StreamInput in) throws IOException {
         super(in);
         message = in.readString();
     }

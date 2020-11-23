@@ -22,7 +22,6 @@ import java.util.Locale;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
-import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ExceptionsHelper;
@@ -40,6 +39,7 @@ import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.threadpool.ThreadPool;
 
 import com.amazon.opendistroforelasticsearch.ad.common.exception.AnomalyDetectionException;
+import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyResult;
 import com.amazon.opendistroforelasticsearch.ad.util.ClientUtil;
@@ -54,16 +54,16 @@ public class AnomalyResultBulkIndexHandler extends AnomalyIndexHandler<AnomalyRe
     private AnomalyDetectionIndices anomalyDetectionIndices;
 
     public AnomalyResultBulkIndexHandler(
-            Client client,
-            Settings settings,
-            ThreadPool threadPool,
-            String indexName,
-            Consumer<ActionListener<CreateIndexResponse>> createIndex,
-            BooleanSupplier indexExists,
-            ClientUtil clientUtil,
-            IndexUtils indexUtils,
-            ClusterService clusterService,
-            AnomalyDetectionIndices anomalyDetectionIndices
+        Client client,
+        Settings settings,
+        ThreadPool threadPool,
+        String indexName,
+        Consumer<ActionListener<CreateIndexResponse>> createIndex,
+        BooleanSupplier indexExists,
+        ClientUtil clientUtil,
+        IndexUtils indexUtils,
+        ClusterService clusterService,
+        AnomalyDetectionIndices anomalyDetectionIndices
     ) {
         super(client, settings, threadPool, indexName, createIndex, indexExists, clientUtil, indexUtils, clusterService);
         this.anomalyDetectionIndices = anomalyDetectionIndices;
@@ -71,50 +71,51 @@ public class AnomalyResultBulkIndexHandler extends AnomalyIndexHandler<AnomalyRe
 
     public void bulkIndexAnomalyResult(List<AnomalyResult> anomalyResults, ActionListener<BulkResponse> listener) {
         try {
-            if (super.indexUtils.checkIndicesBlocked(clusterService.state(), ClusterBlockLevel.WRITE, CommonName.ANOMALY_RESULT_INDEX_ALIAS)) {
+            if (super.indexUtils
+                .checkIndicesBlocked(clusterService.state(), ClusterBlockLevel.WRITE, CommonName.ANOMALY_RESULT_INDEX_ALIAS)) {
                 LOG.warn(CANNOT_SAVE_ERR_MSG);
                 return;
             }
             if (!anomalyDetectionIndices.doesAnomalyResultIndexExist()) {
                 anomalyDetectionIndices
-                        .initAnomalyResultIndexDirectly(
-                                ActionListener
-                                        .wrap(
-                                                initResponse -> onCreateAnomalyResultIndexResponse(
-                                                        initResponse,
-                                                        anomalyResults.get(0).getDetectorId(),
-                                                        anomalyResults,
-                                                        result -> bulkSaveDetectorResult(result, listener)
-                                                ),
-                                                exception -> {
-                                                    if (ExceptionsHelper.unwrapCause(exception) instanceof ResourceAlreadyExistsException) {
-                                                        // It is possible the index has been created while we sending the create request
-                                                        bulkSaveDetectorResult(anomalyResults, listener);
-                                                    } else {
-                                                        throw new AnomalyDetectionException(
-                                                                anomalyResults.get(0).getDetectorId(),
-                                                                "Unexpected error creating anomaly result index",
-                                                                exception
-                                                        );
-                                                    }
-                                                }
-                                        )
-                        );
+                    .initAnomalyResultIndexDirectly(
+                        ActionListener
+                            .wrap(
+                                initResponse -> onCreateAnomalyResultIndexResponse(
+                                    initResponse,
+                                    anomalyResults.get(0).getDetectorId(),
+                                    anomalyResults,
+                                    result -> bulkSaveDetectorResult(result, listener)
+                                ),
+                                exception -> {
+                                    if (ExceptionsHelper.unwrapCause(exception) instanceof ResourceAlreadyExistsException) {
+                                        // It is possible the index has been created while we sending the create request
+                                        bulkSaveDetectorResult(anomalyResults, listener);
+                                    } else {
+                                        throw new AnomalyDetectionException(
+                                            anomalyResults.get(0).getDetectorId(),
+                                            "Unexpected error creating anomaly result index",
+                                            exception
+                                        );
+                                    }
+                                }
+                            )
+                    );
             } else {
                 bulkSaveDetectorResult(anomalyResults, listener);
             }
         } catch (Exception e) {
             throw new AnomalyDetectionException(
-                    anomalyResults.get(0).getDetectorId(),
-                    String
-                            .format(
-                                    Locale.ROOT,
-                                    "Error in saving anomaly index for ID %s from %s to %s",
-                                    anomalyResults.get(0).getDetectorId(),
-                                    anomalyResults.get(0).getDataStartTime(),
-                                    anomalyResults.get(0).getDataEndTime()
-                            ),
-                    e
+                anomalyResults.get(0).getDetectorId(),
+                String
+                    .format(
+                        Locale.ROOT,
+                        "Error in saving anomaly index for ID %s from %s to %s",
+                        anomalyResults.get(0).getDetectorId(),
+                        anomalyResults.get(0).getDataStartTime(),
+                        anomalyResults.get(0).getDataEndTime()
+                    ),
+                e
             );
         }
     }
@@ -126,7 +127,7 @@ public class AnomalyResultBulkIndexHandler extends AnomalyIndexHandler<AnomalyRe
             try {
                 try (XContentBuilder builder = jsonBuilder()) {
                     IndexRequest indexRequest = new IndexRequest(CommonName.ANOMALY_RESULT_INDEX_ALIAS)
-                            .source(anomalyResult.toXContent(builder, RestHandlerUtils.XCONTENT_WITH_TYPE));
+                        .source(anomalyResult.toXContent(builder, RestHandlerUtils.XCONTENT_WITH_TYPE));
                     bulkRequestBuilder.add(indexRequest);
                 } catch (Exception e) {
                     LOG.error("Failed to save anomaly result", e);
@@ -150,10 +151,10 @@ public class AnomalyResultBulkIndexHandler extends AnomalyIndexHandler<AnomalyRe
     }
 
     private <T> void onCreateAnomalyResultIndexResponse(
-            CreateIndexResponse response,
-            String detectorId,
-            T anomalyResult,
-            Consumer<T> func
+        CreateIndexResponse response,
+        String detectorId,
+        T anomalyResult,
+        Consumer<T> func
     ) {
         if (response.isAcknowledged()) {
             func.accept(anomalyResult);

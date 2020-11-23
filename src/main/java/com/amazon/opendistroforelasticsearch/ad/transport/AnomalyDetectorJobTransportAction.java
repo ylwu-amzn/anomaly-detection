@@ -17,7 +17,6 @@ package com.amazon.opendistroforelasticsearch.ad.transport;
 
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.REQUEST_TIMEOUT;
 
-import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
@@ -34,6 +33,7 @@ import org.elasticsearch.transport.TransportService;
 
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.rest.handler.IndexAnomalyDetectorJobActionHandler;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 
 public class AnomalyDetectorJobTransportAction extends HandledTransportAction<AnomalyDetectorJobRequest, AnomalyDetectorJobResponse> {
@@ -87,10 +87,11 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
                 xContentRegistry
             );
             if (rawPath.endsWith(RestHandlerUtils.START_JOB)) {
-//                handler.startAnomalyDetectorJob();
+                // handler.startAnomalyDetectorJob();
                 adTaskManager.startDetector(detectorId, handler, listener);
             } else if (rawPath.endsWith(RestHandlerUtils.STOP_JOB)) {
-                handler.stopAnomalyDetectorJob(detectorId);
+                // handler.stopAnomalyDetectorJob(detectorId);
+                adTaskManager.stopDetector(detectorId, handler, listener);
             }
         } catch (Exception e) {
             logger.error(e);

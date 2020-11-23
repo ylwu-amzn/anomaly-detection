@@ -31,6 +31,7 @@ import org.junit.Test;
 
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 
 public class IndexAnomalyDetectorTransportActionTests extends ESIntegTestCase {
     private IndexAnomalyDetectorTransportAction action;
@@ -50,7 +51,8 @@ public class IndexAnomalyDetectorTransportActionTests extends ESIntegTestCase {
             clusterService(),
             indexSettings(),
             mock(AnomalyDetectionIndices.class),
-            xContentRegistry()
+            xContentRegistry(),
+            mock(ADTaskManager.class)
         );
         task = mock(Task.class);
         request = new IndexAnomalyDetectorRequest(

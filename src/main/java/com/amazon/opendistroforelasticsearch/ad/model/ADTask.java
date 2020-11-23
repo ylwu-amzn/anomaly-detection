@@ -15,10 +15,11 @@
 
 package com.amazon.opendistroforelasticsearch.ad.model;
 
-import com.amazon.opendistroforelasticsearch.ad.annotation.Generated;
-import com.amazon.opendistroforelasticsearch.ad.util.ParseUtils;
-import com.amazon.opendistroforelasticsearch.commons.authuser.User;
-import com.google.common.base.Objects;
+import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
+
+import java.io.IOException;
+import java.time.Instant;
+
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
@@ -26,22 +27,21 @@ import org.elasticsearch.common.xcontent.ToXContentObject;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
 
-import java.io.IOException;
-import java.time.Instant;
-
-import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
+import com.amazon.opendistroforelasticsearch.ad.annotation.Generated;
+import com.amazon.opendistroforelasticsearch.ad.util.ParseUtils;
+import com.google.common.base.Objects;
 
 /**
  * One anomaly detection task means one detector starts to run until stopped.
  */
 public class ADTask implements ToXContentObject, Writeable {
 
-//    public static final String PARSE_FIELD_NAME = "DetectorInternalState";
-//    public static final NamedXContentRegistry.Entry XCONTENT_REGISTRY = new NamedXContentRegistry.Entry(
-//        AnomalyDetectionState.class,
-//        new ParseField(PARSE_FIELD_NAME),
-//        it -> parse(it)
-//    );
+    // public static final String PARSE_FIELD_NAME = "DetectorInternalState";
+    // public static final NamedXContentRegistry.Entry XCONTENT_REGISTRY = new NamedXContentRegistry.Entry(
+    // AnomalyDetectionState.class,
+    // new ParseField(PARSE_FIELD_NAME),
+    // it -> parse(it)
+    // );
 
     public static final String DETECTOR_STATE_INDEX = ".opendistro-anomaly-detection-state";
 
@@ -100,7 +100,7 @@ public class ADTask implements ToXContentObject, Writeable {
         out.writeOptionalString(taskId);
         out.writeOptionalString(taskType);
         out.writeOptionalString(detectorId);
-        if (detector !=  null) {
+        if (detector != null) {
             out.writeBoolean(true);
             detector.writeTo(out);
         } else {
@@ -242,13 +242,13 @@ public class ADTask implements ToXContentObject, Writeable {
             xContentBuilder.field(PROGRESS_FIELD, progress);
         }
         if (currentPiece != null) {
-            xContentBuilder.field(CURRENT_PIECE_FIELD, currentPiece);
+            xContentBuilder.field(CURRENT_PIECE_FIELD, currentPiece.toEpochMilli());
         }
         if (executionStartTime != null) {
-            xContentBuilder.field(EXECUTION_START_TIME_FIELD, executionStartTime);
+            xContentBuilder.field(EXECUTION_START_TIME_FIELD, executionStartTime.toEpochMilli());
         }
         if (executionEndTime != null) {
-            xContentBuilder.field(EXECUTION_END_TIME_FIELD, executionEndTime);
+            xContentBuilder.field(EXECUTION_END_TIME_FIELD, executionEndTime.toEpochMilli());
         }
         if (isLatest != null) {
             xContentBuilder.field(IS_LATEST_FIELD, isLatest);
@@ -331,20 +331,20 @@ public class ADTask implements ToXContentObject, Writeable {
             }
         }
         return new Builder()
-                .taskId(taskId)
-                .lastUpdateTime(lastUpdateTime)
-                .error(error)
-                .state(state)
-                .detectorId(detectorId)
-                .progress(progress)
-                .currentPiece(currentPiece)
-                .executionStartTime(executionStartTime)
-                .executionEndTime(executionEndTime)
-                .isLatest(isLatest)
-                .taskType(taskType)
-                .checkpointId(checkpointId)
-                .detector(detector)
-                .build();
+            .taskId(taskId)
+            .lastUpdateTime(lastUpdateTime)
+            .error(error)
+            .state(state)
+            .detectorId(detectorId)
+            .progress(progress)
+            .currentPiece(currentPiece)
+            .executionStartTime(executionStartTime)
+            .executionEndTime(executionEndTime)
+            .isLatest(isLatest)
+            .taskType(taskType)
+            .checkpointId(checkpointId)
+            .detector(detector)
+            .build();
     }
 
     @Generated
@@ -356,25 +356,39 @@ public class ADTask implements ToXContentObject, Writeable {
             return false;
         ADTask that = (ADTask) o;
         return Objects.equal(getTaskId(), that.getTaskId())
-                && Objects.equal(getLastUpdateTime(), that.getLastUpdateTime())
-                && Objects.equal(getError(), that.getError())
-                && Objects.equal(getState(), that.getState())
-                && Objects.equal(getDetectorId(), that.getDetectorId())
-                && Objects.equal(getProgress(), that.getProgress())
-                && Objects.equal(getCurrentPiece(), that.getCurrentPiece())
-                && Objects.equal(getExecutionStartTime(), that.getExecutionStartTime())
-                && Objects.equal(getExecutionEndTime(), that.getExecutionEndTime())
-                && Objects.equal(getLatest(), that.getLatest())
-                && Objects.equal(getTaskType(), that.getTaskType())
-                && Objects.equal(getCheckpointId(), that.getCheckpointId())
-                && Objects.equal(getDetector(), that.getDetector());
+            && Objects.equal(getLastUpdateTime(), that.getLastUpdateTime())
+            && Objects.equal(getError(), that.getError())
+            && Objects.equal(getState(), that.getState())
+            && Objects.equal(getDetectorId(), that.getDetectorId())
+            && Objects.equal(getProgress(), that.getProgress())
+            && Objects.equal(getCurrentPiece(), that.getCurrentPiece())
+            && Objects.equal(getExecutionStartTime(), that.getExecutionStartTime())
+            && Objects.equal(getExecutionEndTime(), that.getExecutionEndTime())
+            && Objects.equal(getLatest(), that.getLatest())
+            && Objects.equal(getTaskType(), that.getTaskType())
+            && Objects.equal(getCheckpointId(), that.getCheckpointId())
+            && Objects.equal(getDetector(), that.getDetector());
     }
 
     @Generated
     @Override
     public int hashCode() {
-        return Objects.hashCode(taskId, lastUpdateTime, error, state, detectorId, progress, currentPiece, executionStartTime, executionEndTime,
-                isLatest, taskType, checkpointId, detector);
+        return Objects
+            .hashCode(
+                taskId,
+                lastUpdateTime,
+                error,
+                state,
+                detectorId,
+                progress,
+                currentPiece,
+                executionStartTime,
+                executionEndTime,
+                isLatest,
+                taskType,
+                checkpointId,
+                detector
+            );
     }
 
     public String getTaskId() {

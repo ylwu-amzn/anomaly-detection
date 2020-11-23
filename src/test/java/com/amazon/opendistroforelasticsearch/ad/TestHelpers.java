@@ -219,7 +219,7 @@ public class TestHelpers {
             randomQuery(),
             randomIntervalTimeConfiguration(),
             randomIntervalTimeConfiguration(),
-            randomIntBetween(1, 2000),
+            8,
             uiMetadata,
             randomInt(),
             lastUpdateTime,
@@ -355,7 +355,7 @@ public class TestHelpers {
     }
 
     public static TimeConfiguration randomIntervalTimeConfiguration() {
-        return new IntervalTimeConfiguration(ESRestTestCase.randomLongBetween(1, 1000), ChronoUnit.MINUTES);
+        return new IntervalTimeConfiguration(1, ChronoUnit.MINUTES);
     }
 
     public static IntervalSchedule randomIntervalSchedule() {

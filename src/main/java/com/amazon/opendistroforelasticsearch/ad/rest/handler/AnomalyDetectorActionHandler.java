@@ -32,6 +32,7 @@ import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.rest.RestStatus;
 
+import com.amazon.opendistroforelasticsearch.ad.function.AnomalyDetectorFunction;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 

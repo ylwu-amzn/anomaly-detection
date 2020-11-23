@@ -29,7 +29,6 @@ import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.regex.Matcher;
 
-import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.search.join.ScoreMode;
@@ -65,6 +64,7 @@ import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.Feature;
 import com.amazon.opendistroforelasticsearch.ad.model.FeatureData;
+import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
 import com.amazon.opendistroforelasticsearch.commons.ConfigConstants;
 import com.amazon.opendistroforelasticsearch.commons.authuser.User;
 
@@ -470,18 +470,18 @@ public final class ParseUtils {
     }
 
     public static SearchSourceBuilder generateFeatureQuerySearchRequest(
-            AnomalyDetector task,
-            long startTime,
-            long endTime,
-            NamedXContentRegistry xContentRegistry
+        AnomalyDetector task,
+        long startTime,
+        long endTime,
+        NamedXContentRegistry xContentRegistry
     ) throws IOException {
 
         RangeQueryBuilder rangeQuery = new RangeQueryBuilder(task.getTimeField())
-                .from(startTime)
-                .to(endTime)
-                .format("epoch_millis")
-                .includeLower(true)
-                .includeUpper(false);
+            .from(startTime)
+            .to(endTime)
+            .format("epoch_millis")
+            .includeLower(true)
+            .includeUpper(false);
 
         BoolQueryBuilder internalFilterQuery = QueryBuilders.boolQuery().must(rangeQuery).must(task.getFilterQuery());
 
@@ -489,11 +489,11 @@ public final class ParseUtils {
 
         List<CompositeValuesSourceBuilder<?>> sources = new ArrayList<>();
         sources
-                .add(
-                        new DateHistogramValuesSourceBuilder("date_histogram")
-                                .field(task.getTimeField())
-                                .fixedInterval(DateHistogramInterval.seconds((int) intervalSeconds))
-                );
+            .add(
+                new DateHistogramValuesSourceBuilder("date_histogram")
+                    .field(task.getTimeField())
+                    .fixedInterval(DateHistogramInterval.seconds((int) intervalSeconds))
+            );
 
         CompositeAggregationBuilder aggregationBuilder = new CompositeAggregationBuilder("feature_data", sources).size(1000);
 
@@ -501,9 +501,9 @@ public final class ParseUtils {
             for (Feature feature : task.getFeatureAttributes()) {
                 if (feature.getEnabled()) {
                     AggregatorFactories.Builder internalAgg = parseAggregators(
-                            feature.getAggregation().toString(),
-                            xContentRegistry,
-                            feature.getId()
+                        feature.getAggregation().toString(),
+                        xContentRegistry,
+                        feature.getId()
                     );
                     aggregationBuilder.subAggregation(internalAgg.getAggregatorFactories().iterator().next());
                 }

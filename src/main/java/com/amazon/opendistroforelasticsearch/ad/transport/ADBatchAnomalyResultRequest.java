@@ -15,21 +15,7 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
-import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
-import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
-import org.apache.commons.lang.StringUtils;
-import org.elasticsearch.action.ActionRequest;
-import org.elasticsearch.action.ActionRequestValidationException;
-import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.io.stream.InputStreamStreamInput;
-import org.elasticsearch.common.io.stream.OutputStreamStreamOutput;
-import org.elasticsearch.common.io.stream.StreamInput;
-import org.elasticsearch.common.io.stream.StreamOutput;
-import org.elasticsearch.common.xcontent.ToXContentObject;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.tasks.Task;
-import org.elasticsearch.tasks.TaskAwareRequest;
-import org.elasticsearch.tasks.TaskId;
+import static org.elasticsearch.action.ValidateActions.addValidationError;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -38,25 +24,37 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
-import static org.elasticsearch.action.ValidateActions.addValidationError;
+import org.elasticsearch.action.ActionRequest;
+import org.elasticsearch.action.ActionRequestValidationException;
+import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.io.stream.InputStreamStreamInput;
+import org.elasticsearch.common.io.stream.OutputStreamStreamOutput;
+import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.tasks.Task;
+import org.elasticsearch.tasks.TaskAwareRequest;
+import org.elasticsearch.tasks.TaskId;
 
-public class BatchAnomalyResultRequest extends ActionRequest implements TaskAwareRequest {
+import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
+
+public class ADBatchAnomalyResultRequest extends ActionRequest implements TaskAwareRequest {
     static final String INVALID_TIMESTAMP_ERR_MSG = "timestamp is invalid";
-//    static final String TASK_ID_JSON_KEY = "taskId";
-//    static final String TASK_EXECUTION_ID_JSON_KEY = "taskExecutionId";
-//    static final String START_JSON_KEY = "start";
-//    static final String END_JSON_KEY = "end";
-//    static final String NODE_ID_JSON_KEY = "end";
+    // static final String TASK_ID_JSON_KEY = "taskId";
+    // static final String TASK_EXECUTION_ID_JSON_KEY = "taskExecutionId";
+    // static final String START_JSON_KEY = "start";
+    // static final String END_JSON_KEY = "end";
+    // static final String NODE_ID_JSON_KEY = "end";
     public static final long MAX_COUNT = 3;
 
     private ADTask task;
 
-    public BatchAnomalyResultRequest(StreamInput in) throws IOException {
+    public ADBatchAnomalyResultRequest(StreamInput in) throws IOException {
         super(in);
         task = new ADTask(in);
     }
 
-    public BatchAnomalyResultRequest(ADTask task) {
+    public ADBatchAnomalyResultRequest(ADTask task) {
         super();
         this.task = task;
     }
@@ -83,40 +81,45 @@ public class BatchAnomalyResultRequest extends ActionRequest implements TaskAwar
         } else if (detector.isRealTimeDetector()) {
             validationException = addValidationError("Can't run batch task for realtime detector", validationException);
         } else if (detector.getDetectionDateRange().getStartTime() == null
-                || detector.getDetectionDateRange().getEndTime() == null
-                || detector.getDetectionDateRange().getStartTime().isAfter(detector.getDetectionDateRange().getEndTime())) {
+            || detector.getDetectionDateRange().getEndTime() == null
+            || detector.getDetectionDateRange().getStartTime().isAfter(detector.getDetectionDateRange().getEndTime())) {
             validationException = addValidationError(
-                    String.format(Locale.ROOT, "%s: start %d, end %d", INVALID_TIMESTAMP_ERR_MSG,
-                            detector.getDetectionDateRange().getStartTime(),
-                            detector.getDetectionDateRange().getEndTime()),
-                    validationException
+                String
+                    .format(
+                        Locale.ROOT,
+                        "%s: start %d, end %d",
+                        INVALID_TIMESTAMP_ERR_MSG,
+                        detector.getDetectionDateRange().getStartTime(),
+                        detector.getDetectionDateRange().getEndTime()
+                    ),
+                validationException
             );
 
         }
         return validationException;
     }
 
-//    @Override
-//    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-//        builder.startObject();
-//        builder.field(TASK_ID_JSON_KEY, taskId);
-//        builder.field(TASK_EXECUTION_ID_JSON_KEY, taskExecutionId);
-//        builder.field(START_JSON_KEY, start);
-//        builder.field(END_JSON_KEY, end);
-//        builder.field(NODE_ID_JSON_KEY, nodeId);
-//        builder.endObject();
-//        return builder;
-//    }
+    // @Override
+    // public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    // builder.startObject();
+    // builder.field(TASK_ID_JSON_KEY, taskId);
+    // builder.field(TASK_EXECUTION_ID_JSON_KEY, taskExecutionId);
+    // builder.field(START_JSON_KEY, start);
+    // builder.field(END_JSON_KEY, end);
+    // builder.field(NODE_ID_JSON_KEY, nodeId);
+    // builder.endObject();
+    // return builder;
+    // }
 
-    public static BatchAnomalyResultRequest fromActionRequest(final ActionRequest actionRequest) {
-        if (actionRequest instanceof BatchAnomalyResultRequest) {
-            return (BatchAnomalyResultRequest) actionRequest;
+    public static ADBatchAnomalyResultRequest fromActionRequest(final ActionRequest actionRequest) {
+        if (actionRequest instanceof ADBatchAnomalyResultRequest) {
+            return (ADBatchAnomalyResultRequest) actionRequest;
         }
 
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream(); OutputStreamStreamOutput osso = new OutputStreamStreamOutput(baos)) {
             actionRequest.writeTo(osso);
             try (StreamInput input = new InputStreamStreamInput(new ByteArrayInputStream(baos.toByteArray()))) {
-                return new BatchAnomalyResultRequest(input);
+                return new ADBatchAnomalyResultRequest(input);
             }
         } catch (IOException e) {
             throw new IllegalArgumentException("failed to parse ActionRequest into AnomalyResultRequest", e);

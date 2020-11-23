@@ -13,17 +13,17 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.opendistroforelasticsearch.ad.transport;
+package com.amazon.opendistroforelasticsearch.ad.function;
 
-import com.amazon.opendistroforelasticsearch.ad.constant.CommonValue;
-import org.elasticsearch.action.ActionType;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 
-public class BatchAnomalyResultAction extends ActionType<BatchAnomalyResultResponse> {
-    public static final String NAME = CommonValue.EXTERNAL_ACTION_PREFIX + "detector/batchrun";
-    public static final BatchAnomalyResultAction INSTANCE = new BatchAnomalyResultAction();
+@FunctionalInterface
+public interface ADTaskFunction {
 
-    private BatchAnomalyResultAction() {
-        super(NAME, BatchAnomalyResultResponse::new);
-    }
-
+    /**
+     * Performs this operation.
+     *
+     * Notes: don't forget to send back responses via channel if you process response with this method.
+     */
+    void execute(ADTask task);
 }

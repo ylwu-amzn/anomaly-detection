@@ -32,6 +32,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
+
 public class DeleteAnomalyDetectorActionTests extends ESIntegTestCase {
     private DeleteAnomalyDetectorTransportAction action;
     private ActionListener<DeleteResponse> response;
@@ -45,7 +47,8 @@ public class DeleteAnomalyDetectorActionTests extends ESIntegTestCase {
             mock(ActionFilters.class),
             client(),
             clusterService(),
-            xContentRegistry()
+            xContentRegistry(),
+            mock(ADTaskManager.class)
         );
         response = new ActionListener<DeleteResponse>() {
             @Override

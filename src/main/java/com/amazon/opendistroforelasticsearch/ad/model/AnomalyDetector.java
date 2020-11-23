@@ -179,23 +179,23 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
     }
 
     public AnomalyDetector(
-            String detectorId,
-            Long version,
-            String name,
-            String description,
-            String timeField,
-            List<String> indices,
-            List<Feature> features,
-            QueryBuilder filterQuery,
-            TimeConfiguration detectionInterval,
-            TimeConfiguration windowDelay,
-            Integer shingleSize,
-            Map<String, Object> uiMetadata,
-            Integer schemaVersion,
-            Instant lastUpdateTime,
-            List<String> categoryFields,
-            User user,
-            DetectionDateRange detectionDateRange
+        String detectorId,
+        Long version,
+        String name,
+        String description,
+        String timeField,
+        List<String> indices,
+        List<Feature> features,
+        QueryBuilder filterQuery,
+        TimeConfiguration detectionInterval,
+        TimeConfiguration windowDelay,
+        Integer shingleSize,
+        Map<String, Object> uiMetadata,
+        Integer schemaVersion,
+        Instant lastUpdateTime,
+        List<String> categoryFields,
+        User user,
+        DetectionDateRange detectionDateRange
     ) {
         if (Strings.isBlank(name)) {
             throw new IllegalArgumentException("Detector name should be set");

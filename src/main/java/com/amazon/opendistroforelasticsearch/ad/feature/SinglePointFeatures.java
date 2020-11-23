@@ -30,6 +30,7 @@ public class SinglePointFeatures {
 
     private Instant dataStartTime;
     private Instant dataEndTime;
+
     /**
      * Constructor.
      *
@@ -42,10 +43,10 @@ public class SinglePointFeatures {
     }
 
     public SinglePointFeatures(
-            Optional<double[]> unprocessedFeatures,
-            Optional<double[]> processedFeatures,
-            Instant dataStartTime,
-            Instant dataEndTime
+        Optional<double[]> unprocessedFeatures,
+        Optional<double[]> processedFeatures,
+        Instant dataStartTime,
+        Instant dataEndTime
     ) {
         this.unprocessedFeatures = unprocessedFeatures;
         this.processedFeatures = processedFeatures;
