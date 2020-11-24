@@ -24,6 +24,7 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -172,11 +173,11 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
                     adTaskManager
                         .getLatestADTask(
                             detectorID,
-                            (adTask) -> { getDetectorAndJob(detectorID, returnJob, returnTask, adTask, listener); },
+                            (adTask) -> getDetectorAndJob(detectorID, returnJob, returnTask, adTask, listener),
                             listener
                         );
                 } else {
-                    getDetectorAndJob(detectorID, returnJob, returnTask, null, listener);
+                    getDetectorAndJob(detectorID, returnJob, returnTask, Optional.empty(), listener);
                 }
             }
         } catch (Exception e) {
@@ -186,11 +187,11 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
     }
 
     private void getDetectorAndJob(
-        String detectorID,
-        boolean returnJob,
-        boolean returnTask,
-        ADTask adTask,
-        ActionListener<GetAnomalyDetectorResponse> listener
+            String detectorID,
+            boolean returnJob,
+            boolean returnTask,
+            Optional<ADTask> adTask,
+            ActionListener<GetAnomalyDetectorResponse> listener
     ) {
         MultiGetRequest.Item adItem = new MultiGetRequest.Item(ANOMALY_DETECTORS_INDEX, detectorID);
         MultiGetRequest multiGetRequest = new MultiGetRequest().add(adItem);
@@ -202,11 +203,11 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
     }
 
     private ActionListener<MultiGetResponse> onMultiGetResponse(
-        ActionListener<GetAnomalyDetectorResponse> listener,
-        boolean returnJob,
-        boolean returnTask,
-        ADTask adTask,
-        String detectorId
+            ActionListener<GetAnomalyDetectorResponse> listener,
+            boolean returnJob,
+            boolean returnTask,
+            Optional<ADTask> adTask,
+            String detectorId
     ) {
         return new ActionListener<MultiGetResponse>() {
             @Override
@@ -275,7 +276,7 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
                             detector,
                             adJob,
                             returnJob,
-                            adTask,
+                            adTask.orElse(null),
                             returnTask,
                             RestStatus.OK,
                             null,

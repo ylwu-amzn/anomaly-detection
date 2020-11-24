@@ -37,7 +37,7 @@ import com.google.common.collect.ImmutableList;
 public class ShingleTests extends ESTestCase {
 
     public void testEmptyShingle() throws IOException {
-        long endTime = 1600000000000l + 8 * 60 * 1000;
+        long endTime = 1600000000000L + 8 * 60 * 1000;
         AnomalyDetector detector = randomDetector();
         // AnomalyDetector detector = TestHelpers.randomAnomalyDetector(null, Instant.now());
 
@@ -56,7 +56,7 @@ public class ShingleTests extends ESTestCase {
     }
 
     public void testFullShingle() throws IOException {
-        long endTime = 1600000000000l + 8 * 60 * 1000;
+        long endTime = 1600000000000L + 8 * 60 * 1000;
         AnomalyDetector detector = randomDetector();
         // AnomalyDetector detector = TestHelpers.randomAnomalyDetector(null, Instant.now());
 
@@ -70,10 +70,10 @@ public class ShingleTests extends ESTestCase {
         // 1600000300000: 1600000360000
         // 1600000360000: 1600000420000
         // 1600000420000: 1600000480000
-        shingle.add(new AbstractMap.SimpleEntry<>(1600000000000l, Optional.of(new double[] { 1.0, 2.0 })));// 0
-        shingle.add(new AbstractMap.SimpleEntry<>(1600000060000l, Optional.of(new double[] { 1.0, 2.0 })));// 1
-        shingle.add(new AbstractMap.SimpleEntry<>(1600000120000l, Optional.of(new double[] { 1.0, 2.0 })));// 2
-        shingle.add(new AbstractMap.SimpleEntry<>(1600000300000l, Optional.of(new double[] { 1.0, 2.0 })));// 5
+        shingle.add(new AbstractMap.SimpleEntry<>(1600000000000L, Optional.of(new double[] { 1.0, 2.0 })));// 0
+        shingle.add(new AbstractMap.SimpleEntry<>(1600000060000L, Optional.of(new double[] { 1.0, 2.0 })));// 1
+        shingle.add(new AbstractMap.SimpleEntry<>(1600000120000L, Optional.of(new double[] { 1.0, 2.0 })));// 2
+        shingle.add(new AbstractMap.SimpleEntry<>(1600000300000L, Optional.of(new double[] { 1.0, 2.0 })));// 5
 
         Map<Long, Map.Entry<Long, Optional<double[]>>> featuresMap = getNearbyPointsForShingle(
             detector,

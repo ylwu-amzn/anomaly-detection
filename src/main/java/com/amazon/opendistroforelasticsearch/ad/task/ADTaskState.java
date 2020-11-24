@@ -16,6 +16,7 @@
 package com.amazon.opendistroforelasticsearch.ad.task;
 
 public enum ADTaskState {
+    CREATED,
     INIT,
     RUNNING,
     FAILED,

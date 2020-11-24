@@ -120,6 +120,7 @@ public class IndexAnomalyDetectorActionHandler {
      * @param method                  Rest Method type
      * @param xContentRegistry        Registry which is used for XContentParser
      * @param user                    User context
+     * @param adTaskManager           AD Task manager
      */
     public IndexAnomalyDetectorActionHandler(
         ClusterService clusterService,
@@ -222,10 +223,10 @@ public class IndexAnomalyDetectorActionHandler {
                 validateDetector(existingDetector);
             } else {
                 adTaskManager.getLatestADTask(detectorId, (adTask) -> {
-                    if (adTask == null || !ADTaskState.RUNNING.name().equals(adTask.getState())) {
-                        validateDetector(existingDetector);
-                    } else {
+                    if (adTask.isPresent() && adTaskManager.isADTaskRunning(adTask.get())) {
                         listener.onFailure(new ElasticsearchStatusException("Detector is running", RestStatus.INTERNAL_SERVER_ERROR));
+                    } else {
+                        validateDetector(existingDetector);
                     }
                 }, listener);
             }

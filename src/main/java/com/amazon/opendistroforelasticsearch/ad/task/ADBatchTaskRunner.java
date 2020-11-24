@@ -28,6 +28,7 @@ import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorS
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -48,6 +49,7 @@ import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.tasks.TaskCancelledException;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -160,22 +162,35 @@ public class ADBatchTaskRunner {
     }
 
     public void run(ADTask adTask, Task task, TransportService transportService, ActionListener<ADBatchAnomalyResultResponse> listener) {
-        getNodeStats(adTask, ActionListener.wrap(node -> {
-            if (clusterService.localNode().getId().equals(node.getId())) {
-                // Execute batch task locally
-                startADBatchTask(adTask, task, listener);
-            } else {
-                // Execute batch task remotely
-                transportService
-                    .sendRequest(
-                        node,
-                        ADBatchTaskRemoteExecutionAction.NAME,
-                        new ADBatchAnomalyResultRequest(adTask),
-                        option,
-                        new ActionListenerResponseHandler<>(listener, ADBatchAnomalyResultResponse::new)
-                    );
-            }
-        }, exception -> handleExecuteException(adTask.getDetectorId(), exception, listener)));
+        Map<String, Object> updatedFields = new HashMap<>();
+        updatedFields.put(STATE_FIELD, ADTaskState.INIT.name());
+        adTaskManager.updateADTask(adTask.getTaskId(), updatedFields,
+
+                ActionListener.wrap(r -> {
+                    if (r.status() == RestStatus.OK) {
+                        getNodeStats(adTask, ActionListener.wrap(node -> {
+                            if (clusterService.localNode().getId().equals(node.getId())) {
+                                // Execute batch task locally
+                                startADBatchTask(adTask, task, listener);
+                            } else {
+                                // Execute batch task remotely
+                                transportService
+                                        .sendRequest(
+                                                node,
+                                                ADBatchTaskRemoteExecutionAction.NAME,
+                                                new ADBatchAnomalyResultRequest(adTask),
+                                                option,
+                                                new ActionListenerResponseHandler<>(listener, ADBatchAnomalyResultResponse::new)
+                                        );
+                            }
+                        }, exception -> handleExecuteException(adTask.getDetectorId(), exception, listener)));
+                    } else {
+                        logger.warn("Failed to move task {} to INIT state: {}", adTask.getTaskId(), r.status());
+                    }
+                }, e -> {
+                    logger.error("Failed to move task {} to INIT state", adTask.getTaskId());
+                    listener.onFailure(e);
+                }));
     }
 
     public void startADBatchTask(ADTask adTask, Task task, ActionListener<ADBatchAnomalyResultResponse> listener) {
@@ -185,18 +200,20 @@ public class ADBatchTaskRunner {
             logger.error("Fail to start AD batch adTask " + adTask.getTaskId(), e);
             listener.onFailure(e);
             adTaskManager
-                .updateADTask(
-                    adTask.getTaskId(),
-                    ImmutableMap
-                        .of(
-                            STATE_FIELD,
-                            ADTaskState.FAILED.name(),
-                            EXECUTION_END_TIME_FIELD,
-                            Instant.now(),
-                            ERROR_FIELD,
-                            ExceptionUtils.getFullStackTrace(e)
-                        )
-                );
+                    .handleADTaskException(adTask, e);
+//            adTaskManager
+//                .updateADTask(
+//                    adTask.getTaskId(),
+//                    ImmutableMap
+//                        .of(
+//                            STATE_FIELD,
+//                            ADTaskState.FAILED.name(),
+//                            EXECUTION_END_TIME_FIELD,
+//                            Instant.now(),
+//                            ERROR_FIELD,
+//                            ExceptionUtils.getFullStackTrace(e)
+//                        )
+//                );
         }
     }
 
@@ -303,6 +320,7 @@ public class ADBatchTaskRunner {
                     ImmutableMap
                         .of(
                             STATE_FIELD,
+                            //TODO: move to RUNNING state only RCF model passed initilization.
                             ADTaskState.RUNNING.name(),
                             CURRENT_PIECE_FIELD,
                             adTask.getDetector().getDetectionDateRange().getStartTime(),

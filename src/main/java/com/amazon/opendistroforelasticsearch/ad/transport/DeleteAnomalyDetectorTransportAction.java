@@ -91,10 +91,10 @@ public class DeleteAnomalyDetectorTransportAction extends HandledTransportAction
                     detector -> getDetectorJob(detectorId, listener, () -> deleteAnomalyDetectorJobDoc(detectorId, listener)),
                     // historical detector
                     detector -> adTaskManager.getLatestADTask(detectorId, adTask -> {
-                        if (adTask == null || !ADTaskState.RUNNING.name().equals(adTask.getState())) {
-                            deleteDetectorStateDoc(detectorId, listener);
-                        } else {
+                        if (adTask.isPresent() && adTaskManager.isADTaskRunning(adTask.get())){
                             listener.onFailure(new ElasticsearchStatusException("Detector is running", RestStatus.INTERNAL_SERVER_ERROR));
+                        } else {
+                            adTaskManager.deleteADTasks(detectorId, r -> deleteDetectorStateDoc(detectorId, listener), listener);
                         }
                     }, listener),
                     listener
