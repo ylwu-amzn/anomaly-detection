@@ -145,6 +145,9 @@
     "category_field": {
       "type": "keyword"
     },
+    "detector_type": {
+      "type": "keyword"
+    },
     "detection_date_range": {
       "properties": {
         "start_time": {
