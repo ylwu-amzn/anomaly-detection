@@ -472,7 +472,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             )
             .put(StatNames.DETECTOR_COUNT.getName(), new ADStat<>(true, new SettableSupplier()))
             .put(StatNames.HISTORICAL_DETECTOR_COUNT.getName(), new ADStat<>(true, new SettableSupplier()))
-            .put(StatNames.AD_TOTAL_BATCH_TASK_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
+            .put(StatNames.AD_TOTAL_BATCH_TASK_EXECUTION_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
             .put(StatNames.AD_CANCELED_BATCH_TASK_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
             .put(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
             .put(StatNames.AD_BATCH_TASK_FAILURE_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
@@ -626,7 +626,10 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 AnomalyDetectorSettings.INDEX_PRESSURE_SOFT_LIMIT,
                 AnomalyDetectorSettings.MAX_PRIMARY_SHARDS,
                 AnomalyDetectorSettings.FILTER_BY_BACKEND_ROLES,
-                AnomalyDetectorSettings.MAX_CACHE_MISS_HANDLING_PER_SECOND
+                AnomalyDetectorSettings.MAX_CACHE_MISS_HANDLING_PER_SECOND,
+                AnomalyDetectorSettings.MAX_BATCH_TASK_PER_NODE,
+                AnomalyDetectorSettings.MAX_BATCH_TASK_PIECE_SIZE,
+                AnomalyDetectorSettings.MAX_BATCH_TASK_PIECE_INTERVAL_SECONDS
             );
         return unmodifiableList(Stream.concat(enabledSetting.stream(), systemSetting.stream()).collect(Collectors.toList()));
     }

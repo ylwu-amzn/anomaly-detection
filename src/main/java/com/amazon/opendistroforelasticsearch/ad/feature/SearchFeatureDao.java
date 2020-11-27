@@ -288,7 +288,7 @@ public class SearchFeatureDao {
         AnomalyDetector detector,
         long startTime,
         long endTime,
-        ActionListener<List<Optional<double[]>>> listener
+        ActionListener<Map<Long, Optional<double[]>>> listener
     ) throws IOException {
         SearchSourceBuilder searchSourceBuilder = generateFeatureQuerySearchRequest(detector, startTime, endTime, xContent);
         logger.info("query AD data: " + searchSourceBuilder);
@@ -305,19 +305,18 @@ public class SearchFeatureDao {
             );
     }
 
-    private List<Optional<double[]>> parseBucketAggregationResponse(SearchResponse response, List<String> featureIds) {
-        List<Optional<double[]>> features = new ArrayList<>();
+    private Map<Long, Optional<double[]>> parseBucketAggregationResponse(SearchResponse response, List<String> featureIds) {
+        Map<Long, Optional<double[]>> dataPoints = new HashMap<>();
         List<Aggregation> aggregations = response.getAggregations().asList();
         logger.info("Feature aggregation result size {}", aggregations.size());
         for (Aggregation agg : aggregations) {
             List<InternalComposite.InternalBucket> buckets = ((InternalComposite) agg).getBuckets();
             buckets.forEach(bucket -> {
                 Optional<double[]> featureData = parseAggregations(Optional.ofNullable(bucket.getAggregations()), featureIds);
-                features.add(featureData);
+                dataPoints.put((Long)bucket.getKey().get("date_histogram"), featureData);
             });
         }
-
-        return features;
+        return dataPoints;
     }
 
     /**

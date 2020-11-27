@@ -50,7 +50,8 @@ public class ADTask implements ToXContentObject, Writeable {
     public static final String ERROR_FIELD = "error";
     public static final String STATE_FIELD = "state";
     public static final String DETECTOR_ID_FIELD = "detector_id";
-    public static final String PROGRESS_FIELD = "progress";
+    public static final String TASK_PROGRESS_FIELD = "task_progress";
+    public static final String INIT_PROGRESS_FIELD = "init_progress";
     public static final String CURRENT_PIECE_FIELD = "current_piece";
     public static final String EXECUTION_START_TIME_FIELD = "execution_start_time";
     public static final String EXECUTION_END_TIME_FIELD = "execution_end_time";
@@ -64,7 +65,8 @@ public class ADTask implements ToXContentObject, Writeable {
     private String error = null;
     private String state = null;
     private String detectorId = null;
-    private Float progress = null;
+    private Float taskProgress = null;
+    private Float initProgress = null;
     private Instant currentPiece = null;
     private Instant executionStartTime = null;
     private Instant executionEndTime = null;
@@ -85,7 +87,8 @@ public class ADTask implements ToXContentObject, Writeable {
             this.detector = null;
         }
         this.state = input.readOptionalString();
-        this.progress = input.readOptionalFloat();
+        this.taskProgress = input.readOptionalFloat();
+        this.initProgress = input.readOptionalFloat();
         this.currentPiece = input.readOptionalInstant();
         this.executionStartTime = input.readOptionalInstant();
         this.executionEndTime = input.readOptionalInstant();
@@ -107,7 +110,8 @@ public class ADTask implements ToXContentObject, Writeable {
             out.writeBoolean(false);
         }
         out.writeOptionalString(state);
-        out.writeOptionalFloat(progress);
+        out.writeOptionalFloat(taskProgress);
+        out.writeOptionalFloat(initProgress);
         out.writeOptionalInstant(currentPiece);
         out.writeOptionalInstant(executionStartTime);
         out.writeOptionalInstant(executionEndTime);
@@ -123,7 +127,8 @@ public class ADTask implements ToXContentObject, Writeable {
         private String detectorId = null;
         private AnomalyDetector detector = null;
         private String state = null;
-        private Float progress = null;
+        private Float taskProgress = null;
+        private Float initProgress = null;
         private Instant currentPiece = null;
         private Instant executionStartTime = null;
         private Instant executionEndTime = null;
@@ -159,8 +164,13 @@ public class ADTask implements ToXContentObject, Writeable {
             return this;
         }
 
-        public Builder progress(Float progress) {
-            this.progress = progress;
+        public Builder taskProgress(Float taskProgress) {
+            this.taskProgress = taskProgress;
+            return this;
+        }
+
+        public Builder initProgress(Float initProgress) {
+            this.initProgress = initProgress;
             return this;
         }
 
@@ -206,7 +216,8 @@ public class ADTask implements ToXContentObject, Writeable {
             task.error = this.error;
             task.state = this.state;
             task.detectorId = this.detectorId;
-            task.progress = this.progress;
+            task.taskProgress = this.taskProgress;
+            task.initProgress = this.initProgress;
             task.currentPiece = this.currentPiece;
             task.executionStartTime = this.executionStartTime;
             task.executionEndTime = this.executionEndTime;
@@ -238,8 +249,11 @@ public class ADTask implements ToXContentObject, Writeable {
         if (detectorId != null) {
             xContentBuilder.field(DETECTOR_ID_FIELD, detectorId);
         }
-        if (progress != null) {
-            xContentBuilder.field(PROGRESS_FIELD, progress);
+        if (taskProgress != null) {
+            xContentBuilder.field(TASK_PROGRESS_FIELD, taskProgress);
+        }
+        if (initProgress != null) {
+            xContentBuilder.field(INIT_PROGRESS_FIELD, initProgress);
         }
         if (currentPiece != null) {
             xContentBuilder.field(CURRENT_PIECE_FIELD, currentPiece.toEpochMilli());
@@ -274,7 +288,8 @@ public class ADTask implements ToXContentObject, Writeable {
         String error = null;
         String state = null;
         String detectorId = null;
-        Float progress = null;
+        Float taskProgress = null;
+        Float initProgress = null;
         Instant currentPiece = null;
         Instant executionStartTime = null;
         Instant executionEndTime = null;
@@ -301,8 +316,11 @@ public class ADTask implements ToXContentObject, Writeable {
                 case DETECTOR_ID_FIELD:
                     detectorId = parser.text();
                     break;
-                case PROGRESS_FIELD:
-                    progress = parser.floatValue();
+                case TASK_PROGRESS_FIELD:
+                    taskProgress = parser.floatValue();
+                    break;
+                case INIT_PROGRESS_FIELD:
+                    initProgress = parser.floatValue();
                     break;
                 case CURRENT_PIECE_FIELD:
                     currentPiece = ParseUtils.toInstant(parser);
@@ -336,7 +354,8 @@ public class ADTask implements ToXContentObject, Writeable {
             .error(error)
             .state(state)
             .detectorId(detectorId)
-            .progress(progress)
+            .taskProgress(taskProgress)
+            .initProgress(initProgress)
             .currentPiece(currentPiece)
             .executionStartTime(executionStartTime)
             .executionEndTime(executionEndTime)
@@ -360,7 +379,8 @@ public class ADTask implements ToXContentObject, Writeable {
             && Objects.equal(getError(), that.getError())
             && Objects.equal(getState(), that.getState())
             && Objects.equal(getDetectorId(), that.getDetectorId())
-            && Objects.equal(getProgress(), that.getProgress())
+            && Objects.equal(getTaskProgress(), that.getTaskProgress())
+            && Objects.equal(getInitProgress(), that.getInitProgress())
             && Objects.equal(getCurrentPiece(), that.getCurrentPiece())
             && Objects.equal(getExecutionStartTime(), that.getExecutionStartTime())
             && Objects.equal(getExecutionEndTime(), that.getExecutionEndTime())
@@ -380,7 +400,8 @@ public class ADTask implements ToXContentObject, Writeable {
                 error,
                 state,
                 detectorId,
-                progress,
+                taskProgress,
+                initProgress,
                 currentPiece,
                 executionStartTime,
                 executionEndTime,
@@ -431,12 +452,20 @@ public class ADTask implements ToXContentObject, Writeable {
         this.detectorId = detectorId;
     }
 
-    public Float getProgress() {
-        return progress;
+    public Float getTaskProgress() {
+        return taskProgress;
     }
 
-    public void setProgress(Float progress) {
-        this.progress = progress;
+    public Float getInitProgress() {
+        return initProgress;
+    }
+
+    public void setInitProgress(Float initProgress) {
+        this.initProgress = initProgress;
+    }
+
+    public void setTaskProgress(Float taskProgress) {
+        this.taskProgress = taskProgress;
     }
 
     public Instant getCurrentPiece() {

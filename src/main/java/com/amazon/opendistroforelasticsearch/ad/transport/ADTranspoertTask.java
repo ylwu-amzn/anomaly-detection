@@ -20,21 +20,17 @@ import java.util.Map;
 import org.elasticsearch.tasks.CancellableTask;
 import org.elasticsearch.tasks.TaskId;
 
-public class AnomalyDetectionBatchTask extends CancellableTask {
+public class ADTranspoertTask extends CancellableTask {
 
-    private Map<String, Object> taskInfo;
-
-    public AnomalyDetectionBatchTask(
+    public ADTranspoertTask(
         long id,
         String type,
         String action,
         String description,
         TaskId parentTaskId,
-        Map<String, String> headers,
-        Map<String, Object> taskInfo
+        Map<String, String> headers
     ) {
         super(id, type, action, description, parentTaskId, headers);
-        this.taskInfo = taskInfo;
     }
 
     @Override
@@ -42,7 +38,4 @@ public class AnomalyDetectionBatchTask extends CancellableTask {
         return true;
     }
 
-    public Map<String, Object> getTaskInfo() {
-        return taskInfo;
-    }
 }

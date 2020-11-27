@@ -57,4 +57,11 @@ public class ExceptionUtil {
         return false;
     }
 
+    public static boolean isServerError(Exception e) {
+        if (e instanceof ResourceNotFoundException || e instanceof IllegalArgumentException
+                || e instanceof ResourceNotFoundException) {
+            return false;
+        }
+        return true;
+    }
 }

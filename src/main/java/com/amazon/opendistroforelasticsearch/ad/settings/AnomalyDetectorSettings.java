@@ -321,4 +321,36 @@ public final class AnomalyDetectorSettings {
             Setting.Property.NodeScope,
             Setting.Property.Dynamic
         );
+
+    public static final Setting<Integer> MAX_BATCH_TASK_PER_NODE = Setting
+            .intSetting(
+                    "opendistro.anomaly_detection.max_batch_task_per_node",
+                    2,
+                    0,
+                    10,
+                    Setting.Property.NodeScope,
+                    Setting.Property.Dynamic
+            );
+
+    public static final Setting<Integer> MAX_BATCH_TASK_PIECE_SIZE = Setting
+            .intSetting(
+                    "opendistro.anomaly_detection.max_batch_task_piece_size",
+                    1000,
+                    0,
+                    10_000,
+                    Setting.Property.NodeScope,
+                    Setting.Property.Dynamic
+            );
+
+    public static final Setting<Integer> MAX_BATCH_TASK_PIECE_INTERVAL_SECONDS = Setting
+            .intSetting(
+                    "opendistro.anomaly_detection.max_batch_task_piece_interval_seconds",
+                    5,
+                    1,
+                    600,
+                    Setting.Property.NodeScope,
+                    Setting.Property.Dynamic
+            );
+
+    public static int THRESHOLD_MODEL_TRAINING_SIZE = 1000;
 }

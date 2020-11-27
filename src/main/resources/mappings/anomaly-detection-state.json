@@ -20,7 +20,10 @@
     "state": {
       "type": "keyword"
     },
-    "progress": {
+    "task_progress": {
+      "type": "float"
+    },
+    "init_progress": {
       "type": "float"
     },
     "current_piece": {

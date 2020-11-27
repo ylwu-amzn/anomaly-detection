@@ -15,6 +15,7 @@
 
 package com.amazon.opendistroforelasticsearch.ad.task;
 
+import com.amazon.opendistroforelasticsearch.ad.common.exception.AnomalyDetectionException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.ResourceNotFoundException;
 import com.amazon.opendistroforelasticsearch.ad.function.AnomalyDetectorFunction;
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
@@ -48,7 +49,6 @@ import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.action.update.UpdateResponse;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
@@ -65,7 +65,6 @@ import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.script.Script;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
-import org.elasticsearch.tasks.Task;
 import org.elasticsearch.tasks.TaskCancelledException;
 import org.elasticsearch.tasks.TaskInfo;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -92,7 +91,7 @@ import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpect
 
 public class ADTaskManager {
     private final Logger logger = LogManager.getLogger(this.getClass());
-    private static final String TASK_ID_HEADER = "anomaly_detection_task_id";
+    public static final String AD_TASK_ID_HEADER = "odfe_anomaly_detection_task_id";
 
     private final ThreadPool threadPool;
     private final Client client;
@@ -248,7 +247,7 @@ public class ADTaskManager {
             List<TaskInfo> taskInfos = tasks
                     .stream()
                     .filter(
-                            taskInfo -> StringUtils.equals(taskInfo.getHeaders().get(Task.X_OPAQUE_ID), getADTaskOpaqueId(taskId))
+                            taskInfo -> StringUtils.equals(taskInfo.getHeaders().get(AD_TASK_ID_HEADER), taskId)
                                     && taskInfo.isCancellable()
                     )
                     .collect(Collectors.toList());
@@ -435,7 +434,7 @@ public class ADTaskManager {
             .isLatest(true)
             .taskType(ADTaskType.HISTORICAL.name())
             .executionStartTime(Instant.now())
-            .progress(0.0f)
+            .taskProgress(0.0f)
             .state(ADTaskState.CREATED.name())
             .lastUpdateTime(Instant.now())
             .build();
@@ -473,29 +472,18 @@ public class ADTaskManager {
             );
             task.setTaskId(response.getId());
             listener.onResponse(anomalyDetectorJobResponse);
-            try (ThreadContext.StoredContext context = threadPool.getThreadContext().stashContext()) {
-                assert context != null;
-                threadPool.getThreadContext().putHeader(Task.X_OPAQUE_ID, getADTaskOpaqueId(task.getTaskId()));
-
-                client
+            client
                     .execute(
-                        ADBatchAnomalyResultAction.INSTANCE,
-                        new ADBatchAnomalyResultRequest(task),
-                        ActionListener
-                            .wrap(
-                                r -> logger.info("Task execution finished for {}, response: {}", task.getTaskId(), r.getMessage()),
-                                exception -> handleADTaskException(task, exception)
-                            )
+                            ADBatchAnomalyResultAction.INSTANCE,
+                            new ADBatchAnomalyResultRequest(task),
+                            ActionListener
+                                    .wrap(
+                                            r -> logger.info("Task execution finished for {}, response: {}",
+                                                    task.getTaskId(), r.getMessage()),
+                                            exception -> handleADTaskException(task, exception)
+                                    )
                     );
-            } catch (Exception e) {
-                handleADTaskException(task, e);
-                listener.onFailure(e);
-            }
         }
-    }
-
-    private String getADTaskOpaqueId(String taskId) {
-        return TASK_ID_HEADER + ":" + taskId;
     }
 
     // private void handleADTaskException(ADTask task, Exception exception) {
@@ -520,7 +508,10 @@ public class ADTaskManager {
             state = ADTaskState.STOPPED.name();
         } else {
             logger.error("Fail to execute batch task action " + task.getTaskId(), exception);
-            updatedFields.put(ERROR_FIELD, ExceptionUtils.getFullStackTrace(exception));
+            String error = (exception instanceof IllegalArgumentException
+                    || exception instanceof AnomalyDetectionException) ?
+                    exception.getMessage() : ExceptionUtils.getFullStackTrace(exception);
+            updatedFields.put(ERROR_FIELD, error);
         }
         updatedFields.put(STATE_FIELD, state);
         updatedFields.put(EXECUTION_END_TIME_FIELD, Instant.now().toEpochMilli());

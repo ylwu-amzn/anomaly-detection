@@ -15,8 +15,17 @@
 
 package com.amazon.opendistroforelasticsearch.ad.feature;
 
-import static java.util.Arrays.copyOfRange;
-import static org.apache.commons.math3.linear.MatrixUtils.createRealMatrix;
+import com.amazon.opendistroforelasticsearch.ad.CleanState;
+import com.amazon.opendistroforelasticsearch.ad.common.exception.EndRunException;
+import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
+import com.amazon.opendistroforelasticsearch.ad.dataprocessor.Interpolator;
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
+import com.amazon.opendistroforelasticsearch.ad.model.Entity;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.support.ThreadedActionListener;
+import org.elasticsearch.threadpool.ThreadPool;
 
 import java.io.IOException;
 import java.time.Clock;
@@ -39,19 +48,8 @@ import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.elasticsearch.action.ActionListener;
-import org.elasticsearch.action.support.ThreadedActionListener;
-import org.elasticsearch.threadpool.ThreadPool;
-
-import com.amazon.opendistroforelasticsearch.ad.CleanState;
-import com.amazon.opendistroforelasticsearch.ad.common.exception.EndRunException;
-import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
-import com.amazon.opendistroforelasticsearch.ad.dataprocessor.Interpolator;
-import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
-import com.amazon.opendistroforelasticsearch.ad.model.Entity;
-import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
+import static java.util.Arrays.copyOfRange;
+import static org.apache.commons.math3.linear.MatrixUtils.createRealMatrix;
 
 /**
  * A facade managing feature data operations and buffers.
@@ -191,31 +189,12 @@ public class FeatureManager implements CleanState {
             .collect(Collectors.toList());
     }
 
-    public void getFeatures(AnomalyDetector detector, long startTime, long endTime, ActionListener<List<SinglePointFeatures>> listener) {
+    public void getFeatureDataPoints(AnomalyDetector detector, long startTime, long endTime, ActionListener<Map<Long, Optional<double[]>>> listener) {
         try {
-            int shingleSize = detector.getShingleSize();
-            List<double[]> features = new ArrayList<>();
-            long interval = ((IntervalTimeConfiguration) detector.getDetectionInterval()).toDuration().toMillis();
             searchFeatureDao.getFeaturesForPeriodByBatch(detector, startTime, endTime, ActionListener.wrap(points -> {
-                for (int i = 0; i < points.size(); i++) { // TODO: process missing values, by default missing values will not returned.
-                    Optional<double[]> point = points.get(i);
-                    features.add(point.get());
-                }
-                logger.info("features size: {}", features.size());
-                List<SinglePointFeatures> featureList = new ArrayList<>();
-                if (features.size() > 0) {
-                    Optional<double[][]> featureData = batchShingle(features, shingleSize);
-                    for (int i = 0; i < featureData.get().length; i++) {
-                        SinglePointFeatures feature = new SinglePointFeatures(
-                            points.get(i + shingleSize - 1),
-                            Optional.ofNullable(featureData.get()[i]),
-                            Instant.ofEpochMilli(startTime + (i + shingleSize - 1) * interval),
-                            Instant.ofEpochMilli(startTime + (i + shingleSize) * interval)
-                        );
-                        featureList.add(feature);
-                    }
-                }
-                listener.onResponse(featureList);
+                // TODO: process missing values, by default missing values will not returned.
+                logger.info("features size: {}", points.size());
+                listener.onResponse(points);
             }, listener::onFailure));
         } catch (Exception e) {
             logger.error("Failed to get features for detector: " + detector.getDetectorId());
@@ -254,6 +233,48 @@ public class FeatureManager implements CleanState {
             .forEach(e -> shingle.add(e));
 
         getProcessedFeatures(shingle, detector, endTime, listener);
+    }
+
+    public SinglePointFeatures getShingledFeature(AnomalyDetector detector,
+                                                  Deque<Entry<Long, Optional<double[]>>> shingle,
+                                                  Map<Long, Optional<double[]>> dataPoints,
+                                                  long endTime
+                                 ) {
+        long maxTimeDifference = detector.getDetectorIntervalInMilliseconds() / 2;
+        Map<Long, Entry<Long, Optional<double[]>>> featuresMap = getNearbyPointsForShingle(detector, shingle, endTime, maxTimeDifference)
+                .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+        List<Entry<Long, Long>> missingRanges = getMissingRangesInShingle(detector, featuresMap, endTime);
+        missingRanges.stream()
+                .forEach(r -> {
+                    if (dataPoints.containsKey(r.getKey())) {
+                        featuresMap.put(r.getValue(), new SimpleImmutableEntry<>(r.getValue(), dataPoints.get(r.getKey())));
+                    }
+                });
+        shingle.clear();
+
+        shingle.clear();
+        getFullShingleEndTimes(endTime, detector.getDetectorIntervalInMilliseconds(), detector.getShingleSize())
+                .mapToObj(time -> featuresMap.getOrDefault(time, new SimpleImmutableEntry<>(time, Optional.empty())))
+                .forEach(e -> shingle.add(e));
+
+        return getProcessedFeatures(shingle, detector, endTime);
+    }
+
+    private SinglePointFeatures getProcessedFeatures(
+            Deque<Entry<Long, Optional<double[]>>> shingle,
+            AnomalyDetector detector,
+            long endTime
+    ) {
+        int shingleSize = detector.getShingleSize();
+        Optional<double[]> currentPoint = shingle.peekLast().getValue();
+        return new SinglePointFeatures(
+                currentPoint,
+                Optional
+                        // if current point is not present or current shingle has more missing data points than
+                        // max missing rate, will return null
+                        .ofNullable(currentPoint.isPresent() ? filterAndFill(shingle, endTime, detector) : null)
+                        .map(points -> batchShingle(points, shingleSize)[0])
+        );
     }
 
     private void getProcessedFeatures(

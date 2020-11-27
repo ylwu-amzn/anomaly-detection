@@ -37,7 +37,7 @@ public enum StatNames {
     HISTORICAL_DETECTOR_COUNT("historical_detector_count"),
     AD_EXECUTING_BATCH_TASK_COUNT("ad_executing_batch_task_count"),
     AD_CANCELED_BATCH_TASK_COUNT("ad_canceled_batch_task_count"),
-    AD_TOTAL_BATCH_TASK_COUNT("ad_total_batch_task_count"),
+    AD_TOTAL_BATCH_TASK_EXECUTION_COUNT("ad_total_batch_task_execution_count"),
     AD_BATCH_TASK_FAILURE_COUNT("ad_batch_task_failure_count");
 
     private String name;
