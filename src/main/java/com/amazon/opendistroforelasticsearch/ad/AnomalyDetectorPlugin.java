@@ -29,6 +29,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.amazon.opendistroforelasticsearch.ad.task.ADBatchTaskCache;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.SpecialPermission;
@@ -187,6 +188,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
     private static Gson gson;
     private AnomalyDetectionIndices anomalyDetectionIndices;
     private AnomalyDetectorRunner anomalyDetectorRunner;
+    private ADBatchTaskCache adBatchTaskCache;
     private ADTaskManager adTaskManager;
     private ADBatchTaskRunner adBatchTaskRunner;
     private Client client;
@@ -504,6 +506,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             xContentRegistry,
             stateManager
         );
+        adBatchTaskCache = new ADBatchTaskCache(settings, clusterService);
         adTaskManager = new ADTaskManager(
             threadPool,
             clusterService,
@@ -512,7 +515,8 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             nodeFilter,
             anomalyDetectionIndices,
             detectorStateHandler,
-            adStats
+            adStats,
+            adBatchTaskCache
         );
         adBatchTaskRunner = new ADBatchTaskRunner(
             settings,
@@ -525,7 +529,8 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             featureManager,
             adTaskManager,
             adStats,
-            anomalyResultBulkIndexHandler
+            anomalyResultBulkIndexHandler,
+            adBatchTaskCache
         );
 
         MultiEntityResultHandler multiEntityResultHandler = new MultiEntityResultHandler(

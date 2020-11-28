@@ -36,35 +36,35 @@ import static org.elasticsearch.action.ValidateActions.addValidationError;
 public class ADBatchAnomalyResultRequest extends ActionRequest implements TaskAwareRequest {
     static final String INVALID_TIMESTAMP_ERR_MSG = "timestamp is invalid";
 
-    private ADTask task;
+    private ADTask adTask;
 
     public ADBatchAnomalyResultRequest(StreamInput in) throws IOException {
         super(in);
-        task = new ADTask(in);
+        adTask = new ADTask(in);
     }
 
-    public ADBatchAnomalyResultRequest(ADTask task) {
+    public ADBatchAnomalyResultRequest(ADTask adTask) {
         super();
-        this.task = task;
+        this.adTask = adTask;
     }
 
-    public ADTask getTask() {
-        return task;
+    public ADTask getAdTask() {
+        return adTask;
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
-        task.writeTo(out);
+        adTask.writeTo(out);
     }
 
     @Override
     public ActionRequestValidationException validate() {
         ActionRequestValidationException validationException = null;
-        if (Strings.isEmpty(task.getTaskId())) {
+        if (Strings.isEmpty(adTask.getTaskId())) {
             validationException = addValidationError("Task id is missing", validationException);
         }
-        AnomalyDetector detector = task.getDetector();
+        AnomalyDetector detector = adTask.getDetector();
         if (detector == null) {
             validationException = addValidationError("Detector is missing", validationException);
         } else if (detector.isRealTimeDetector()) {
@@ -106,14 +106,14 @@ public class ADBatchAnomalyResultRequest extends ActionRequest implements TaskAw
     @Override
     public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
         StringBuilder descriptionBuilder = new StringBuilder();
-        descriptionBuilder.append("task_id:[").append(task.getTaskId()).append("], ");
-        if (task.getDetector() != null) {
-            descriptionBuilder.append("detector_id:[").append(task.getDetectorId()).append("], ");
-            descriptionBuilder.append("start_time:[").append(task.getDetector().getDetectionDateRange().getStartTime()).append("], ");
-            descriptionBuilder.append("end_time:[").append(task.getDetector().getDetectionDateRange().getEndTime()).append("]");
+        descriptionBuilder.append("task_id:[").append(adTask.getTaskId()).append("], ");
+        if (adTask.getDetector() != null) {
+            descriptionBuilder.append("detector_id:[").append(adTask.getDetectorId()).append("], ");
+            descriptionBuilder.append("start_time:[").append(adTask.getDetector().getDetectionDateRange().getStartTime()).append("], ");
+            descriptionBuilder.append("end_time:[").append(adTask.getDetector().getDetectionDateRange().getEndTime()).append("]");
         }
 
-        headers.put(AD_TASK_ID_HEADER, task.getTaskId());
+        headers.put(AD_TASK_ID_HEADER, adTask.getTaskId());
 
         return new ADTranspoertTask(id, type, action, descriptionBuilder.toString(), parentTaskId, headers);
     }

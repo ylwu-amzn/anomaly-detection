@@ -210,23 +210,23 @@ public class ADTask implements ToXContentObject, Writeable {
         }
 
         public ADTask build() {
-            ADTask task = new ADTask();
-            task.taskId = this.taskId;
-            task.lastUpdateTime = this.lastUpdateTime;
-            task.error = this.error;
-            task.state = this.state;
-            task.detectorId = this.detectorId;
-            task.taskProgress = this.taskProgress;
-            task.initProgress = this.initProgress;
-            task.currentPiece = this.currentPiece;
-            task.executionStartTime = this.executionStartTime;
-            task.executionEndTime = this.executionEndTime;
-            task.isLatest = this.isLatest;
-            task.taskType = this.taskType;
-            task.checkpointId = this.checkpointId;
-            task.detector = this.detector;
+            ADTask adTask = new ADTask();
+            adTask.taskId = this.taskId;
+            adTask.lastUpdateTime = this.lastUpdateTime;
+            adTask.error = this.error;
+            adTask.state = this.state;
+            adTask.detectorId = this.detectorId;
+            adTask.taskProgress = this.taskProgress;
+            adTask.initProgress = this.initProgress;
+            adTask.currentPiece = this.currentPiece;
+            adTask.executionStartTime = this.executionStartTime;
+            adTask.executionEndTime = this.executionEndTime;
+            adTask.isLatest = this.isLatest;
+            adTask.taskType = this.taskType;
+            adTask.checkpointId = this.checkpointId;
+            adTask.detector = this.detector;
 
-            return task;
+            return adTask;
         }
 
     }

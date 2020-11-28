@@ -123,6 +123,6 @@ public class ADBatchAnomalyResultTransportAction extends HandledTransportAction<
 
     @Override
     protected void doExecute(Task task, ADBatchAnomalyResultRequest request, ActionListener<ADBatchAnomalyResultResponse> actionListener) {
-        adBatchTaskRunner.run(request.getTask(), task, transportService, actionListener);
+        adBatchTaskRunner.run(request.getAdTask(), task, transportService, actionListener);
     }
 }

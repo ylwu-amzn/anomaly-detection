@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.Optional;
 
 public class ADBatchTaskModel {
+    private final String detectorId;
     private RandomCutForest rcfModel;
     private Deque<Map.Entry<Long, Optional<double[]>>> shingle; //TODO, clean when finish/fail/stop
     private ThresholdingModel thresholdModel;
@@ -32,7 +33,13 @@ public class ADBatchTaskModel {
     private List<Double> thresholdModelTrainingData; // TODO, check if this class is singleton or not
     private ADTranspoertTask adTranspoertTask;
 
-    public ADBatchTaskModel() {}
+    public ADBatchTaskModel(String detectorId) {
+        this.detectorId = detectorId;
+    }
+
+    public String getDetectorId() {
+        return detectorId;
+    }
 
     public RandomCutForest getRcfModel() {
         return rcfModel;

@@ -15,49 +15,47 @@
 
 package com.amazon.opendistroforelasticsearch.ad.task;
 
+import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException;
 import com.amazon.opendistroforelasticsearch.ad.ml.HybridThresholdingModel;
 import com.amazon.opendistroforelasticsearch.ad.ml.ThresholdingModel;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADTranspoertTask;
 import com.amazon.randomcutforest.RandomCutForest;
+import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.settings.Settings;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_BATCH_TASK_PER_NODE;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_MIN_SAMPLES;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_SAMPLES_PER_TREE;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_TREES;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.TIME_DECAY;
 
 public class ADBatchTaskCache {
-    private static ADBatchTaskCache INSTANCE;
 
     private final Map<String, ADBatchTaskModel> taskModels;
+    private volatile Integer maxAdBatchTaskPerNode;
 
-    private ADBatchTaskCache() {
+    public ADBatchTaskCache(Settings settings, ClusterService clusterService) {
+        this.maxAdBatchTaskPerNode = MAX_BATCH_TASK_PER_NODE.get(settings);
+        clusterService
+                .getClusterSettings()
+                .addSettingsUpdateConsumer(MAX_BATCH_TASK_PER_NODE, it -> maxAdBatchTaskPerNode = it);
         taskModels = new ConcurrentHashMap<>();
     }
 
-    public static ADBatchTaskCache getInstance() {
-        if (INSTANCE != null) {
-            return INSTANCE;
-        }
-        synchronized (ADBatchTaskCache.class) {
-            if (INSTANCE != null) {
-                return INSTANCE;
-            }
-            INSTANCE = new ADBatchTaskCache();
-            return INSTANCE;
-        }
-    }
-
     public RandomCutForest getOrCreateRcfModel(String taskId, int shingleSize, int enabledFeatureSize) {
-        ADBatchTaskModel taskModel = taskModels.computeIfAbsent(taskId, id -> new ADBatchTaskModel());
+        ADBatchTaskModel taskModel = getOrThrow(taskId);
         if (taskModel.getRcfModel() == null) {
             RandomCutForest rcf = RandomCutForest
                     .builder()
@@ -75,14 +73,14 @@ public class ADBatchTaskCache {
     }
 
     public RandomCutForest getRcfModel(String taskId) {
-        if (!taskModels.containsKey(taskId)) {
+        if (!contains(taskId)) {
             return null;
         }
-        return taskModels.get(taskId).getRcfModel();
+        return get(taskId).getRcfModel();
     }
 
     public ThresholdingModel getOrCreateThresholdModel(String taskId) {
-        ADBatchTaskModel taskModel = taskModels.computeIfAbsent(taskId, id -> new ADBatchTaskModel());
+        ADBatchTaskModel taskModel = getOrThrow(taskId);
         if (taskModel.getThresholdModel() == null) {
             ThresholdingModel thresholdModel = new HybridThresholdingModel(
                     AnomalyDetectorSettings.THRESHOLD_MIN_PVALUE,
@@ -99,15 +97,8 @@ public class ADBatchTaskCache {
         return taskModel.getThresholdModel();
     }
 
-    public ThresholdingModel getThresholdModel(String taskId) {
-        if (!taskModels.containsKey(taskId)) {
-            return null;
-        }
-        return taskModels.get(taskId).getThresholdModel();
-    }
-
     public List<Double> getThresholdTrainingData(String taskId) {
-        ADBatchTaskModel taskModel = taskModels.computeIfAbsent(taskId, id -> new ADBatchTaskModel());
+        ADBatchTaskModel taskModel = getOrThrow(taskId);
         if (taskModel.getThresholdModelTrainingData() == null) {
             taskModel.setThresholdModelTrainingData(new ArrayList<>());
         }
@@ -115,17 +106,17 @@ public class ADBatchTaskCache {
     }
 
     public boolean isThresholdModelTrained(String taskId) {
-        if (!taskModels.containsKey(taskId)) {
+        if (!contains(taskId)) {
             return false;
         }
-        return taskModels.get(taskId).isThresholdModelTrained();
+        return get(taskId).isThresholdModelTrained();
     }
 
     public void setThresholdModelTrained(String taskId, boolean trained) {
-        if (!taskModels.containsKey(taskId)) {
+        if (!contains(taskId)) {
             throw new IllegalArgumentException("Task not in cache");
         }
-        ADBatchTaskModel taskModel = taskModels.get(taskId);
+        ADBatchTaskModel taskModel = get(taskId);
         taskModel.setThresholdModelTrained(trained);
         if (trained) {
             taskModel.getThresholdModelTrainingData().clear();
@@ -134,29 +125,84 @@ public class ADBatchTaskCache {
     }
 
     public Deque<Map.Entry<Long, Optional<double[]>>> getShingle(String taskId) {
-        if (!taskModels.containsKey(taskId)) {
+        if (!contains(taskId)) {
             return null;
         }
-        return taskModels.get(taskId).getShingle();
+        return get(taskId).getShingle();
     }
 
     public void putAdTransportTask(String taskId, ADTranspoertTask task) {
-        ADBatchTaskModel taskModel = taskModels.computeIfAbsent(taskId, id -> new ADBatchTaskModel());
+        ADBatchTaskModel taskModel = getOrThrow(taskId);
         taskModel.setAdTranspoertTask(task);
     }
 
     public ADTranspoertTask getAdTransportTask(String taskId) {
-        if (!taskModels.containsKey(taskId)) {
+        if (!contains(taskId)) {
             return null;
         }
-        return taskModels.get(taskId).getAdTranspoertTask();
+        return get(taskId).getAdTranspoertTask();
     }
 
     public int getTaskNumber() {
         return taskModels.size();
     }
 
+    public boolean contains(String taskId) {
+        return taskModels.containsKey(taskId);
+    }
+
+    public boolean containsTaskOfDetector(String detectorId) {
+        long count = taskModels.entrySet().stream().filter(entry -> Objects.equals(detectorId, entry.getValue().getDetectorId())).count();
+        return count > 0;
+    }
+
+    public ADBatchTaskModel get(String taskId) {
+        return taskModels.get(taskId);
+    }
+
+    private ADBatchTaskModel getOrThrow(String taskId) {
+        ADBatchTaskModel model = taskModels.get(taskId);
+        if (model == null) {
+            throw new IllegalArgumentException("Task not in cache");
+        }
+        return model;
+    }
+
+    public ADBatchTaskModel put(ADTask adTask) {
+        String taskId = adTask.getTaskId();
+        if (contains(taskId)) {
+            throw new IllegalArgumentException("AD task is already running");
+        }
+        allowToPutNewTask();
+        return taskModels.put(taskId, new ADBatchTaskModel(adTask.getDetectorId()));
+    }
+
+//    public ADBatchTaskModel putIfAbsent(String taskId) {
+//        if (!contains(taskId)) {
+//            return put(taskId);
+//        }
+//        return get(taskId);
+//    }
+
     public void remove(String taskId) {
         taskModels.remove(taskId);
+    }
+
+    /**
+     * check if current running batch task on current node exceeds max running task limitation.
+     */
+    public void allowToPutNewTask() {
+        checkTaskCount(maxAdBatchTaskPerNode);
+    }
+
+    public void checkLimitation() {
+        checkTaskCount(maxAdBatchTaskPerNode + 1);
+    }
+
+    private void checkTaskCount(int maxTasks) {
+        if (this.getTaskNumber() >= maxTasks) {
+            String error = "Can't run more than " + maxAdBatchTaskPerNode + " historical detector per node";
+            throw new LimitExceededException(error);
+        }
     }
 }
