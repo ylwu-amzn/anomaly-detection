@@ -30,6 +30,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.amazon.opendistroforelasticsearch.ad.task.ADBatchTaskCache;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileTransportAction;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.SpecialPermission;
@@ -515,7 +517,6 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             nodeFilter,
             anomalyDetectionIndices,
             detectorStateHandler,
-            adStats,
             adBatchTaskCache
         );
         adBatchTaskRunner = new ADBatchTaskRunner(
@@ -678,7 +679,8 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 new ActionHandler<>(EntityProfileAction.INSTANCE, EntityProfileTransportAction.class),
                 new ActionHandler<>(SearchAnomalyDetectorInfoAction.INSTANCE, SearchAnomalyDetectorInfoTransportAction.class),
                 new ActionHandler<>(ADBatchAnomalyResultAction.INSTANCE, ADBatchAnomalyResultTransportAction.class),
-                new ActionHandler<>(ADBatchTaskRemoteExecutionAction.INSTANCE, ADBatchTaskRemoteExecutionTransportAction.class)
+                new ActionHandler<>(ADBatchTaskRemoteExecutionAction.INSTANCE, ADBatchTaskRemoteExecutionTransportAction.class),
+                new ActionHandler<>(ADTaskProfileAction.INSTANCE, ADTaskProfileTransportAction.class)
             );
     }
 

@@ -15,6 +15,7 @@
 
 package com.amazon.opendistroforelasticsearch.ad.util;
 
+import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.common.io.stream.NotSerializableExceptionWrapper;
 
@@ -59,7 +60,7 @@ public class ExceptionUtil {
 
     public static boolean isServerError(Exception e) {
         if (e instanceof ResourceNotFoundException || e instanceof IllegalArgumentException
-                || e instanceof ResourceNotFoundException) {
+                || e instanceof LimitExceededException) {
             return false;
         }
         return true;

@@ -44,6 +44,7 @@ import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.index.query.MatchAllQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.search.aggregations.AggregationBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 
 import com.amazon.opendistroforelasticsearch.ad.annotation.Generated;
@@ -257,7 +258,18 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
             throw new IllegalArgumentException("Indices should be set");
         }
         this.indices = indices;
-        featureAttributes = input.readList(Feature::new);
+        int featureSize = input.readInt();
+        featureAttributes = new ArrayList<>();
+        for (int i = 0; i < featureSize; i++) {
+            String featureId = input.readString();
+            String featureName = input.readString();
+            Boolean enabled = input.readBoolean();
+            AggregationBuilder aggregation = input.readNamedWriteable(AggregationBuilder.class);
+            Feature feature = new Feature(featureId, featureName, enabled, aggregation);
+            featureAttributes.add(feature);
+        }
+//        featureAttributes = input.readList(Feature::new);
+
         filterQuery = new MatchAllQueryBuilder(input);
         detectionInterval = IntervalTimeConfiguration.readFrom(input);
         windowDelay = IntervalTimeConfiguration.readFrom(input);
@@ -269,7 +281,7 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         uiMetadata = input.readMap();
         schemaVersion = input.readInt();
         lastUpdateTime = input.readInstant();
-        this.categoryFields = input.readStringList();
+        this.categoryFields = input.readOptionalStringList();
         if (input.readBoolean()) {
             this.user = new User(input);
         } else {
@@ -295,7 +307,15 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         output.writeString(description);
         output.writeString(timeField);
         output.writeStringCollection(indices);
-        output.writeList(featureAttributes);
+//        output.writeNamedWriteableList(featureAttributes);
+        output.writeInt(featureAttributes.size());
+
+        for (Feature feature : featureAttributes) {
+            output.writeString(feature.getId());
+            output.writeString(feature.getName());
+            output.writeBoolean(feature.getEnabled());
+            output.writeNamedWriteable(feature.getAggregation());
+        }
         filterQuery.writeTo(output);
         detectionInterval.writeTo(output);
         windowDelay.writeTo(output);
@@ -303,20 +323,20 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         output.writeMap(uiMetadata);
         output.writeInt(schemaVersion);
         output.writeInstant(lastUpdateTime);
-        output.writeStringCollection(categoryFields);
+        output.writeOptionalStringCollection(categoryFields);
         if (user != null) {
             output.writeBoolean(true); // user exists
             user.writeTo(output);
         } else {
             output.writeBoolean(false); // user does not exist
         }
-        output.writeOptionalString(detectorType);
         if (detectionDateRange != null) {
             output.writeBoolean(true); // detectionDateRange exists
             detectionDateRange.writeTo(output);
         } else {
             output.writeBoolean(false); // detectionDateRange does not exist
         }
+        output.writeOptionalString(detectorType);
     }
 
     @Override

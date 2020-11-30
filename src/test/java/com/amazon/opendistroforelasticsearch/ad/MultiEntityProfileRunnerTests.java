@@ -34,6 +34,7 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.FailedNodeException;
@@ -82,6 +83,7 @@ public class MultiEntityProfileRunnerTests extends AbstractADTest {
 
     private int shingleSize;
     private AnomalyDetectorJob job;
+    private ADTaskManager adTaskManager;
 
     enum InittedEverResultStatus {
         INITTED,
@@ -95,6 +97,7 @@ public class MultiEntityProfileRunnerTests extends AbstractADTest {
         super.setUp();
         client = mock(Client.class);
         nodeFilter = mock(DiscoveryNodeFilterer.class);
+        adTaskManager = mock(ADTaskManager.class);
         requiredSamples = 128;
 
         detectorId = "A69pa3UBHuCbh-emo9oR";
@@ -102,7 +105,7 @@ public class MultiEntityProfileRunnerTests extends AbstractADTest {
         result = new DetectorInternalState.Builder().lastUpdateTime(Instant.now());
         job = TestHelpers.randomAnomalyDetectorJob(true);
 
-        runner = new AnomalyDetectorProfileRunner(client, xContentRegistry(), nodeFilter, requiredSamples);
+        runner = new AnomalyDetectorProfileRunner(client, xContentRegistry(), nodeFilter, requiredSamples, adTaskManager);
 
         doAnswer(invocation -> {
             Object[] args = invocation.getArguments();

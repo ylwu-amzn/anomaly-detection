@@ -37,6 +37,7 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.FailedNodeException;
@@ -80,6 +81,7 @@ public class AnomalyDetectorProfileRunnerTests extends AbstractADTest {
     private DiscoveryNodeFilterer nodeFilter;
     private AnomalyDetector detector;
     private ClusterService clusterService;
+    private ADTaskManager adTaskManager;
 
     private static Set<DetectorProfileName> stateOnly;
     private static Set<DetectorProfileName> stateNError;
@@ -139,12 +141,13 @@ public class AnomalyDetectorProfileRunnerTests extends AbstractADTest {
         client = mock(Client.class);
         nodeFilter = mock(DiscoveryNodeFilterer.class);
         clusterService = mock(ClusterService.class);
+        adTaskManager = mock(ADTaskManager.class);
         when(clusterService.state()).thenReturn(ClusterState.builder(new ClusterName("test cluster")).build());
 
         requiredSamples = 128;
         neededSamples = 5;
 
-        runner = new AnomalyDetectorProfileRunner(client, xContentRegistry(), nodeFilter, requiredSamples);
+        runner = new AnomalyDetectorProfileRunner(client, xContentRegistry(), nodeFilter, requiredSamples, adTaskManager);
 
         detectorIntervalMin = 3;
         detectorGetReponse = mock(GetResponse.class);
@@ -672,6 +675,6 @@ public class AnomalyDetectorProfileRunnerTests extends AbstractADTest {
     }
 
     public void testInvalidRequiredSamples() {
-        expectThrows(IllegalArgumentException.class, () -> new AnomalyDetectorProfileRunner(client, xContentRegistry(), nodeFilter, 0));
+        expectThrows(IllegalArgumentException.class, () -> new AnomalyDetectorProfileRunner(client, xContentRegistry(), nodeFilter, 0, adTaskManager));
     }
 }

@@ -160,11 +160,13 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
                         );
                 } else {
                     Set<DetectorProfileName> profilesToCollect = getProfilesToCollect(typesStr, all);
+
                     AnomalyDetectorProfileRunner profileRunner = new AnomalyDetectorProfileRunner(
                         client,
                         xContentRegistry,
                         nodeFilter,
-                        AnomalyDetectorSettings.NUM_MIN_SAMPLES
+                        AnomalyDetectorSettings.NUM_MIN_SAMPLES,
+                        adTaskManager
                     );
                     profileRunner.profile(detectorID, getProfileActionListener(listener, detectorID), profilesToCollect);
                 }

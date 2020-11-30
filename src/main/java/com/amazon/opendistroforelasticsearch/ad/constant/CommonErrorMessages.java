@@ -18,6 +18,7 @@ package com.amazon.opendistroforelasticsearch.ad.constant;
 public class CommonErrorMessages {
     public static final String AD_ID_MISSING_MSG = "AD ID is missing";
     public static final String MODEL_ID_MISSING_MSG = "Model ID is missing";
+    public static final String AD_TASK_ID_MISSING_MSG = "AD task ID is missing";
     public static final String WAIT_ERR_MSG = "Exception in waiting for result";
     public static final String HASH_ERR_MSG = "Cannot find an RCF node.  Hashing does not work.";
     public static final String NO_CHECKPOINT_ERR_MSG = "No checkpoints found for model id ";

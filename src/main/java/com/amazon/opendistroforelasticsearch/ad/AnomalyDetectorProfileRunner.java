@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.util.Throwables;
@@ -77,13 +78,14 @@ public class AnomalyDetectorProfileRunner extends AbstractProfileRunner {
     private Client client;
     private NamedXContentRegistry xContentRegistry;
     private DiscoveryNodeFilterer nodeFilter;
+    private final ADTaskManager adTaskManager;
 
     public AnomalyDetectorProfileRunner(
-        Client client,
-        NamedXContentRegistry xContentRegistry,
-        DiscoveryNodeFilterer nodeFilter,
-        long requiredSamples
-    ) {
+            Client client,
+            NamedXContentRegistry xContentRegistry,
+            DiscoveryNodeFilterer nodeFilter,
+            long requiredSamples,
+            ADTaskManager adTaskManager) {
         super(requiredSamples);
         this.client = client;
         this.xContentRegistry = xContentRegistry;
@@ -91,6 +93,7 @@ public class AnomalyDetectorProfileRunner extends AbstractProfileRunner {
         if (requiredSamples <= 0) {
             throw new IllegalArgumentException("required samples should be a positive number, but was " + requiredSamples);
         }
+        this.adTaskManager = adTaskManager;
     }
 
     public void profile(String detectorId, ActionListener<DetectorProfile> listener, Set<DetectorProfileName> profilesToCollect) {
@@ -118,6 +121,10 @@ public class AnomalyDetectorProfileRunner extends AbstractProfileRunner {
                 ) {
                     ensureExpectedToken(XContentParser.Token.START_OBJECT, xContentParser.nextToken(), xContentParser);
                     AnomalyDetector detector = AnomalyDetector.parse(xContentParser, detectorId);
+                    if (!detector.isRealTimeDetector() && profilesToCollect.contains(DetectorProfileName.AD_TASK)) {
+                        adTaskManager.getTaskProfile(detectorId, listener);
+                        return;
+                    }
                     boolean isMultiEntityDetector = detector.isMultientityDetector();
 
                     int totalResponsesToWait = 0;

@@ -176,14 +176,17 @@ public class ADBatchTaskRunner {
     public void run(ADTask adTask, Task task, TransportService transportService, ActionListener<ADBatchAnomalyResultResponse> listener) {
         Map<String, Object> updatedFields = new HashMap<>();
         updatedFields.put(STATE_FIELD, ADTaskState.INIT.name());
+        updatedFields.put(INIT_PROGRESS_FIELD, 0.0f);
         adTaskManager.updateADTask(adTask.getTaskId(), updatedFields,
                 ActionListener.wrap(r -> {
                     getNodeStats(adTask, ActionListener.wrap(node -> {
                         if (clusterService.localNode().getId().equals(node.getId())) {
                             // Execute batch task locally
+                            logger.info("execute task {} locally on node {} for detector {}", adTask.getTaskId(), node.getId(), adTask.getDetectorId());
                             startADBatchTask(adTask, task, listener);
                         } else {
                             // Execute batch task remotely
+                            logger.info("execute task {} remotely on node {} for detector {}", adTask.getTaskId(), node.getId(), adTask.getDetectorId());
                             transportService
                                     .sendRequest(
                                             node,
@@ -205,8 +208,6 @@ public class ADBatchTaskRunner {
         ADStatsRequest adStatsRequest = new ADStatsRequest(dataNodes);
         adStatsRequest.addAll(ImmutableSet.of(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName()));
 
-        DiscoveryNode localNode = clusterService.localNode();
-        String id = localNode.getId();
         client.execute(ADStatsNodesAction.INSTANCE, adStatsRequest, ActionListener.wrap(adStatsResponse -> {
             List<ADStatsNodeResponse> candidateNodeResponse = adStatsResponse
                 .getNodes()
@@ -244,29 +245,32 @@ public class ADBatchTaskRunner {
             }
             threadPool.executor(AD_BATCh_TASK_THREAD_POOL_NAME).execute(() -> {
                 try {
-                    executeADBatchTask(adTask, task, listener);
+//                    executeADBatchTask(adTask, task, listener);
+                    executeADBatchTask(adTask, task);
                 } catch (Exception e) {
-                    listener.onFailure(e);
+//                    listener.onFailure(e);
+                    adTaskManager.handleADTaskException(adTask, e);
                 }
             });
+            listener.onResponse(new ADBatchAnomalyResultResponse("Task started on node " + clusterService.localNode().getId()));
         } catch (Exception e) {
             logger.error("Fail to start AD batch task " + adTask.getTaskId(), e);
             listener.onFailure(e);
         }
     }
 
-    private void executeADBatchTask(ADTask adTask, Task task,
-                                    ActionListener<ADBatchAnomalyResultResponse> actionListener) {
+    private void executeADBatchTask(ADTask adTask, Task task/*,ActionListener<ADBatchAnomalyResultResponse> actionListener*/) {
         String taskId = adTask.getTaskId();
 
         // wrap original listener to process before return response/failure: 1.clean cache 2.track task stats
-        ActionListener<ADBatchAnomalyResultResponse> listener = wrappedListener(taskId, actionListener);
+        ActionListener<ADBatchAnomalyResultResponse> listener = wrappedListener(adTask);
 
         // every put action will check if exceeds task limitation, so no need to
         // call checkBatchTaskLimitation() here
-        adBatchTaskCache.putAdTransportTask(taskId, (ADTranspoertTask)task);
         adStats.getStat(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName()).increment();
         adStats.getStat(StatNames.AD_TOTAL_BATCH_TASK_EXECUTION_COUNT.getName()).increment();
+        adBatchTaskCache.put(adTask);
+        adBatchTaskCache.putAdTransportTask(taskId, (ADTranspoertTask)task);
 
         // check if circuit breaker is open
         if (adCircuitBreakerService.isOpen()) {
@@ -288,12 +292,13 @@ public class ADBatchTaskRunner {
         runFirstPiece(adTask, executeStartTime, listener);
     }
 
-    private ActionListener<ADBatchAnomalyResultResponse> wrappedListener(String taskId, ActionListener<ADBatchAnomalyResultResponse> actionListener) {
+    private ActionListener<ADBatchAnomalyResultResponse> wrappedListener(ADTask adTask/*, ActionListener<ADBatchAnomalyResultResponse> actionListener*/) {
         // wrap original listener to process before return response/failure: 1.clean cache 2.track task stats
+        String taskId = adTask.getTaskId();
         ActionListener<ADBatchAnomalyResultResponse> listener = ActionListener.wrap(response -> {
             adBatchTaskCache.remove(taskId);
             adStats.getStat(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName()).decrement();
-            actionListener.onResponse(response);
+//            actionListener.onResponse(response);
         }, e -> {
             adBatchTaskCache.remove(taskId);
             adStats.getStat(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName()).decrement();
@@ -302,7 +307,8 @@ public class ADBatchTaskRunner {
             } else if (ExceptionUtil.isServerError(e)) {
                 adStats.getStat(StatNames.AD_BATCH_TASK_FAILURE_COUNT.getName()).increment();
             }
-            actionListener.onFailure(e);
+//            actionListener.onFailure(e);
+            adTaskManager.handleADTaskException(adTask, e);
         });
         return listener;
     }
