@@ -532,7 +532,7 @@ public class ADTaskManager {
         if (exception instanceof ReceiveTimeoutTransportException) {
             //TODO: handle timeout exception
             logger.error("Timeout to execute AD task", exception);
-            updatedFields.pgetTaskProfile1ut(ERROR_FIELD, exception.getMessage());
+            updatedFields.put(ERROR_FIELD, exception.getMessage());
         } else if (exception instanceof TaskCancelledException) {
             logger.error("AD task cancelled: " + adTask.getTaskId());
             state = ADTaskState.STOPPED.name();
