@@ -40,22 +40,22 @@ import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorS
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_TREES;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.TIME_DECAY;
 
-public class ADBatchTaskCache {
+public class ADTaskCache {
 
-    private final Map<String, ADBatchTaskModel> taskModels;
+    private final Map<String, ADBatchTaskCacheEntity> taskCaches;
     private volatile Integer maxAdBatchTaskPerNode;
 
-    public ADBatchTaskCache(Settings settings, ClusterService clusterService) {
+    public ADTaskCache(Settings settings, ClusterService clusterService) {
         this.maxAdBatchTaskPerNode = MAX_BATCH_TASK_PER_NODE.get(settings);
         clusterService
                 .getClusterSettings()
                 .addSettingsUpdateConsumer(MAX_BATCH_TASK_PER_NODE, it -> maxAdBatchTaskPerNode = it);
-        taskModels = new ConcurrentHashMap<>();
+        taskCaches = new ConcurrentHashMap<>();
     }
 
     public RandomCutForest getOrCreateRcfModel(String taskId, int shingleSize, int enabledFeatureSize) {
-        ADBatchTaskModel taskModel = getOrThrow(taskId);
-        if (taskModel.getRcfModel() == null) {
+        ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
+        if (taskCache.getRcfModel() == null) {
             RandomCutForest rcf = RandomCutForest
                     .builder()
                     .dimensions(shingleSize * enabledFeatureSize)
@@ -65,10 +65,10 @@ public class ADBatchTaskCache {
                     .outputAfter(NUM_MIN_SAMPLES)
                     .parallelExecutionEnabled(false)
                     .build();
-            taskModel.setRcfModel(rcf);
-            taskModel.setShingle(new ArrayDeque<>(shingleSize));
+            taskCache.setRcfModel(rcf);
+            taskCache.setShingle(new ArrayDeque<>(shingleSize));
         }
-        return taskModel.getRcfModel();
+        return taskCache.getRcfModel();
     }
 
     public RandomCutForest getRcfModel(String taskId) {
@@ -79,8 +79,8 @@ public class ADBatchTaskCache {
     }
 
     public ThresholdingModel getOrCreateThresholdModel(String taskId) {
-        ADBatchTaskModel taskModel = getOrThrow(taskId);
-        if (taskModel.getThresholdModel() == null) {
+        ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
+        if (taskCache.getThresholdModel() == null) {
             ThresholdingModel thresholdModel = new HybridThresholdingModel(
                     AnomalyDetectorSettings.THRESHOLD_MIN_PVALUE,
                     AnomalyDetectorSettings.THRESHOLD_MAX_RANK_ERROR,
@@ -89,19 +89,19 @@ public class ADBatchTaskCache {
                     AnomalyDetectorSettings.THRESHOLD_DOWNSAMPLES,
                     AnomalyDetectorSettings.THRESHOLD_MAX_SAMPLES
             );
-            taskModel.setThresholdModel(thresholdModel);
-            taskModel.setThresholdModelTrainingData(new ArrayList<>());
-            taskModel.setThresholdModelTrained(false);
+            taskCache.setThresholdModel(thresholdModel);
+            taskCache.setThresholdModelTrainingData(new ArrayList<>());
+            taskCache.setThresholdModelTrained(false);
         }
-        return taskModel.getThresholdModel();
+        return taskCache.getThresholdModel();
     }
 
     public List<Double> getThresholdTrainingData(String taskId) {
-        ADBatchTaskModel taskModel = getOrThrow(taskId);
-        if (taskModel.getThresholdModelTrainingData() == null) {
-            taskModel.setThresholdModelTrainingData(new ArrayList<>());
+        ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
+        if (taskCache.getThresholdModelTrainingData() == null) {
+            taskCache.setThresholdModelTrainingData(new ArrayList<>());
         }
-        return taskModel.getThresholdModelTrainingData();
+        return taskCache.getThresholdModelTrainingData();
     }
 
     public boolean isThresholdModelTrained(String taskId) {
@@ -115,11 +115,11 @@ public class ADBatchTaskCache {
         if (!contains(taskId)) {
             throw new IllegalArgumentException("Task not in cache");
         }
-        ADBatchTaskModel taskModel = get(taskId);
-        taskModel.setThresholdModelTrained(trained);
+        ADBatchTaskCacheEntity taskCache = get(taskId);
+        taskCache.setThresholdModelTrained(trained);
         if (trained) {
-            taskModel.getThresholdModelTrainingData().clear();
-            taskModel.setThresholdModelTrainingData(null);
+            taskCache.getThresholdModelTrainingData().clear();
+            taskCache.setThresholdModelTrainingData(null);
         }
     }
 
@@ -131,8 +131,8 @@ public class ADBatchTaskCache {
     }
 
     public void putAdTransportTask(String taskId, ADTranspoertTask task) {
-        ADBatchTaskModel taskModel = getOrThrow(taskId);
-        taskModel.setAdTranspoertTask(task);
+        ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
+        taskCache.setAdTranspoertTask(task);
     }
 
     public ADTranspoertTask getAdTransportTask(String taskId) {
@@ -143,37 +143,37 @@ public class ADBatchTaskCache {
     }
 
     public int getTaskNumber() {
-        return taskModels.size();
+        return taskCaches.size();
     }
 
     public boolean contains(String taskId) {
-        return taskModels.containsKey(taskId);
+        return taskCaches.containsKey(taskId);
     }
 
     public boolean containsTaskOfDetector(String detectorId) {
-        long count = taskModels.entrySet().stream().filter(entry -> Objects.equals(detectorId, entry.getValue().getDetectorId())).count();
+        long count = taskCaches.entrySet().stream().filter(entry -> Objects.equals(detectorId, entry.getValue().getDetectorId())).count();
         return count > 0;
     }
 
-    public ADBatchTaskModel get(String taskId) {
-        return taskModels.get(taskId);
+    public ADBatchTaskCacheEntity get(String taskId) {
+        return taskCaches.get(taskId);
     }
 
-    private ADBatchTaskModel getOrThrow(String taskId) {
-        ADBatchTaskModel model = taskModels.get(taskId);
-        if (model == null) {
+    private ADBatchTaskCacheEntity getOrThrow(String taskId) {
+        ADBatchTaskCacheEntity taskCache = taskCaches.get(taskId);
+        if (taskCache == null) {
             throw new IllegalArgumentException("Task not in cache");
         }
-        return model;
+        return taskCache;
     }
 
-    public ADBatchTaskModel put(ADTask adTask) {
+    public ADBatchTaskCacheEntity put(ADTask adTask) {
         String taskId = adTask.getTaskId();
         if (contains(taskId)) {
             throw new IllegalArgumentException("AD task is already running");
         }
         allowToPutNewTask();
-        return taskModels.put(taskId, new ADBatchTaskModel(adTask.getDetectorId()));
+        return taskCaches.put(taskId, new ADBatchTaskCacheEntity(adTask.getDetectorId()));
     }
 
 //    public ADBatchTaskModel putIfAbsent(String taskId) {
@@ -184,7 +184,7 @@ public class ADBatchTaskCache {
 //    }
 
     public void remove(String taskId) {
-        taskModels.remove(taskId);
+        taskCaches.remove(taskId);
     }
 
     /**
@@ -203,5 +203,14 @@ public class ADBatchTaskCache {
             String error = "Can't run more than " + maxAdBatchTaskPerNode + " historical detector per node";
             throw new LimitExceededException(error);
         }
+    }
+
+    public boolean isCancelled(String taskId) {
+        ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
+        return taskCache.isCancelled();
+    }
+
+    public void cancel(String taskId) {
+        getOrThrow(taskId).cancel();
     }
 }

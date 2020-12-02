@@ -15,7 +15,7 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
-import com.amazon.opendistroforelasticsearch.ad.model.ADTaskProfile;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskCancellationState;
 import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.elasticsearch.action.FailedNodeException;
 import org.elasticsearch.action.support.ActionFilters;
@@ -29,13 +29,13 @@ import org.elasticsearch.transport.TransportService;
 import java.io.IOException;
 import java.util.List;
 
-public class ADTaskProfileTransportAction extends
-        TransportNodesAction<ADTaskProfileRequest, ADTaskProfileResponse, ADTaskProfileNodeRequest, ADTaskProfileNodeResponse> {
+public class ADCancelTaskTransportAction extends
+        TransportNodesAction<ADCancelTaskRequest, ADCancelTaskResponse, ADCancelTaskNodeRequest, ADCancelTaskNodeResponse> {
 
     private ADTaskManager adTaskManager;
 
     @Inject
-    public ADTaskProfileTransportAction(
+    public ADCancelTaskTransportAction(
             ThreadPool threadPool,
             ClusterService clusterService,
             TransportService transportService,
@@ -43,39 +43,38 @@ public class ADTaskProfileTransportAction extends
             ADTaskManager adTaskManager
     ) {
         super(
-                ADTaskProfileAction.NAME,
+                ADCancelTaskAction.NAME,
                 threadPool,
                 clusterService,
                 transportService,
                 actionFilters,
-                ADTaskProfileRequest::new,
-                ADTaskProfileNodeRequest::new,
+                ADCancelTaskRequest::new,
+                ADCancelTaskNodeRequest::new,
                 ThreadPool.Names.MANAGEMENT,
-                ADTaskProfileNodeResponse.class
+                ADCancelTaskNodeResponse.class
         );
         this.adTaskManager = adTaskManager;
     }
 
 
     @Override
-    protected ADTaskProfileResponse newResponse(ADTaskProfileRequest request, List<ADTaskProfileNodeResponse> responses, List<FailedNodeException> failures) {
-        return new ADTaskProfileResponse(clusterService.getClusterName(), responses, failures);
+    protected ADCancelTaskResponse newResponse(ADCancelTaskRequest request, List<ADCancelTaskNodeResponse> responses, List<FailedNodeException> failures) {
+        return new ADCancelTaskResponse(clusterService.getClusterName(), responses, failures);
     }
 
     @Override
-    protected ADTaskProfileNodeRequest newNodeRequest(ADTaskProfileRequest request) {
-        return new ADTaskProfileNodeRequest(request);
+    protected ADCancelTaskNodeRequest newNodeRequest(ADCancelTaskRequest request) {
+        return new ADCancelTaskNodeRequest(request);
     }
 
     @Override
-    protected ADTaskProfileNodeResponse newNodeResponse(StreamInput in) throws IOException {
-        return new ADTaskProfileNodeResponse(in);
+    protected ADCancelTaskNodeResponse newNodeResponse(StreamInput in) throws IOException {
+        return new ADCancelTaskNodeResponse(in);
     }
 
     @Override
-    protected ADTaskProfileNodeResponse nodeOperation(ADTaskProfileNodeRequest request) {
-        ADTaskProfile adTaskProfile = adTaskManager.getTaskProfile(request.getAdTaskId());
-
-        return new ADTaskProfileNodeResponse(clusterService.localNode(), adTaskProfile);
+    protected ADCancelTaskNodeResponse nodeOperation(ADCancelTaskNodeRequest request) {
+        ADTaskCancellationState state = adTaskManager.cancelTask(request.getAdTaskId());
+        return new ADCancelTaskNodeResponse(clusterService.localNode(), state);
     }
 }

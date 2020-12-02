@@ -23,8 +23,9 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-public class ADBatchTaskModel {
+public class ADBatchTaskCacheEntity {
     private final String detectorId;
     private RandomCutForest rcfModel;
     private Deque<Map.Entry<Long, Optional<double[]>>> shingle; //TODO, clean when finish/fail/stop
@@ -32,8 +33,9 @@ public class ADBatchTaskModel {
     private boolean thresholdModelTrained;
     private List<Double> thresholdModelTrainingData; // TODO, check if this class is singleton or not
     private ADTranspoertTask adTranspoertTask;
+    private AtomicBoolean cancelled = new AtomicBoolean(false);
 
-    public ADBatchTaskModel(String detectorId) {
+    public ADBatchTaskCacheEntity(String detectorId) {
         this.detectorId = detectorId;
     }
 
@@ -87,5 +89,13 @@ public class ADBatchTaskModel {
 
     public void setAdTranspoertTask(ADTranspoertTask adTranspoertTask) {
         this.adTranspoertTask = adTranspoertTask;
+    }
+
+    public boolean isCancelled() {
+        return cancelled.get();
+    }
+
+    public void cancel() {
+        this.cancelled.compareAndSet(false, true);
     }
 }

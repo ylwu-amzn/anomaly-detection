@@ -223,6 +223,7 @@ public class IndexAnomalyDetectorActionHandler {
             } else {
                 adTaskManager.getLatestADTask(detectorId, (adTask) -> {
                     if (adTask.isPresent() && adTaskManager.isADTaskRunning(adTask.get())) {
+                        // can't update detector if there is AD task running
                         listener.onFailure(new ElasticsearchStatusException("Detector is running", RestStatus.INTERNAL_SERVER_ERROR));
                     } else {
                         validateDetector(existingDetector);

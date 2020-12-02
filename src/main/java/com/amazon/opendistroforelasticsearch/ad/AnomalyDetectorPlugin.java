@@ -29,7 +29,9 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.amazon.opendistroforelasticsearch.ad.task.ADBatchTaskCache;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskCache;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADCancelTaskAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADCancelTaskTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileTransportAction;
 import org.apache.logging.log4j.LogManager;
@@ -186,11 +188,11 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
     public static final String AD_THREAD_POOL_NAME = "ad-threadpool";
     public static final String AD_JOB_TYPE = "opendistro_anomaly_detector";
     public static final String AD_THREAD_POOL_PREFIX = "opendistro.ad.";
-    public static final String AD_BATCh_TASK_THREAD_POOL_NAME = "ad-batch-task-threadpool";
+    public static final String AD_BATCH_TASK_THREAD_POOL_NAME = "ad-batch-task-threadpool";
     private static Gson gson;
     private AnomalyDetectionIndices anomalyDetectionIndices;
     private AnomalyDetectorRunner anomalyDetectorRunner;
-    private ADBatchTaskCache adBatchTaskCache;
+    private ADTaskCache adBatchTaskCache;
     private ADTaskManager adTaskManager;
     private ADBatchTaskRunner adBatchTaskRunner;
     private Client client;
@@ -508,8 +510,9 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             xContentRegistry,
             stateManager
         );
-        adBatchTaskCache = new ADBatchTaskCache(settings, clusterService);
+        adBatchTaskCache = new ADTaskCache(settings, clusterService);
         adTaskManager = new ADTaskManager(
+            settings,
             threadPool,
             clusterService,
             client,
@@ -598,10 +601,10 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 ),
                 new FixedExecutorBuilder(
                     settings,
-                    AD_BATCh_TASK_THREAD_POOL_NAME,
-                    Math.max(1, EsExecutors.allocatedProcessors(settings) / 4),
+                    AD_BATCH_TASK_THREAD_POOL_NAME,
+                    Math.max(1, EsExecutors.allocatedProcessors(settings) / 8),
                     AnomalyDetectorSettings.AD_THEAD_POOL_QUEUE_SIZE,
-                    AD_THREAD_POOL_PREFIX + AD_BATCh_TASK_THREAD_POOL_NAME
+                    AD_THREAD_POOL_PREFIX + AD_BATCH_TASK_THREAD_POOL_NAME
                 )
             );
     }
@@ -680,7 +683,8 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 new ActionHandler<>(SearchAnomalyDetectorInfoAction.INSTANCE, SearchAnomalyDetectorInfoTransportAction.class),
                 new ActionHandler<>(ADBatchAnomalyResultAction.INSTANCE, ADBatchAnomalyResultTransportAction.class),
                 new ActionHandler<>(ADBatchTaskRemoteExecutionAction.INSTANCE, ADBatchTaskRemoteExecutionTransportAction.class),
-                new ActionHandler<>(ADTaskProfileAction.INSTANCE, ADTaskProfileTransportAction.class)
+                new ActionHandler<>(ADTaskProfileAction.INSTANCE, ADTaskProfileTransportAction.class),
+                new ActionHandler<>(ADCancelTaskAction.INSTANCE, ADCancelTaskTransportAction.class)
             );
     }
 

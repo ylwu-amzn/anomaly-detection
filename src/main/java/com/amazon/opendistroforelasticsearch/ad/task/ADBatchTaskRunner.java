@@ -83,7 +83,7 @@ import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
-import static com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorPlugin.AD_BATCh_TASK_THREAD_POOL_NAME;
+import static com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorPlugin.AD_BATCH_TASK_THREAD_POOL_NAME;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.CURRENT_PIECE_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.ERROR_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.INIT_PROGRESS_FIELD;
@@ -118,7 +118,7 @@ public class ADBatchTaskRunner {
     private final AnomalyResultBulkIndexHandler anomalyResultBulkIndexHandler;
     private final IndexNameExpressionResolver indexNameExpressionResolver;
 
-    private final ADBatchTaskCache adBatchTaskCache;
+    private final ADTaskCache adBatchTaskCache;
     private final TransportRequestOptions option; //TODO, test this config
 
     private volatile Integer maxAdBatchTaskPerNode;
@@ -137,7 +137,7 @@ public class ADBatchTaskRunner {
             ADTaskManager adTaskManager,
             ADStats adStats,
             AnomalyResultBulkIndexHandler anomalyResultBulkIndexHandler,
-            ADBatchTaskCache adBatchTaskCache) {
+            ADTaskCache adBatchTaskCache) {
         this.threadPool = threadPool;
         this.clusterService = clusterService;
         this.client = client;
@@ -243,27 +243,28 @@ public class ADBatchTaskRunner {
             if (!EnabledSetting.isADPluginEnabled()) {
                 throw new EndRunException(adTask.getDetectorId(), CommonErrorMessages.DISABLED_ERR_MSG, true);
             }
-            threadPool.executor(AD_BATCh_TASK_THREAD_POOL_NAME).execute(() -> {
+            threadPool.executor(AD_BATCH_TASK_THREAD_POOL_NAME).execute(() -> {
                 try {
-                    executeADBatchTask(adTask, task, listener);
-//                    executeADBatchTask(adTask, task);
+//                    executeADBatchTask(adTask, task, listener);
+                    executeADBatchTask(adTask, task);
                 } catch (Exception e) {
                     listener.onFailure(e);
                     adTaskManager.handleADTaskException(adTask, e);
                 }
             });
-//            listener.onResponse(new ADBatchAnomalyResultResponse("Task started on node " + clusterService.localNode().getId()));
+            listener.onResponse(new ADBatchAnomalyResultResponse("Task started on node " + clusterService.localNode().getId()));
         } catch (Exception e) {
             logger.error("Fail to start AD batch task " + adTask.getTaskId(), e);
             listener.onFailure(e);
         }
     }
 
-    private void executeADBatchTask(ADTask adTask, Task task, ActionListener<ADBatchAnomalyResultResponse> actionListener) {
+    private void executeADBatchTask(ADTask adTask, Task task/*,ActionListener<ADBatchAnomalyResultResponse> actionListener*/) {
         String taskId = adTask.getTaskId();
 
         // wrap original listener to process before return response/failure: 1.clean cache 2.track task stats
-        ActionListener<ADBatchAnomalyResultResponse> listener = wrappedListener(adTask, actionListener);
+//        ActionListener<ADBatchAnomalyResultResponse> listener = wrappedListener(adTask, actionListener);
+        ActionListener<ADBatchAnomalyResultResponse> listener = wrappedListener(adTask);
 
         // every put action will check if exceeds task limitation, so no need to
         // call checkBatchTaskLimitation() here
@@ -292,13 +293,13 @@ public class ADBatchTaskRunner {
         runFirstPiece(adTask, executeStartTime, listener);
     }
 
-    private ActionListener<ADBatchAnomalyResultResponse> wrappedListener(ADTask adTask, ActionListener<ADBatchAnomalyResultResponse> actionListener) {
+    private ActionListener<ADBatchAnomalyResultResponse> wrappedListener(ADTask adTask/*, ActionListener<ADBatchAnomalyResultResponse> actionListener*/) {
         // wrap original listener to process before return response/failure: 1.clean cache 2.track task stats
         String taskId = adTask.getTaskId();
         ActionListener<ADBatchAnomalyResultResponse> listener = ActionListener.wrap(response -> {
             adBatchTaskCache.remove(taskId);
             adStats.getStat(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName()).decrement();
-            actionListener.onResponse(response);
+//            actionListener.onResponse(response);
         }, e -> {
             adBatchTaskCache.remove(taskId);
             adStats.getStat(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName()).decrement();
@@ -307,7 +308,7 @@ public class ADBatchTaskRunner {
             } else if (ExceptionUtil.isServerError(e)) {
                 adStats.getStat(StatNames.AD_BATCH_TASK_FAILURE_COUNT.getName()).increment();
             }
-            actionListener.onFailure(e);
+//            actionListener.onFailure(e);
             adTaskManager.handleADTaskException(adTask, e);
         });
         return listener;
@@ -462,7 +463,7 @@ public class ADBatchTaskRunner {
             logger.error("Fail to execute onFeatureResponseLocalRCF", exception);
             listener.onFailure(exception);
         });
-        ThreadedActionListener threadedActionListener = new ThreadedActionListener<>(logger, threadPool, AD_BATCh_TASK_THREAD_POOL_NAME, actionListener, false);
+        ThreadedActionListener threadedActionListener = new ThreadedActionListener<>(logger, threadPool, AD_BATCH_TASK_THREAD_POOL_NAME, actionListener, false);
 
         featureManager.getFeatureDataPoints(adTask.getDetector(), pieceStartTime,pieceEndTime, threadedActionListener);
     }
@@ -567,7 +568,7 @@ public class ADBatchTaskRunner {
         anomalyResultBulkIndexHandler
                 .bulkIndexAnomalyResult(
                         anomalyResults,
-                        new ThreadedActionListener<>(logger, threadPool, AD_BATCh_TASK_THREAD_POOL_NAME,
+                        new ThreadedActionListener<>(logger, threadPool, AD_BATCH_TASK_THREAD_POOL_NAME,
                                 ActionListener
                                         .wrap(response -> {
                                             try {
@@ -720,9 +721,16 @@ public class ADBatchTaskRunner {
         return true;
     }
 
+//    private void checkIfADTaskCancelled(String taskId) {
+//        ADTranspoertTask adTranspoertTask = adBatchTaskCache.getAdTransportTask(taskId);
+//        if (adTranspoertTask != null && adTranspoertTask.isCancelled()) {
+//            adBatchTaskCache.remove(taskId);
+//            throw new TaskCancelledException("cancelled");
+//        }
+//    }
+
     private void checkIfADTaskCancelled(String taskId) {
-        ADTranspoertTask adTranspoertTask = adBatchTaskCache.getAdTransportTask(taskId);
-        if (adTranspoertTask != null && adTranspoertTask.isCancelled()) {
+        if (adBatchTaskCache.contains(taskId) && adBatchTaskCache.isCancelled(taskId)) {
             adBatchTaskCache.remove(taskId);
             throw new TaskCancelledException("cancelled");
         }
