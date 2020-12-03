@@ -276,7 +276,7 @@ public class ADTaskManager {
     }
 
     private boolean lastUpdateTimeExpired(ADTask adTask) {
-        return adTask.getLastUpdateTime().plus(pieceIntervalSeconds, ChronoUnit.SECONDS).isBefore(Instant.now());
+        return adTask.getLastUpdateTime().plus(2*pieceIntervalSeconds, ChronoUnit.SECONDS).isBefore(Instant.now());
     }
 
 //    private void getRunningAdTask(ADTask adTask, Consumer<List<TaskInfo>> consumer, ActionListener listener) {

@@ -638,7 +638,7 @@ public class ADBatchTaskRunner {
                                     )
                     );
         } else {
-            logger.info("all pieces finished for task {}, detector", taskId, adTask.getDetectorId());
+            logger.info("all pieces finished for task {}, detector {}", taskId, adTask.getDetectorId());
             adBatchTaskCache.remove(taskId);
             adTaskManager
                     .updateADTask(
