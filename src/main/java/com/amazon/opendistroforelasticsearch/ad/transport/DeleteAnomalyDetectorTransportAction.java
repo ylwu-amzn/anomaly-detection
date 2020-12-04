@@ -102,7 +102,6 @@ public class DeleteAnomalyDetectorTransportAction extends HandledTransportAction
                     }, listener),
                     listener
                 );
-
         } catch (Exception e) {
             LOG.error(e);
             listener.onFailure(e);

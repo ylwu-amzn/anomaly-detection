@@ -1,0 +1,28 @@
+@startuml
+'participant User #LightGreen
+'autonumber
+User -> "AD Kibana Plugin": create historical detector
+"AD Kibana Plugin" -> "AD ES Plugin": create historical detector
+
+"AD ES Plugin" --> "AD Kibana Plugin": status: ok
+"AD Kibana Plugin" --> User: detector created successfully
+
+User -> "AD Kibana Plugin": start detector
+"AD Kibana Plugin" -> "AD ES Plugin": start detector
+"AD ES Plugin" -> "AD ES Plugin": create task
+"AD ES Plugin" --> "AD Kibana Plugin": task id
+"AD Kibana Plugin" --> User: detector started successfully
+
+loop poll until task finished
+    "AD Kibana Plugin" -> "AD ES Plugin": poll task progress/anomaly results
+    "AD ES Plugin" --> "AD Kibana Plugin": task/anomaly results
+    "AD Kibana Plugin" --> User: task state/progress, anomaly result
+    "AD ES Plugin" -> "AD ES Plugin": run task by pieces
+end
+
+User -> "AD Kibana Plugin": stop detector
+"AD Kibana Plugin" -> "AD ES Plugin": stop detector
+"AD ES Plugin" --> "AD Kibana Plugin": status: ok
+"AD Kibana Plugin" --> User: detector stopped
+
+@enduml

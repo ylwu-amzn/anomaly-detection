@@ -1,0 +1,48 @@
+@startuml
+'participant User #LightGreen
+'autonumber
+
+'this line can make sure the Client always show as first entity
+participant Client
+
+box "Coordinate node" #LightBlue
+	participant "REST API Handler"
+	participant "TransportAction"
+	participant "TaskManager"
+end box
+
+box "Worker node" #LightPink
+	participant "RemoteTransportAction"
+	participant "BatchTaskRunner"
+	participant "Cache"
+	participant "FeatureManager"
+	participant "RCF&Threshold Model"
+end box
+
+Client -> "REST API Handler": start historical detector
+"REST API Handler" -> "TransportAction": start historical detector
+"TransportAction" -> "TaskManager": start historical detector
+"TaskManager" -> "TaskManager": create task
+"TaskManager" --> "TransportAction": task id
+"TransportAction" --> "REST API Handler": task id
+"REST API Handler" --> Client: task id
+
+"TaskManager" -> "RemoteTransportAction": dispatch task to worker node
+note right
+ It's possible to run locally
+ Just use remote execution as example
+end note
+"RemoteTransportAction" --> "TaskManager": status: ok
+"RemoteTransportAction" -> "BatchTaskRunner": run task
+"BatchTaskRunner" -> "Cache": cache task
+loop run piece by piece until reach the end date
+    "BatchTaskRunner" -> "FeatureManager": query feature data by batch
+    "FeatureManager" --> "BatchTaskRunner": aggregated feature data
+    "BatchTaskRunner" -> "Cache": cache shingle
+    "BatchTaskRunner" -> "RCF&Threshold Model": train model if not in cache
+    "RCF&Threshold Model" --> "BatchTaskRunner": anomaly result
+    "BatchTaskRunner" -> Cache: cache model if not exist
+    "BatchTaskRunner" -> "BatchTaskRunner": persist anomaly result
+    "BatchTaskRunner" -> "BatchTaskRunner": update task state/progress
+end
+@enduml

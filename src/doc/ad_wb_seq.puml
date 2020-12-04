@@ -1,0 +1,14 @@
+@startuml
+TaskManager -> ESNodeClient: create task
+ESNodeClient --> TaskManager: Creation Response
+
+TaskManager -> TransportService: gather all node's state
+TransportService --> TaskManager: task stats
+
+TaskManager -> TaskManager: find worker node to run task
+
+TaskManager -> TransportService: send task to worker node
+
+TaskRunner -> TaskRunner: split all data into pieces and run
+
+@enduml
