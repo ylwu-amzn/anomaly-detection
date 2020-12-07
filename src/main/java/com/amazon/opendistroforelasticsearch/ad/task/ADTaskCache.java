@@ -15,13 +15,15 @@
 
 package com.amazon.opendistroforelasticsearch.ad.task;
 
+import com.amazon.opendistroforelasticsearch.ad.MemoryTracker;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException;
 import com.amazon.opendistroforelasticsearch.ad.ml.HybridThresholdingModel;
 import com.amazon.opendistroforelasticsearch.ad.ml.ThresholdingModel;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
-import com.amazon.opendistroforelasticsearch.ad.transport.ADTranspoertTask;
 import com.amazon.randomcutforest.RandomCutForest;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Settings;
 
@@ -34,23 +36,28 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static com.amazon.opendistroforelasticsearch.ad.MemoryTracker.Origin.HISTORICAL_SINGLE_ENTITY_DETECTOR;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_BATCH_TASK_PER_NODE;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_MIN_SAMPLES;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_SAMPLES_PER_TREE;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_TREES;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.THRESHOLD_MODEL_TRAINING_SIZE;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.TIME_DECAY;
 
 public class ADTaskCache {
 
     private final Map<String, ADBatchTaskCacheEntity> taskCaches;
     private volatile Integer maxAdBatchTaskPerNode;
+    private final MemoryTracker memoryTracker;
+    private final Logger logger = LogManager.getLogger(ADTaskCache.class);
 
-    public ADTaskCache(Settings settings, ClusterService clusterService) {
+    public ADTaskCache(Settings settings, ClusterService clusterService, MemoryTracker memoryTracker) {
         this.maxAdBatchTaskPerNode = MAX_BATCH_TASK_PER_NODE.get(settings);
         clusterService
                 .getClusterSettings()
                 .addSettingsUpdateConsumer(MAX_BATCH_TASK_PER_NODE, it -> maxAdBatchTaskPerNode = it);
         taskCaches = new ConcurrentHashMap<>();
+        this.memoryTracker = memoryTracker;
     }
 
     public RandomCutForest getOrCreateRcfModel(String taskId, int shingleSize, int enabledFeatureSize) {
@@ -90,7 +97,7 @@ public class ADTaskCache {
                     AnomalyDetectorSettings.THRESHOLD_MAX_SAMPLES
             );
             taskCache.setThresholdModel(thresholdModel);
-            taskCache.setThresholdModelTrainingData(new ArrayList<>());
+            taskCache.setThresholdModelTrainingData(new ArrayList<>(THRESHOLD_MODEL_TRAINING_SIZE));
             taskCache.setThresholdModelTrained(false);
         }
         return taskCache.getThresholdModel();
@@ -118,8 +125,12 @@ public class ADTaskCache {
         ADBatchTaskCacheEntity taskCache = get(taskId);
         taskCache.setThresholdModelTrained(trained);
         if (trained) {
+            int size = taskCache.getThresholdModelTrainingData().size();
+            long cacheSize = ADTaskResourceEstimator.maxTrainingDataMemorySize(size);
             taskCache.getThresholdModelTrainingData().clear();
             taskCache.setThresholdModelTrainingData(null);
+            taskCache.getCacheMemorySize().getAndAdd(-cacheSize);
+            memoryTracker.releaseMemory(ADTaskResourceEstimator.maxTrainingDataMemorySize(size), false, HISTORICAL_SINGLE_ENTITY_DETECTOR);
         }
     }
 
@@ -130,17 +141,17 @@ public class ADTaskCache {
         return get(taskId).getShingle();
     }
 
-    public void putAdTransportTask(String taskId, ADTranspoertTask task) {
-        ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
-        taskCache.setAdTranspoertTask(task);
-    }
+//    public void putAdTransportTask(String taskId, ADTranspoertTask task) {
+//        ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
+//        taskCache.setAdTranspoertTask(task);
+//    }
 
-    public ADTranspoertTask getAdTransportTask(String taskId) {
-        if (!contains(taskId)) {
-            return null;
-        }
-        return get(taskId).getAdTranspoertTask();
-    }
+//    public ADTranspoertTask getAdTransportTask(String taskId) {
+//        if (!contains(taskId)) {
+//            return null;
+//        }
+//        return get(taskId).getAdTranspoertTask();
+//    }
 
     public int getTaskNumber() {
         return taskCaches.size();
@@ -172,8 +183,22 @@ public class ADTaskCache {
         if (contains(taskId)) {
             throw new IllegalArgumentException("AD task is already running");
         }
-        allowToPutNewTask();
-        return taskCaches.put(taskId, new ADBatchTaskCacheEntity(adTask.getDetectorId()));
+        checkRunningTaskLimit();
+        long  neededCacheSize = calculateADTaskCacheSize(adTask);
+        if (!memoryTracker.canAllocate(neededCacheSize)) {
+            //TODO: tune the error message
+            throw new LimitExceededException("AD can't consume more memory than 10%");
+        }
+        memoryTracker.consumeMemory(neededCacheSize, false, HISTORICAL_SINGLE_ENTITY_DETECTOR);
+        ADBatchTaskCacheEntity cacheEntity = new ADBatchTaskCacheEntity(adTask.getDetectorId());
+        cacheEntity.getCacheMemorySize().getAndSet(neededCacheSize);
+        return taskCaches.put(taskId, cacheEntity);
+    }
+
+    private long calculateADTaskCacheSize(ADTask adTask) {
+        return memoryTracker.estimateModelSize(adTask.getDetector(), NUM_TREES)
+                + ADTaskResourceEstimator.maxTrainingDataMemorySize(THRESHOLD_MODEL_TRAINING_SIZE)
+                + ADTaskResourceEstimator.maxShingleMemorySize(adTask.getDetector().getShingleSize());
     }
 
 //    public ADBatchTaskModel putIfAbsent(String taskId) {
@@ -184,13 +209,16 @@ public class ADTaskCache {
 //    }
 
     public void remove(String taskId) {
-        taskCaches.remove(taskId);
+        if (contains(taskId)) {
+            memoryTracker.releaseMemory(get(taskId).getCacheMemorySize().get(), false, HISTORICAL_SINGLE_ENTITY_DETECTOR);
+            taskCaches.remove(taskId);
+        }
     }
 
     /**
      * check if current running batch task on current node exceeds max running task limitation.
      */
-    public void allowToPutNewTask() {
+    public void checkRunningTaskLimit() {
         checkTaskCount(maxAdBatchTaskPerNode);
     }
 

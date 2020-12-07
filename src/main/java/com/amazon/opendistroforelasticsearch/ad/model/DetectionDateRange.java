@@ -32,10 +32,6 @@ import com.amazon.opendistroforelasticsearch.ad.annotation.Generated;
 import com.amazon.opendistroforelasticsearch.ad.util.ParseUtils;
 import com.google.common.base.Objects;
 
-/**
- * Include result returned from RCF model and feature data.
- * TODO: fix rotating anomaly result index
- */
 public class DetectionDateRange implements ToXContentObject, Writeable {
 
     public static final String START_TIME_FIELD = "start_time";

@@ -16,7 +16,6 @@
 package com.amazon.opendistroforelasticsearch.ad.task;
 
 import com.amazon.opendistroforelasticsearch.ad.ml.ThresholdingModel;
-import com.amazon.opendistroforelasticsearch.ad.transport.ADTranspoertTask;
 import com.amazon.randomcutforest.RandomCutForest;
 
 import java.util.Deque;
@@ -24,16 +23,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class ADBatchTaskCacheEntity {
     private final String detectorId;
     private RandomCutForest rcfModel;
-    private Deque<Map.Entry<Long, Optional<double[]>>> shingle; //TODO, clean when finish/fail/stop
+    private Deque<Map.Entry<Long, Optional<double[]>>> shingle;
     private ThresholdingModel thresholdModel;
     private boolean thresholdModelTrained;
-    private List<Double> thresholdModelTrainingData; // TODO, check if this class is singleton or not
-    private ADTranspoertTask adTranspoertTask;
+    private List<Double> thresholdModelTrainingData;
     private AtomicBoolean cancelled = new AtomicBoolean(false);
+    private AtomicLong cacheMemorySize = new AtomicLong(0);
 
     public ADBatchTaskCacheEntity(String detectorId) {
         this.detectorId = detectorId;
@@ -83,12 +83,8 @@ public class ADBatchTaskCacheEntity {
         this.thresholdModelTrainingData = thresholdModelTrainingData;
     }
 
-    public ADTranspoertTask getAdTranspoertTask() {
-        return adTranspoertTask;
-    }
-
-    public void setAdTranspoertTask(ADTranspoertTask adTranspoertTask) {
-        this.adTranspoertTask = adTranspoertTask;
+    public AtomicLong getCacheMemorySize() {
+        return cacheMemorySize;
     }
 
     public boolean isCancelled() {

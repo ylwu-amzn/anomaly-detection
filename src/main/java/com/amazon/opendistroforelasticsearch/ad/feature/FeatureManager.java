@@ -192,7 +192,6 @@ public class FeatureManager implements CleanState {
     public void getFeatureDataPoints(AnomalyDetector detector, long startTime, long endTime, ActionListener<Map<Long, Optional<double[]>>> listener) {
         try {
             searchFeatureDao.getFeaturesForPeriodByBatch(detector, startTime, endTime, ActionListener.wrap(points -> {
-                // TODO: process missing values, by default missing values will not returned.
                 logger.info("features size: {}", points.size());
                 listener.onResponse(points);
             }, listener::onFailure));

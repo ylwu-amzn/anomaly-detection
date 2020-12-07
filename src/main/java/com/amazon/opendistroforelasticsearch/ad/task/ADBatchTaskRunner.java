@@ -24,6 +24,8 @@ import com.amazon.opendistroforelasticsearch.ad.common.exception.ResourceNotFoun
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
 import com.amazon.opendistroforelasticsearch.ad.feature.FeatureManager;
 import com.amazon.opendistroforelasticsearch.ad.feature.SinglePointFeatures;
+import com.amazon.opendistroforelasticsearch.ad.indices.ADIndex;
+import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.ml.ThresholdingModel;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyResult;
@@ -40,7 +42,6 @@ import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchTaskRemoteExecu
 import com.amazon.opendistroforelasticsearch.ad.transport.ADStatsNodeResponse;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADStatsNodesAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADStatsRequest;
-import com.amazon.opendistroforelasticsearch.ad.transport.ADTranspoertTask;
 import com.amazon.opendistroforelasticsearch.ad.transport.handler.AnomalyResultBulkIndexHandler;
 import com.amazon.opendistroforelasticsearch.ad.util.DiscoveryNodeFilterer;
 import com.amazon.opendistroforelasticsearch.ad.util.ExceptionUtil;
@@ -104,19 +105,18 @@ public class ADBatchTaskRunner {
 
     // TODO: test performance
     private final RateLimiter rateLimiter = RateLimiter.create(1);
-    // TODO: limit how many running tasks
 
     private final ThreadPool threadPool;
     private final Client client;
     private final ADStats adStats;
     private final DiscoveryNodeFilterer nodeFilter;
-    // TODO: limit running tasks
     private final ClusterService clusterService;
     private final FeatureManager featureManager;
     private final ADCircuitBreakerService adCircuitBreakerService;
     private final ADTaskManager adTaskManager;
     private final AnomalyResultBulkIndexHandler anomalyResultBulkIndexHandler;
     private final IndexNameExpressionResolver indexNameExpressionResolver;
+    private AnomalyDetectionIndices anomalyDetectionIndices;
 
     private final ADTaskCache adBatchTaskCache;
     private final TransportRequestOptions option; //TODO, test this config
@@ -135,6 +135,7 @@ public class ADBatchTaskRunner {
             ADCircuitBreakerService adCircuitBreakerService,
             FeatureManager featureManager,
             ADTaskManager adTaskManager,
+            AnomalyDetectionIndices anomalyDetectionIndices,
             ADStats adStats,
             AnomalyResultBulkIndexHandler anomalyResultBulkIndexHandler,
             ADTaskCache adBatchTaskCache) {
@@ -148,6 +149,7 @@ public class ADBatchTaskRunner {
         this.adCircuitBreakerService = adCircuitBreakerService;
         this.adTaskManager = adTaskManager;
         this.featureManager = featureManager;
+        this.anomalyDetectionIndices = anomalyDetectionIndices;
 
         this.option = TransportRequestOptions
             .builder()
@@ -271,7 +273,7 @@ public class ADBatchTaskRunner {
         adStats.getStat(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName()).increment();
         adStats.getStat(StatNames.AD_TOTAL_BATCH_TASK_EXECUTION_COUNT.getName()).increment();
         adBatchTaskCache.put(adTask);
-        adBatchTaskCache.putAdTransportTask(taskId, (ADTranspoertTask)task);
+//        adBatchTaskCache.putAdTransportTask(taskId, (ADTranspoertTask)task);
 
         // check if circuit breaker is open
         if (adCircuitBreakerService.isOpen()) {
@@ -323,8 +325,7 @@ public class ADBatchTaskRunner {
                     ImmutableMap
                         .of(
                             STATE_FIELD,
-                            //TODO: move to RUNNING state only RCF model passed initilization.
-                            ADTaskState.INIT.name(), //TODO, init_progress: total_updates/128
+                            ADTaskState.INIT.name(),
                             CURRENT_PIECE_FIELD,
                             adTask.getDetector().getDetectionDateRange().getStartTime().toEpochMilli(),
                                 TASK_PROGRESS_FIELD,
@@ -398,7 +399,6 @@ public class ADBatchTaskRunner {
                     })
                 );
         } catch (Exception exception) {
-            // TODO: handle exception in task manager, persist error
             listener.onFailure(exception);
         }
     }
@@ -516,8 +516,8 @@ public class ADBatchTaskRunner {
                         Instant.now(),
                         error,
                         null,
-                        null, //TODO, add user info
-                        null//TODO, add schema version
+                        adTask.getDetector().getUser(),
+                        anomalyDetectionIndices.getSchemaVersion(ADIndex.RESULT)
                 );
                 anomalyResults.add(anomalyResult);
             } else {
@@ -558,8 +558,8 @@ public class ADBatchTaskRunner {
                         Instant.now(),
                         null,
                         null,
-                        null,
-                        null
+                        adTask.getDetector().getUser(),
+                        anomalyDetectionIndices.getSchemaVersion(ADIndex.RESULT)
                 );
                 anomalyResults.add(anomalyResult);
             }
@@ -593,7 +593,6 @@ public class ADBatchTaskRunner {
         long interval,
         ActionListener<ADBatchAnomalyResultResponse> listener
     ) {
-        checkIfADTaskCancelled(adTask.getTaskId());
         String taskId = adTask.getTaskId();
         float initProgress = calculateInitProgress(taskId);
         String taskState = initProgress >= 1.0f ? ADTaskState.RUNNING.name() : ADTaskState.INIT.name();
@@ -604,8 +603,12 @@ public class ADBatchTaskRunner {
             adBatchTaskCache.checkLimitation();
             long expectedPieceEndTime = pieceStartTime + pieceSize * interval;
             long pieceEndTime = expectedPieceEndTime > dataEndTime ? dataEndTime : expectedPieceEndTime;
-            // TODO: add limiter later
-            rateLimiter.acquire(pieceIntervalSeconds);
+            int i = 0;
+            while (i < pieceIntervalSeconds) {
+                checkIfADTaskCancelled(taskId);
+                rateLimiter.acquire(1);
+                i++;
+            }
             logger.info("start next piece start from {} to {}, interval {}", pieceStartTime, pieceEndTime, interval);
             float taskProgress = (float) (pieceStartTime - dataStartTime) / (dataEndTime - dataStartTime);
             adTaskManager

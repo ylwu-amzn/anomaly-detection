@@ -49,6 +49,7 @@ import org.elasticsearch.action.get.GetRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.action.support.WriteRequest;
 import org.elasticsearch.action.support.replication.ReplicationResponse;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.action.update.UpdateResponse;
@@ -106,7 +107,6 @@ public class ADTaskManager {
     private final Client client;
     private final NamedXContentRegistry xContentRegistry;
     private final DiscoveryNodeFilterer nodeFilter;
-    // TODO: limit running tasks
     private final ClusterService clusterService;
     private final DetectionStateHandler detectorStateHandler;
     private final AnomalyDetectionIndices detectionIndices;
@@ -444,7 +444,7 @@ public class ADTaskManager {
             listener.onFailure(new ElasticsearchStatusException("Detector is already running", RestStatus.BAD_REQUEST));
             return;
         }
-        adTaskCache.allowToPutNewTask();
+        adTaskCache.checkRunningTaskLimit();
         if (detectionIndices.doesDetectorStateIndexExist()) {
             checkCurrentTaskState(detector, listener);
         } else {
@@ -524,7 +524,8 @@ public class ADTaskManager {
 
         IndexRequest request = new IndexRequest(ADTask.DETECTOR_STATE_INDEX);
         try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
-            request.source(adTask.toXContent(builder, RestHandlerUtils.XCONTENT_WITH_TYPE));
+            request.source(adTask.toXContent(builder, RestHandlerUtils.XCONTENT_WITH_TYPE))
+                    .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
             client.index(request, ActionListener.wrap(r -> onIndexADTaskResponse(r, adTask, null, listener), e -> listener.onFailure(e)));
         } catch (Exception e) {
             logger.error("fail to start a new task for " + detector.getDetectorId(), e);
@@ -647,6 +648,7 @@ public class ADTaskManager {
         updatedContent.putAll(updatedFields);
         updatedContent.put(LAST_UPDATE_TIME_FIELD, Instant.now().toEpochMilli());
         updateRequest.doc(updatedContent);
+        updateRequest.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
         client
             .update(
                 updateRequest,

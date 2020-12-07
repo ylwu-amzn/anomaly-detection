@@ -510,7 +510,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             xContentRegistry,
             stateManager
         );
-        adBatchTaskCache = new ADTaskCache(settings, clusterService);
+        adBatchTaskCache = new ADTaskCache(settings, clusterService, memoryTracker);
         adTaskManager = new ADTaskManager(
             settings,
             threadPool,
@@ -532,6 +532,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             adCircuitBreakerService,
             featureManager,
             adTaskManager,
+            anomalyDetectionIndices,
             adStats,
             anomalyResultBulkIndexHandler,
             adBatchTaskCache
