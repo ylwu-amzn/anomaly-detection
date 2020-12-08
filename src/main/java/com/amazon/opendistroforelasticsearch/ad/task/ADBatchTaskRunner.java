@@ -87,6 +87,7 @@ import java.util.stream.Collectors;
 import static com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorPlugin.AD_BATCH_TASK_THREAD_POOL_NAME;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.CURRENT_PIECE_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.ERROR_FIELD;
+import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.EXECUTION_END_TIME_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.INIT_PROGRESS_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.STATE_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.TASK_PROGRESS_FIELD;
@@ -653,6 +654,8 @@ public class ADBatchTaskRunner {
                                     dataEndTime,
                                     TASK_PROGRESS_FIELD,
                                     1.0f,
+                                    EXECUTION_END_TIME_FIELD,
+                                    Instant.now().toEpochMilli(),
                                     INIT_PROGRESS_FIELD,
                                     initProgress),
                             ActionListener.wrap(r -> {
