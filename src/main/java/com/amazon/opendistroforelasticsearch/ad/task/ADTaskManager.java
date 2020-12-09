@@ -65,6 +65,7 @@ import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.query.BoolQueryBuilder;
+import org.elasticsearch.index.query.RangeQueryBuilder;
 import org.elasticsearch.index.query.TermQueryBuilder;
 import org.elasticsearch.index.query.TermsQueryBuilder;
 import org.elasticsearch.index.reindex.DeleteByQueryAction;
@@ -75,6 +76,7 @@ import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.script.Script;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
+import org.elasticsearch.search.sort.SortOrder;
 import org.elasticsearch.tasks.TaskCancelledException;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.ReceiveTimeoutTransportException;
@@ -94,10 +96,12 @@ import java.util.stream.Collectors;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.DETECTOR_ID_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.ERROR_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.EXECUTION_END_TIME_FIELD;
+import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.EXECUTION_START_TIME_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.IS_LATEST_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.LAST_UPDATE_TIME_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.STATE_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.STOPPED_BY_FIELD;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_AD_TASK_DOCS_PER_DETECTOR;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_BATCH_TASK_PIECE_INTERVAL_SECONDS;
 import static org.elasticsearch.action.DocWriteResponse.Result.CREATED;
 import static org.elasticsearch.action.DocWriteResponse.Result.UPDATED;
@@ -116,6 +120,7 @@ public class ADTaskManager {
     private final AnomalyDetectionIndices detectionIndices;
     private final ADTaskCache adTaskCache;
     private volatile Integer pieceIntervalSeconds;
+    private volatile Integer maxAdTaskDocsPerDetector;
 
     public ADTaskManager(
         Settings settings,
@@ -140,7 +145,12 @@ public class ADTaskManager {
         this.pieceIntervalSeconds = MAX_BATCH_TASK_PIECE_INTERVAL_SECONDS.get(settings);
         clusterService
                 .getClusterSettings()
-                .addSettingsUpdateConsumer(MAX_BATCH_TASK_PIECE_INTERVAL_SECONDS, it -> pieceIntervalSeconds = it);
+                .addSettingsUpdateConsumer(MAX_BATCH_TASK_PIECE_INTERVAL_SECONDS, it -> pieceIntervalSeconds = it);        this.pieceIntervalSeconds = MAX_BATCH_TASK_PIECE_INTERVAL_SECONDS.get(settings);
+
+        this.maxAdTaskDocsPerDetector = MAX_AD_TASK_DOCS_PER_DETECTOR.get(settings);
+        clusterService
+                .getClusterSettings()
+                .addSettingsUpdateConsumer(MAX_AD_TASK_DOCS_PER_DETECTOR, it -> maxAdTaskDocsPerDetector = it);
     }
 
     public void startDetector(
@@ -534,7 +544,9 @@ public class ADTaskManager {
         try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
             request.source(adTask.toXContent(builder, RestHandlerUtils.XCONTENT_WITH_TYPE))
                     .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
-            client.index(request, ActionListener.wrap(r -> onIndexADTaskResponse(r, adTask, null, listener), e -> listener.onFailure(e)));
+            client.index(request, ActionListener.wrap(r -> onIndexADTaskResponse(r, adTask, () -> {
+                cleanOldAdTaskDocs(detector.getDetectorId());
+            }, listener), e -> listener.onFailure(e)));
         } catch (Exception e) {
             logger.error("fail to start a new task for " + detector.getDetectorId(), e);
             listener.onFailure(e);
@@ -552,35 +564,80 @@ public class ADTaskManager {
             listener.onFailure(new ElasticsearchStatusException(errorMsg, response.status()));
             return;
         }
-        if (function != null) {
-            function.execute();
-        } else {
-            AnomalyDetectorJobResponse anomalyDetectorJobResponse = new AnomalyDetectorJobResponse(
+        AnomalyDetectorJobResponse anomalyDetectorJobResponse = new AnomalyDetectorJobResponse(
                 response.getId(),
                 response.getVersion(),
                 response.getSeqNo(),
                 response.getPrimaryTerm(),
                 RestStatus.OK
-            );
-            adTask.setTaskId(response.getId());
-            listener.onResponse(anomalyDetectorJobResponse);
-            // check if task exceeds limitation, if yes, return error to user directly
+        );
+        adTask.setTaskId(response.getId());
+        listener.onResponse(anomalyDetectorJobResponse);
+        // check if task exceeds limitation, if yes, return error to user directly
 //            adBatchTaskCache.put(adTask);
-            client
-                    .execute(
-                            ADBatchAnomalyResultAction.INSTANCE,
-                            new ADBatchAnomalyResultRequest(adTask),
-                            ActionListener
-                                    .wrap(
-                                            r -> {
-                                                logger.info(r.getMessage());
-                                            },
-                                            exception -> {
-                                                handleADTaskException(adTask, exception);
-                                            }
-                                    )
-                    );
+        client
+                .execute(
+                        ADBatchAnomalyResultAction.INSTANCE,
+                        new ADBatchAnomalyResultRequest(adTask),
+                        ActionListener
+                                .wrap(
+                                        r -> {
+                                            logger.info(r.getMessage());
+                                        },
+                                        exception -> {
+                                            handleADTaskException(adTask, exception);
+                                        }
+                                )
+                );
+        if (function != null) {
+            function.execute();
         }
+    }
+
+    private void cleanOldAdTaskDocs(String detectorId) {
+        BoolQueryBuilder query = new BoolQueryBuilder();
+        query.filter(new TermQueryBuilder(DETECTOR_ID_FIELD, detectorId));
+        query.filter(new TermQueryBuilder(IS_LATEST_FIELD, false));
+        SearchRequest searchRequest = new SearchRequest();
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+        sourceBuilder.query(query)
+                .sort(EXECUTION_START_TIME_FIELD, SortOrder.DESC)
+                .from(maxAdTaskDocsPerDetector - 1)
+                .trackTotalHits(true)
+                .size(1);
+        searchRequest.source(sourceBuilder).indices(ADTask.DETECTOR_STATE_INDEX);
+        client.search(searchRequest, ActionListener.wrap(r -> {
+            Iterator<SearchHit> iterator = r.getHits().iterator();
+            if(iterator.hasNext()) {
+                logger.info("AD tasks count for detector {} is {}, exceeds limit of {}",
+                        detectorId, r.getHits().getTotalHits().value, maxAdTaskDocsPerDetector);
+                SearchHit searchHit = r.getHits().getAt(0);
+                try (
+                        XContentParser parser = RestHandlerUtils.createXContentParserFromRegistry(xContentRegistry, searchHit.getSourceRef())
+                ) {
+                    ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+                    ADTask adTask = ADTask.parse(parser, searchHit.getId());
+
+                    DeleteByQueryRequest request = new DeleteByQueryRequest(ADTask.DETECTOR_STATE_INDEX);
+                    RangeQueryBuilder rangeQueryBuilder = new RangeQueryBuilder(EXECUTION_START_TIME_FIELD);
+                    rangeQueryBuilder.lte(adTask.getExecutionStartTime().toEpochMilli()).format("epoch_millis");
+                    request.setQuery(rangeQueryBuilder);
+                    client.execute(DeleteByQueryAction.INSTANCE, request, ActionListener.wrap(
+                            res -> {
+                                logger.info("Deleted {} old AD tasks started equals or before {} for detector {}",
+                                        res.getDeleted(), adTask.getExecutionStartTime().toEpochMilli(), detectorId);
+                            }, e -> {
+                                logger.warn("Failed to clean AD tasks for detector " + detectorId, e);
+                            }
+                    ));
+
+                } catch (Exception e) {
+                    logger.warn("Failed to parse AD tasks for detector " + detectorId, e);
+                }
+            }
+        },e->{
+            logger.warn("Failed to search AD tasks for detector " + detectorId, e);
+        }));
     }
 
     // private void handleADTaskException(ADTask task, Exception exception) {

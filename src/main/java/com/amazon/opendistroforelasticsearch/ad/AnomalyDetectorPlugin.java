@@ -640,7 +640,8 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 AnomalyDetectorSettings.MAX_CACHE_MISS_HANDLING_PER_SECOND,
                 AnomalyDetectorSettings.MAX_BATCH_TASK_PER_NODE,
                 AnomalyDetectorSettings.MAX_BATCH_TASK_PIECE_SIZE,
-                AnomalyDetectorSettings.MAX_BATCH_TASK_PIECE_INTERVAL_SECONDS
+                AnomalyDetectorSettings.MAX_BATCH_TASK_PIECE_INTERVAL_SECONDS,
+                AnomalyDetectorSettings.MAX_AD_TASK_DOCS_PER_DETECTOR
             );
         return unmodifiableList(Stream.concat(enabledSetting.stream(), systemSetting.stream()).collect(Collectors.toList()));
     }

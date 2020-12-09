@@ -352,5 +352,32 @@ public final class AnomalyDetectorSettings {
                     Setting.Property.Dynamic
             );
 
-    public static int THRESHOLD_MODEL_TRAINING_SIZE = 1000;
+    public static final Setting<Integer> MAX_AD_TASK_DOCS_PER_DETECTOR = Setting
+            .intSetting(
+                    "opendistro.anomaly_detection.max_ad_task_docs_per_detector",
+                    // Total documents in primary replica.
+                    // One AD task is roughly 1.5KB for normal case. Support task's size
+                    // is 2KB conservatively. We allow 1000 anomaly detectors by default.
+                    // If we store 1000 AD tasks for one detector, that will be 2GB.
+                    // If we limit total size as 50 GB, then we can store 25_000 AD tasks
+                    // for one detector.
+                    1000,
+                    10,
+                    25_000,
+                    Setting.Property.NodeScope,
+                    Setting.Property.Dynamic
+            );
+
+    // realtime detector is using 512, check MIN_TRAIN_SAMPLES
+    public static int THRESHOLD_MODEL_TRAINING_SIZE = 512;
+//    public static final Setting<Integer> THRESHOLD_MODEL_TRAINING_SIZE = Setting
+//            .intSetting(
+//                    "opendistro.anomaly_detection.max_batch_task_piece_interval_seconds",
+//                    512, // realtime detector is using 512, check MIN_TRAIN_SAMPLES
+//                    128, // realtime detector's RCF needs 128 data points at least, check NUM_MIN_SAMPLES
+//                    10_000, // The greater value will consume more memory, keep consistent with MAX_BATCH_TASK_PIECE_SIZE
+//                    Setting.Property.NodeScope,
+//                    Setting.Property.Dynamic
+//            );
+
 }
