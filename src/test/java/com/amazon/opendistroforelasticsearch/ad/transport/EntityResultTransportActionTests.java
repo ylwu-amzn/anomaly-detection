@@ -37,6 +37,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.support.ActionFilters;
@@ -87,6 +88,7 @@ public class EntityResultTransportActionTests extends AbstractADTest {
     CacheProvider provider;
     EntityCache entityCache;
     NodeStateManager stateManager;
+    ADTaskManager adTaskManager;
     Settings settings;
     Clock clock;
     EntityResultRequest request;
@@ -153,6 +155,7 @@ public class EntityResultTransportActionTests extends AbstractADTest {
         String field = "a";
         detector = TestHelpers.randomAnomalyDetectorUsingCategoryFields(detectorId, Arrays.asList(field));
         stateManager = mock(NodeStateManager.class);
+        adTaskManager = mock(ADTaskManager.class);
         doAnswer(invocation -> {
             ActionListener<Optional<AnomalyDetector>> listener = invocation.getArgument(1);
             listener.onResponse(Optional.of(detector));
@@ -178,7 +181,8 @@ public class EntityResultTransportActionTests extends AbstractADTest {
             stateManager,
             settings,
             clock,
-            indexUtil
+            indexUtil,
+            adTaskManager
         );
 
         // timeout in 60 seconds

@@ -277,23 +277,19 @@ public class ADBatchTaskRunner {
 //        adBatchTaskCache.putAdTransportTask(taskId, (ADTranspoertTask)task);
 
         // check if circuit breaker is open
-        if (adCircuitBreakerService.isOpen()) {
-            String errorMessage = "Circuit breaker is open. Can't run task.";
-            logger.error(errorMessage + taskId);
-            adTaskManager
-                .updateADTask(
-                    taskId,
-                    ImmutableMap.of(STATE_FIELD, ADTaskState.FAILED.name(), ERROR_FIELD, errorMessage),
-                    ActionListener.wrap(response -> {
-                        ADBatchAnomalyResultResponse res = new ADBatchAnomalyResultResponse(errorMessage);
-                        listener.onResponse(res);
-                    }, exception -> listener.onFailure(exception))
-                );
-            return;
-        }
+        checkCircuitBreaker(adTask, listener);
 
         Instant executeStartTime = Instant.now();
         runFirstPiece(adTask, executeStartTime, listener);
+    }
+
+    private void checkCircuitBreaker(ADTask adTask, ActionListener<ADBatchAnomalyResultResponse> listener) {
+        String taskId = adTask.getTaskId();
+        if (adCircuitBreakerService.isOpen()) {
+            String error = "Circuit breaker is open";
+            logger.error("AD task: {}, {}", taskId, error);
+            throw new LimitExceededException(adTask.getDetectorId(), error, true);
+        }
     }
 
     private ActionListener<ADBatchAnomalyResultResponse> wrappedListener(ADTask adTask/*, ActionListener<ADBatchAnomalyResultResponse> actionListener*/) {
@@ -599,6 +595,7 @@ public class ADBatchTaskRunner {
         String taskState = initProgress >= 1.0f ? ADTaskState.RUNNING.name() : ADTaskState.INIT.name();
 
         if (pieceStartTime < dataEndTime) {
+            checkCircuitBreaker(adTask, listener);
             //check running task exceeds limitation or not for every piece,
             // so we can end extra task in case any race condition
             adBatchTaskCache.checkLimitation();
@@ -737,8 +734,7 @@ public class ADBatchTaskRunner {
 
     private void checkIfADTaskCancelled(String taskId) {
         if (adBatchTaskCache.contains(taskId) && adBatchTaskCache.isCancelled(taskId)) {
-            adBatchTaskCache.remove(taskId);
-            throw new TaskCancelledException("cancelled");
+            throw new TaskCancelledException(adBatchTaskCache.getCancelReason(taskId));
         }
     }
 

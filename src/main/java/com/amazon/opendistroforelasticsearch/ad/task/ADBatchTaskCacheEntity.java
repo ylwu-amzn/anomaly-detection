@@ -34,6 +34,7 @@ public class ADBatchTaskCacheEntity {
     private List<Double> thresholdModelTrainingData;
     private AtomicBoolean cancelled = new AtomicBoolean(false);
     private AtomicLong cacheMemorySize = new AtomicLong(0);
+    private String cancelReason;
 
     public ADBatchTaskCacheEntity(String detectorId) {
         this.detectorId = detectorId;
@@ -91,7 +92,16 @@ public class ADBatchTaskCacheEntity {
         return cancelled.get();
     }
 
-    public void cancel() {
+    public String getCancelReason() {
+        return cancelReason;
+    }
+
+    public void setCancelReason(String cancelReason) {
+        this.cancelReason = cancelReason;
+    }
+
+    public void cancel(String reason) {
         this.cancelled.compareAndSet(false, true);
+        this.cancelReason = reason;
     }
 }

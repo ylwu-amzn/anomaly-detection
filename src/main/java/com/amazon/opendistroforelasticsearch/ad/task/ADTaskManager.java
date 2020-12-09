@@ -81,6 +81,7 @@ import java.io.IOException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -599,6 +600,7 @@ public class ADTaskManager {
         } else if (exception instanceof TaskCancelledException) {
             logger.error("AD task cancelled: " + adTask.getTaskId());
             state = ADTaskState.STOPPED.name();
+            updatedFields.put(ERROR_FIELD, exception.getMessage());
         } else {
             logger.error("Fail to execute batch task action " + adTask.getTaskId(), exception);
             String error = (exception instanceof IllegalArgumentException
@@ -752,19 +754,27 @@ public class ADTaskManager {
         return adTaskProfile;
     }
 
-    /**
-     * Cancel AD task.
-     * @param taskId AD task id
-     * @return task cancellation state
-     */
-    public ADTaskCancellationState cancelTask(String taskId) {
+    public ADTaskCancellationState cancelTask(String taskId, String reason) {
         if (!adTaskCache.contains(taskId)) {
             return ADTaskCancellationState.NOT_FOUND;
         }
         if (adTaskCache.isCancelled(taskId)) {
             return ADTaskCancellationState.ALREADY_CANCELLED;
         }
-        adTaskCache.cancel(taskId);
+        adTaskCache.cancel(taskId, reason);
         return ADTaskCancellationState.CANCELLED;
+    }
+
+    //TODO: need to tune this part once we implement task priority
+    public boolean hasCancellableTask() {
+        return adTaskCache.size() > 0;
+    }
+
+    public void cancelAllFeasibleTasks(String reason) {
+        Iterator<Map.Entry<String, ADBatchTaskCacheEntity>> iterator = adTaskCache.iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, ADBatchTaskCacheEntity> taskCache = iterator.next();
+            cancelTask(taskCache.getKey(), reason);
+        }
     }
 }

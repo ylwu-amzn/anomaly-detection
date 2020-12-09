@@ -15,6 +15,7 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
@@ -34,24 +35,34 @@ public class RCFResultTransportAction extends HandledTransportAction<RCFResultRe
     private static final Logger LOG = LogManager.getLogger(RCFResultTransportAction.class);
     private ModelManager manager;
     private ADCircuitBreakerService adCircuitBreakerService;
+    private ADTaskManager adTaskManager;
 
     @Inject
     public RCFResultTransportAction(
         ActionFilters actionFilters,
         TransportService transportService,
         ModelManager manager,
-        ADCircuitBreakerService adCircuitBreakerService
+        ADCircuitBreakerService adCircuitBreakerService,
+        ADTaskManager adTaskManager
     ) {
         super(RCFResultAction.NAME, transportService, actionFilters, RCFResultRequest::new);
         this.manager = manager;
         this.adCircuitBreakerService = adCircuitBreakerService;
+        this.adTaskManager = adTaskManager;
     }
 
     @Override
     protected void doExecute(Task task, RCFResultRequest request, ActionListener<RCFResultResponse> listener) {
-
+        String adID = request.getAdID();
         if (adCircuitBreakerService.isOpen()) {
-            listener.onFailure(new LimitExceededException(request.getAdID(), CommonErrorMessages.MEMORY_CIRCUIT_BROKEN_ERR_MSG));
+            boolean endRun = true;
+            if (adTaskManager.hasCancellableTask()) {
+                endRun = false;
+                String error = "Cancel task to release resource for RCF model of realtime detector: " + adID;
+                LOG.warn(error);
+                adTaskManager.cancelAllFeasibleTasks(error);
+            }
+            listener.onFailure(new LimitExceededException(adID, CommonErrorMessages.MEMORY_CIRCUIT_BROKEN_ERR_MSG, endRun));
             return;
         }
 
@@ -59,7 +70,7 @@ public class RCFResultTransportAction extends HandledTransportAction<RCFResultRe
             LOG.info("Serve rcf request for {}", request.getModelID());
             manager
                 .getRcfResult(
-                    request.getAdID(),
+                    adID,
                     request.getModelID(),
                     request.getFeatures(),
                     ActionListener

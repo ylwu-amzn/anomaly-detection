@@ -34,6 +34,7 @@ import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.function.Function;
 
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.PlainActionFuture;
@@ -98,6 +99,7 @@ public class MultientityResultTests extends AbstractADTest {
     private Clock clock;
     private AnomalyDetector detector;
     private NodeStateManager stateManager;
+    private ADTaskManager adTaskManager;
     private static Settings settings;
     private TransportService transportService;
     private SearchFeatureDao searchFeatureDao;
@@ -144,6 +146,7 @@ public class MultientityResultTests extends AbstractADTest {
         detector = TestHelpers.randomAnomalyDetectorUsingCategoryFields(detectorId, Collections.singletonList(categoryField));
 
         stateManager = mock(NodeStateManager.class);
+        adTaskManager = mock(ADTaskManager.class);
         // make sure parameters are not null, otherwise this mock won't get invoked
         doAnswer(invocation -> {
             ActionListener<Optional<AnomalyDetector>> listener = invocation.getArgument(1);
@@ -209,7 +212,8 @@ public class MultientityResultTests extends AbstractADTest {
             adCircuitBreakerService,
             adStats,
             mockThreadPool,
-            searchFeatureDao
+            searchFeatureDao,
+            adTaskManager
         );
 
         anomalyResultHandler = mock(MultiEntityResultHandler.class);
@@ -367,7 +371,8 @@ public class MultientityResultTests extends AbstractADTest {
             stateManager,
             settings,
             clock,
-            indexUtil
+            indexUtil,
+            adTaskManager
         );
 
         EntityCache entityCache = mock(EntityCache.class);
@@ -443,7 +448,8 @@ public class MultientityResultTests extends AbstractADTest {
             adCircuitBreakerService,
             adStats,
             threadPool,
-            searchFeatureDao
+            searchFeatureDao,
+            adTaskManager
         );
     }
 
@@ -477,7 +483,8 @@ public class MultientityResultTests extends AbstractADTest {
             stateManager,
             settings,
             clock,
-            indexUtil
+            indexUtil,
+            adTaskManager
         );
 
         PlainActionFuture<AnomalyResultResponse> listener = new PlainActionFuture<>();

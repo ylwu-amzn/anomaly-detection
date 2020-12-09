@@ -30,6 +30,7 @@ import org.elasticsearch.common.settings.Settings;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -228,7 +229,7 @@ public class ADTaskCache {
 
     private void checkTaskCount(int maxTasks) {
         if (this.getTaskNumber() >= maxTasks) {
-            String error = "Can't run more than " + maxAdBatchTaskPerNode + " historical detector per node";
+            String error = "Can't run more than " + maxAdBatchTaskPerNode + " historical detectors per data node";
             throw new LimitExceededException(error);
         }
     }
@@ -238,7 +239,21 @@ public class ADTaskCache {
         return taskCache.isCancelled();
     }
 
-    public void cancel(String taskId) {
-        getOrThrow(taskId).cancel();
+    public String getCancelReason(String taskId) {
+        ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
+        return taskCache.getCancelReason();
+    }
+
+    public void cancel(String taskId, String reason) {
+        ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
+        taskCache.cancel(reason);
+    }
+
+    public int size() {
+        return taskCaches.size();
+    }
+
+    public Iterator<Map.Entry<String, ADBatchTaskCacheEntity>> iterator() {
+        return taskCaches.entrySet().iterator();
     }
 }

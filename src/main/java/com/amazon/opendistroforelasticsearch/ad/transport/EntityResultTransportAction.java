@@ -24,6 +24,7 @@ import java.util.Arrays;
 import java.util.Map.Entry;
 import java.util.Optional;
 
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
@@ -68,6 +69,7 @@ public class EntityResultTransportAction extends HandledTransportAction<EntityRe
     private final int coolDownMinutes;
     private final Clock clock;
     private AnomalyDetectionIndices indexUtil;
+    private ADTaskManager adTaskManager;
 
     @Inject
     public EntityResultTransportAction(
@@ -80,7 +82,8 @@ public class EntityResultTransportAction extends HandledTransportAction<EntityRe
         CacheProvider entityCache,
         NodeStateManager stateManager,
         Settings settings,
-        AnomalyDetectionIndices indexUtil
+        AnomalyDetectionIndices indexUtil,
+        ADTaskManager adTaskManager
     ) {
         this(
             actionFilters,
@@ -93,7 +96,8 @@ public class EntityResultTransportAction extends HandledTransportAction<EntityRe
             stateManager,
             settings,
             Clock.systemUTC(),
-            indexUtil
+            indexUtil,
+            adTaskManager
         );
     }
 
@@ -108,7 +112,8 @@ public class EntityResultTransportAction extends HandledTransportAction<EntityRe
         NodeStateManager stateManager,
         Settings settings,
         Clock clock,
-        AnomalyDetectionIndices indexUtil
+        AnomalyDetectionIndices indexUtil,
+        ADTaskManager adTaskManager
     ) {
         super(EntityResultAction.NAME, transportService, actionFilters, EntityResultRequest::new);
         this.manager = manager;
@@ -120,6 +125,7 @@ public class EntityResultTransportAction extends HandledTransportAction<EntityRe
         this.coolDownMinutes = (int) (COOLDOWN_MINUTES.get(settings).getMinutes());
         this.clock = clock;
         this.indexUtil = indexUtil;
+        this.adTaskManager = adTaskManager;
     }
 
     @Override
@@ -127,6 +133,12 @@ public class EntityResultTransportAction extends HandledTransportAction<EntityRe
         if (adCircuitBreakerService.isOpen()) {
             listener
                 .onFailure(new LimitExceededException(request.getDetectorId(), CommonErrorMessages.MEMORY_CIRCUIT_BROKEN_ERR_MSG, false));
+            if (adTaskManager.hasCancellableTask()) {
+                String error = "Cancel task to release resource for realtime high cardinality detector: "
+                        + request.getDetectorId();
+                LOG.warn(error);
+                adTaskManager.cancelAllFeasibleTasks(error);
+            }
             return;
         }
 

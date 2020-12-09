@@ -17,6 +17,8 @@ package com.amazon.opendistroforelasticsearch.ad.transport;
 
 import com.amazon.opendistroforelasticsearch.ad.task.ADTaskCancellationState;
 import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.FailedNodeException;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.nodes.TransportNodesAction;
@@ -31,7 +33,7 @@ import java.util.List;
 
 public class ADCancelTaskTransportAction extends
         TransportNodesAction<ADCancelTaskRequest, ADCancelTaskResponse, ADCancelTaskNodeRequest, ADCancelTaskNodeResponse> {
-
+    private final Logger logger = LogManager.getLogger(ADCancelTaskTransportAction.class);
     private ADTaskManager adTaskManager;
 
     @Inject
@@ -74,7 +76,9 @@ public class ADCancelTaskTransportAction extends
 
     @Override
     protected ADCancelTaskNodeResponse nodeOperation(ADCancelTaskNodeRequest request) {
-        ADTaskCancellationState state = adTaskManager.cancelTask(request.getAdTaskId());
+        String reason = "Task cancelled by user";
+        ADTaskCancellationState state = adTaskManager.cancelTask(request.getAdTaskId(), reason);
+        logger.info("AD task id: {}, {}", request.getAdTaskId(), reason);
         return new ADCancelTaskNodeResponse(clusterService.localNode(), state);
     }
 }

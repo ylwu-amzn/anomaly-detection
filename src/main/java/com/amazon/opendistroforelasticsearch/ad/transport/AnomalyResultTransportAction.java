@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
@@ -123,6 +124,7 @@ public class AnomalyResultTransportAction extends HandledTransportAction<ActionR
     private final ThreadPool threadPool;
     private final Client client;
     private final SearchFeatureDao searchFeatureDao;
+    private final ADTaskManager adTaskManager;
 
     // cache HC detector id
     private final Set<String> hcDetectors;
@@ -143,7 +145,8 @@ public class AnomalyResultTransportAction extends HandledTransportAction<ActionR
         ADCircuitBreakerService adCircuitBreakerService,
         ADStats adStats,
         ThreadPool threadPool,
-        SearchFeatureDao searchFeatureDao
+        SearchFeatureDao searchFeatureDao,
+        ADTaskManager adTaskManager
     ) {
         super(AnomalyResultAction.NAME, transportService, actionFilters, AnomalyResultRequest::new);
         this.transportService = transportService;
@@ -165,6 +168,7 @@ public class AnomalyResultTransportAction extends HandledTransportAction<ActionR
         this.threadPool = threadPool;
         this.searchFeatureDao = searchFeatureDao;
         this.hcDetectors = new HashSet<>();
+        this.adTaskManager = adTaskManager;
     }
 
     /**
@@ -242,8 +246,13 @@ public class AnomalyResultTransportAction extends HandledTransportAction<ActionR
 
             adStats.getStat(StatNames.AD_EXECUTE_REQUEST_COUNT.getName()).increment();
 
-            if (adCircuitBreakerService.isOpen()) {
+            if (!adCircuitBreakerService.isOpen()) {
                 listener.onFailure(new LimitExceededException(adID, CommonErrorMessages.MEMORY_CIRCUIT_BROKEN_ERR_MSG, false));
+                if (adTaskManager.hasCancellableTask()) {
+                    String error = "Cancel task to release resource for realtime detector: " + adID;
+                    LOG.warn(error);
+                    adTaskManager.cancelAllFeasibleTasks(error);
+                }
                 return;
             }
             try {
