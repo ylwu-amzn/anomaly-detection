@@ -209,7 +209,8 @@ public class ADBatchTaskRunner {
     private void getNodeStats(ADTask adTask, ActionListener<DiscoveryNode> listener) {
         DiscoveryNode[] dataNodes = nodeFilter.getEligibleDataNodes();
         ADStatsRequest adStatsRequest = new ADStatsRequest(dataNodes);
-        adStatsRequest.addAll(ImmutableSet.of(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName()));
+        adStatsRequest.addAll(ImmutableSet.of(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName(),
+                StatNames.JVM_HEAP_USAGE.getName()));
 
         client.execute(ADStatsNodesAction.INSTANCE, adStatsRequest, ActionListener.wrap(adStatsResponse -> {
             List<ADStatsNodeResponse> candidateNodeResponse = adStatsResponse
@@ -228,8 +229,27 @@ public class ADBatchTaskRunner {
                             .compareTo((Long) r2.getStatsMap().get(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName()))
                 )
                 .collect(Collectors.toList());
+            candidateNodeResponse.stream().forEach(c -> {
+                logger.info("Node AD stats: node id: {}, running_task: {}, jvm_heap_usage: {}",
+                        c.getNode().getId(),
+                        c.getStatsMap().get(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName()),
+                        c.getStatsMap().get(StatNames.JVM_HEAP_USAGE.getName()));
+            });
             if (candidateNodeResponse.size() > 0) {
-                listener.onResponse(candidateNodeResponse.get(0).getNode());
+                if (candidateNodeResponse.size() == 1) {
+                    logger.info("Dispatch AD task to node: {}", candidateNodeResponse.get(0).getNode().getId());
+                    listener.onResponse(candidateNodeResponse.get(0).getNode());
+                } else {
+                    Long taskCount = (Long)candidateNodeResponse.get(0).getStatsMap().get(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName());
+                    Optional<ADStatsNodeResponse> first = candidateNodeResponse.stream().filter(c -> taskCount.equals(c.getStatsMap().get(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName())))
+                            .sorted((ADStatsNodeResponse r1, ADStatsNodeResponse r2) -> ((Long) r1
+                                    .getStatsMap()
+                                    .get(StatNames.JVM_HEAP_USAGE.getName()))
+                                    .compareTo((Long) r2.getStatsMap().get(StatNames.JVM_HEAP_USAGE.getName()))).findFirst();
+                    logger.info("Will Dispatch AD task to node: {}", first.get().getNode().getId());
+                    listener.onResponse(first.get().getNode());
+                }
+
             } else {
                 String errorMessage = "No eligible node to run detector " + adTask.getDetectorId();
                 logger.warn(errorMessage);

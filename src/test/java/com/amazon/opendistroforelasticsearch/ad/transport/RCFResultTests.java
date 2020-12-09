@@ -79,7 +79,8 @@ public class RCFResultTests extends ESTestCase {
             mock(ActionFilters.class),
             transportService,
             manager,
-            adCircuitBreakerService
+            adCircuitBreakerService,
+            null
         );
         doAnswer(invocation -> {
             ActionListener<RcfResult> listener = invocation.getArgument(3);
@@ -117,7 +118,8 @@ public class RCFResultTests extends ESTestCase {
             mock(ActionFilters.class),
             transportService,
             manager,
-            adCircuitBreakerService
+            adCircuitBreakerService,
+            null
         );
         doThrow(NullPointerException.class)
             .when(manager)
@@ -209,7 +211,8 @@ public class RCFResultTests extends ESTestCase {
             mock(ActionFilters.class),
             transportService,
             manager,
-            breakerService
+            breakerService,
+            null
         );
         doAnswer(invocation -> {
             ActionListener<RcfResult> listener = invocation.getArgument(3);

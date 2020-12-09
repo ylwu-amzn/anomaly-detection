@@ -97,7 +97,8 @@ public class ADStatsNodesTransportActionTests extends ESIntegTestCase {
             clusterService(),
             mock(TransportService.class),
             mock(ActionFilters.class),
-            adStats
+            adStats,
+            null
         );
     }
 

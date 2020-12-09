@@ -482,6 +482,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             .put(StatNames.AD_CANCELED_BATCH_TASK_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
             .put(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
             .put(StatNames.AD_BATCH_TASK_FAILURE_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
+            .put(StatNames.JVM_HEAP_USAGE.getName(), new ADStat<>(false, new SettableSupplier()))
             .build();
 
         adStats = new ADStats(indexUtils, modelManager, stats);
