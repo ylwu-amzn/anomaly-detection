@@ -23,24 +23,32 @@ import java.io.IOException;
 
 public class ADCancelTaskNodeRequest extends BaseNodeRequest {
     private String adTaskId;
+    private String userName;
 
     public ADCancelTaskNodeRequest(StreamInput in) throws IOException {
         super(in);
         this.adTaskId = in.readString();
+        this.userName = in.readOptionalString();
     }
 
     public ADCancelTaskNodeRequest(ADCancelTaskRequest request) {
         this.adTaskId = request.getAdTaskId();
+        this.userName = request.getUserName();
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
         out.writeString(adTaskId);
+        out.writeOptionalString(userName);
     }
 
     public String getAdTaskId() {
         return adTaskId;
+    }
+
+    public String getUserName() {
+        return userName;
     }
 
 }

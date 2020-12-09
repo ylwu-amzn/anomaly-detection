@@ -17,6 +17,8 @@ package com.amazon.opendistroforelasticsearch.ad.transport;
 
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.REQUEST_TIMEOUT;
 
+import com.amazon.opendistroforelasticsearch.ad.util.ParseUtils;
+import com.amazon.opendistroforelasticsearch.commons.authuser.User;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
@@ -74,7 +76,7 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
         // By the time request reaches here, the user permissions are validated by Security plugin.
         // Since the detectorID is provided, this can only happen if User is part of a role which has access
         // to the detector. This is filtered by our Search Detector API.
-
+        User user = ParseUtils.getUserContext(client);
         try (ThreadContext.StoredContext context = client.threadPool().getThreadContext().stashContext()) {
             IndexAnomalyDetectorJobActionHandler handler = new IndexAnomalyDetectorJobActionHandler(
                 client,
@@ -88,10 +90,10 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
             );
             if (rawPath.endsWith(RestHandlerUtils.START_JOB)) {
                 // handler.startAnomalyDetectorJob();
-                adTaskManager.startDetector(detectorId, handler, listener);
+                adTaskManager.startDetector(detectorId, handler, user, listener);
             } else if (rawPath.endsWith(RestHandlerUtils.STOP_JOB)) {
                 // handler.stopAnomalyDetectorJob(detectorId);
-                adTaskManager.stopDetector(detectorId, handler, listener);
+                adTaskManager.stopDetector(detectorId, handler, user, listener);
             }
         } catch (Exception e) {
             logger.error(e);

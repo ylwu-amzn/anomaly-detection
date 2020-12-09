@@ -22,6 +22,7 @@ import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.FailedNodeException;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.nodes.TransportNodesAction;
+import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.stream.StreamInput;
@@ -34,6 +35,7 @@ import java.util.List;
 public class ADCancelTaskTransportAction extends
         TransportNodesAction<ADCancelTaskRequest, ADCancelTaskResponse, ADCancelTaskNodeRequest, ADCancelTaskNodeResponse> {
     private final Logger logger = LogManager.getLogger(ADCancelTaskTransportAction.class);
+    private Client client;
     private ADTaskManager adTaskManager;
 
     @Inject
@@ -42,7 +44,8 @@ public class ADCancelTaskTransportAction extends
             ClusterService clusterService,
             TransportService transportService,
             ActionFilters actionFilters,
-            ADTaskManager adTaskManager
+            ADTaskManager adTaskManager,
+            Client client
     ) {
         super(
                 ADCancelTaskAction.NAME,
@@ -56,6 +59,7 @@ public class ADCancelTaskTransportAction extends
                 ADCancelTaskNodeResponse.class
         );
         this.adTaskManager = adTaskManager;
+        this.client = client;
     }
 
 
@@ -77,7 +81,8 @@ public class ADCancelTaskTransportAction extends
     @Override
     protected ADCancelTaskNodeResponse nodeOperation(ADCancelTaskNodeRequest request) {
         String reason = "Task cancelled by user";
-        ADTaskCancellationState state = adTaskManager.cancelTask(request.getAdTaskId(), reason);
+        String userName = request.getUserName();
+        ADTaskCancellationState state = adTaskManager.cancelTask(request.getAdTaskId(), reason, userName);
         logger.info("AD task id: {}, {}", request.getAdTaskId(), reason);
         return new ADCancelTaskNodeResponse(clusterService.localNode(), state);
     }

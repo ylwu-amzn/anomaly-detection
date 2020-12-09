@@ -47,6 +47,8 @@ public class ADTask implements ToXContentObject, Writeable {
 
     public static final String TASK_ID_FIELD = "task_id";
     public static final String LAST_UPDATE_TIME_FIELD = "last_update_time";
+    public static final String STARTED_BY_FIELD = "started_by";
+    public static final String STOPPED_BY_FIELD = "stopped_by";
     public static final String ERROR_FIELD = "error";
     public static final String STATE_FIELD = "state";
     public static final String DETECTOR_ID_FIELD = "detector_id";
@@ -62,6 +64,8 @@ public class ADTask implements ToXContentObject, Writeable {
 
     private String taskId = null;
     private Instant lastUpdateTime = null;
+    private String startedBy = null;
+    private String stoppedBy = null;
     private String error = null;
     private String state = null;
     private String detectorId = null;
@@ -96,6 +100,8 @@ public class ADTask implements ToXContentObject, Writeable {
         this.error = input.readOptionalString();
         this.checkpointId = input.readOptionalString();
         this.lastUpdateTime = input.readOptionalInstant();
+        this.startedBy = input.readOptionalString();
+        this.stoppedBy = input.readOptionalString();
     }
 
     @Override
@@ -119,6 +125,8 @@ public class ADTask implements ToXContentObject, Writeable {
         out.writeOptionalString(error);
         out.writeOptionalString(checkpointId);
         out.writeOptionalInstant(lastUpdateTime);
+        out.writeOptionalString(startedBy);
+        out.writeOptionalString(stoppedBy);
     }
 
     public static class Builder {
@@ -136,6 +144,8 @@ public class ADTask implements ToXContentObject, Writeable {
         private String error = null;
         private String checkpointId = null;
         private Instant lastUpdateTime = null;
+        private String startedBy = null;
+        private String stoppedBy = null;
 
         public Builder() {}
 
@@ -146,6 +156,16 @@ public class ADTask implements ToXContentObject, Writeable {
 
         public Builder lastUpdateTime(Instant lastUpdateTime) {
             this.lastUpdateTime = lastUpdateTime;
+            return this;
+        }
+
+        public Builder startedBy(String startedBy) {
+            this.startedBy = startedBy;
+            return this;
+        }
+
+        public Builder stoppedBy(String stoppedBy) {
+            this.stoppedBy = stoppedBy;
             return this;
         }
 
@@ -225,6 +245,8 @@ public class ADTask implements ToXContentObject, Writeable {
             adTask.taskType = this.taskType;
             adTask.checkpointId = this.checkpointId;
             adTask.detector = this.detector;
+            adTask.startedBy = this.startedBy;
+            adTask.stoppedBy = this.stoppedBy;
 
             return adTask;
         }
@@ -239,6 +261,12 @@ public class ADTask implements ToXContentObject, Writeable {
         }
         if (lastUpdateTime != null) {
             xContentBuilder.field(LAST_UPDATE_TIME_FIELD, lastUpdateTime.toEpochMilli());
+        }
+        if (startedBy != null) {
+            xContentBuilder.field(STARTED_BY_FIELD, startedBy);
+        }
+        if (stoppedBy != null) {
+            xContentBuilder.field(STOPPED_BY_FIELD, stoppedBy);
         }
         if (error != null) {
             xContentBuilder.field(ERROR_FIELD, error);
@@ -285,6 +313,8 @@ public class ADTask implements ToXContentObject, Writeable {
 
     public static ADTask parse(XContentParser parser, String taskId) throws IOException {
         Instant lastUpdateTime = null;
+        String startedBy = null;
+        String stoppedBy = null;
         String error = null;
         String state = null;
         String detectorId = null;
@@ -306,6 +336,12 @@ public class ADTask implements ToXContentObject, Writeable {
             switch (fieldName) {
                 case LAST_UPDATE_TIME_FIELD:
                     lastUpdateTime = ParseUtils.toInstant(parser);
+                    break;
+                case STARTED_BY_FIELD:
+                    startedBy = parser.text();
+                    break;
+                case STOPPED_BY_FIELD:
+                    stoppedBy = parser.text();
                     break;
                 case ERROR_FIELD:
                     error = parser.text();
@@ -351,6 +387,8 @@ public class ADTask implements ToXContentObject, Writeable {
         return new Builder()
             .taskId(taskId)
             .lastUpdateTime(lastUpdateTime)
+            .startedBy(startedBy)
+            .stoppedBy(stoppedBy)
             .error(error)
             .state(state)
             .detectorId(detectorId)
@@ -376,6 +414,8 @@ public class ADTask implements ToXContentObject, Writeable {
         ADTask that = (ADTask) o;
         return Objects.equal(getTaskId(), that.getTaskId())
             && Objects.equal(getLastUpdateTime(), that.getLastUpdateTime())
+            && Objects.equal(getStartedBy(), that.getStartedBy())
+            && Objects.equal(getStoppedBy(), that.getStoppedBy())
             && Objects.equal(getError(), that.getError())
             && Objects.equal(getState(), that.getState())
             && Objects.equal(getDetectorId(), that.getDetectorId())
@@ -397,6 +437,8 @@ public class ADTask implements ToXContentObject, Writeable {
             .hashCode(
                 taskId,
                 lastUpdateTime,
+                startedBy,
+                stoppedBy,
                 error,
                 state,
                 detectorId,
@@ -426,6 +468,22 @@ public class ADTask implements ToXContentObject, Writeable {
 
     public void setLastUpdateTime(Instant lastUpdateTime) {
         this.lastUpdateTime = lastUpdateTime;
+    }
+
+    public String getStartedBy() {
+        return startedBy;
+    }
+
+    public void setStartedBy(String startedBy) {
+        this.startedBy = startedBy;
+    }
+
+    public String getStoppedBy() {
+        return stoppedBy;
+    }
+
+    public void setStoppedBy(String stoppedBy) {
+        this.stoppedBy = stoppedBy;
     }
 
     public String getError() {

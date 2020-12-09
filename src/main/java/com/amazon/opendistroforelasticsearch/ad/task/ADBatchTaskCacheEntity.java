@@ -35,6 +35,7 @@ public class ADBatchTaskCacheEntity {
     private AtomicBoolean cancelled = new AtomicBoolean(false);
     private AtomicLong cacheMemorySize = new AtomicLong(0);
     private String cancelReason;
+    private String cancelledBy;
 
     public ADBatchTaskCacheEntity(String detectorId) {
         this.detectorId = detectorId;
@@ -96,12 +97,17 @@ public class ADBatchTaskCacheEntity {
         return cancelReason;
     }
 
+    public String getCancelledBy() {
+        return cancelledBy;
+    }
+
     public void setCancelReason(String cancelReason) {
         this.cancelReason = cancelReason;
     }
 
-    public void cancel(String reason) {
+    public void cancel(String reason, String userName) {
         this.cancelled.compareAndSet(false, true);
         this.cancelReason = reason;
+        this.cancelledBy = userName;
     }
 }

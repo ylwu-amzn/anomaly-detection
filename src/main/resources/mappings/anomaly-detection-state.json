@@ -11,6 +11,12 @@
       "type": "date",
       "format": "strict_date_time||epoch_millis"
     },
+    "started_by": {
+      "type": "keyword"
+    },
+    "stopped_by": {
+      "type": "keyword"
+    },
     "error": {
       "type": "text"
     },

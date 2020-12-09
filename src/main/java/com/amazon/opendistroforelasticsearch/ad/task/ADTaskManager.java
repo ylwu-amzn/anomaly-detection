@@ -15,6 +15,7 @@
 
 package com.amazon.opendistroforelasticsearch.ad.task;
 
+import com.amazon.opendistroforelasticsearch.ad.common.exception.ADTaskCancelledException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.AnomalyDetectionException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.InternalFailure;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException;
@@ -38,6 +39,7 @@ import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyDetectorJobResp
 import com.amazon.opendistroforelasticsearch.ad.transport.handler.DetectionStateHandler;
 import com.amazon.opendistroforelasticsearch.ad.util.DiscoveryNodeFilterer;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
+import com.amazon.opendistroforelasticsearch.commons.authuser.User;
 import com.google.common.collect.ImmutableMap;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -95,6 +97,7 @@ import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.EXECUTION_EN
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.IS_LATEST_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.LAST_UPDATE_TIME_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.STATE_FIELD;
+import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.STOPPED_BY_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_BATCH_TASK_PIECE_INTERVAL_SECONDS;
 import static org.elasticsearch.action.DocWriteResponse.Result.CREATED;
 import static org.elasticsearch.action.DocWriteResponse.Result.UPDATED;
@@ -141,29 +144,30 @@ public class ADTaskManager {
     }
 
     public void startDetector(
-        String detectorId,
-        IndexAnomalyDetectorJobActionHandler handler,
-        ActionListener<AnomalyDetectorJobResponse> listener
+            String detectorId,
+            IndexAnomalyDetectorJobActionHandler handler,
+            User user,
+            ActionListener<AnomalyDetectorJobResponse> listener
     ) {
         getDetector(
             detectorId,
             (detector) -> handler.startAnomalyDetectorJob(detector), // create schedule job for realtime detector
-            (detector) -> createADTaskIndex(detector, listener), // start an AD task for historical detector
+            (detector) -> createADTaskIndex(detector, user, listener), // start an AD task for historical detector
             listener
         );
     }
 
     public void stopDetector(
-        String detectorId,
-        IndexAnomalyDetectorJobActionHandler handler,
-        ActionListener<AnomalyDetectorJobResponse> listener
+            String detectorId,
+            IndexAnomalyDetectorJobActionHandler handler,
+            User user, ActionListener<AnomalyDetectorJobResponse> listener
     ) {
         getDetector(
             detectorId,
             // stop realtime detector job
             (detector) -> handler.stopAnomalyDetectorJob(detectorId),
             // stop historical detector AD task
-            (detector) -> getLatestADTask(detectorId, (task) -> stopTask(detectorId, task, listener), listener),
+            (detector) -> getLatestADTask(detectorId, (task) -> stopTask(detectorId, task, user, listener), listener),
             listener
         );
     }
@@ -336,7 +340,7 @@ public class ADTaskManager {
         }
     }
 
-    private void stopTask(String detectorId, Optional<ADTask> adTask, ActionListener<AnomalyDetectorJobResponse> listener) {
+    private void stopTask(String detectorId, Optional<ADTask> adTask, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
         if (!adTask.isPresent()) {
             listener.onFailure(new ResourceNotFoundException(detectorId, "Detector not started"));
             return;
@@ -351,7 +355,8 @@ public class ADTaskManager {
         String taskId = adTask.get().getTaskId();
 
         DiscoveryNode[] dataNodes = nodeFilter.getEligibleDataNodes();
-        ADCancelTaskRequest cancelTaskRequest = new ADCancelTaskRequest(taskId, dataNodes);
+        String userName = user == null ? null: user.getName();
+        ADCancelTaskRequest cancelTaskRequest = new ADCancelTaskRequest(taskId,userName,  dataNodes);
         client.execute(ADCancelTaskAction.INSTANCE, cancelTaskRequest,
                 ActionListener.wrap(response -> {
                     Set<ADTaskCancellationState> states = response.getNodes().stream()
@@ -440,19 +445,19 @@ public class ADTaskManager {
 ////        }));
 //    }
 
-    private void createADTaskIndex(AnomalyDetector detector, ActionListener<AnomalyDetectorJobResponse> listener) {
+    private void createADTaskIndex(AnomalyDetector detector, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
         if (adTaskCache.containsTaskOfDetector(detector.getDetectorId())){
             listener.onFailure(new ElasticsearchStatusException("Detector is already running", RestStatus.BAD_REQUEST));
             return;
         }
         adTaskCache.checkRunningTaskLimit();
         if (detectionIndices.doesDetectorStateIndexExist()) {
-            checkCurrentTaskState(detector, listener);
+            checkCurrentTaskState(detector, user, listener);
         } else {
             detectionIndices.initDetectionStateIndex(ActionListener.wrap(r -> {
                 if (r.isAcknowledged()) {
                     logger.info("Created {} with mappings.", ADTask.DETECTOR_STATE_INDEX);
-                    executeHistoricalDetector(detector, listener);
+                    executeHistoricalDetector(detector, user, listener);
                 } else {
                     logger.warn("Created {} with mappings call not acknowledged.", ADTask.DETECTOR_STATE_INDEX);
                     listener
@@ -467,7 +472,7 @@ public class ADTaskManager {
         }
     }
 
-    private void checkCurrentTaskState(AnomalyDetector detector, ActionListener<AnomalyDetectorJobResponse> listener) {
+    private void checkCurrentTaskState(AnomalyDetector detector, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
         BoolQueryBuilder query = new BoolQueryBuilder();
         query.filter(new TermQueryBuilder(DETECTOR_ID_FIELD, detector.getDetectorId()));
         query.filter(new TermsQueryBuilder(STATE_FIELD, ADTaskState.CREATED.name(), ADTaskState.INIT.name(),ADTaskState.RUNNING.name()));
@@ -480,13 +485,13 @@ public class ADTaskManager {
             if (r.getHits().getTotalHits().value > 0) {
                 listener.onFailure(new ElasticsearchStatusException("Detector is already running", RestStatus.BAD_REQUEST));
             } else {
-                executeHistoricalDetector(detector, listener);
+                executeHistoricalDetector(detector, user, listener);
             }
         }, e -> listener.onFailure(e)));
 
     }
 
-    public void executeHistoricalDetector(AnomalyDetector detector, ActionListener<AnomalyDetectorJobResponse> listener) {
+    public void executeHistoricalDetector(AnomalyDetector detector, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
         UpdateByQueryRequest updateByQueryRequest = new UpdateByQueryRequest();
         updateByQueryRequest.indices(ADTask.DETECTOR_STATE_INDEX);
         BoolQueryBuilder query = new BoolQueryBuilder();
@@ -502,7 +507,7 @@ public class ADTaskManager {
                 updateByQueryRequest,
                 ActionListener
                     .wrap(
-                        r -> createNewADTask(detector, listener),
+                        r -> createNewADTask(detector, user, listener),
                         e -> {
                             // Not check IndexNotFoundException here as we have created index before this line
                             listener.onFailure(e);
@@ -511,7 +516,8 @@ public class ADTaskManager {
             );
     }
 
-    private void createNewADTask(AnomalyDetector detector, ActionListener<AnomalyDetectorJobResponse> listener) {
+    private void createNewADTask(AnomalyDetector detector, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
+        String userName = user == null ? null : user.getName();
         ADTask adTask = new ADTask.Builder()
             .detectorId(detector.getDetectorId())
             .detector(detector)
@@ -521,6 +527,7 @@ public class ADTaskManager {
             .taskProgress(0.0f)
             .state(ADTaskState.CREATED.name())
             .lastUpdateTime(Instant.now())
+            .startedBy(userName)
             .build();
 
         IndexRequest request = new IndexRequest(ADTask.DETECTOR_STATE_INDEX);
@@ -598,9 +605,15 @@ public class ADTaskManager {
             logger.error("Timeout to execute AD task", exception);
             updatedFields.put(ERROR_FIELD, exception.getMessage());
         } else if (exception instanceof TaskCancelledException) {
-            logger.error("AD task cancelled: " + adTask.getTaskId());
+            logger.warn("AD task cancelled: " + adTask.getTaskId());
             state = ADTaskState.STOPPED.name();
             updatedFields.put(ERROR_FIELD, exception.getMessage());
+            if (exception instanceof ADTaskCancelledException) {
+                String stoppedBy = ((ADTaskCancelledException) exception).getCancelledBy();
+                if (stoppedBy != null) {
+                    updatedFields.put(STOPPED_BY_FIELD, stoppedBy);
+                }
+            }
         } else {
             logger.error("Fail to execute batch task action " + adTask.getTaskId(), exception);
             String error = (exception instanceof IllegalArgumentException
@@ -754,14 +767,14 @@ public class ADTaskManager {
         return adTaskProfile;
     }
 
-    public ADTaskCancellationState cancelTask(String taskId, String reason) {
+    public ADTaskCancellationState cancelTask(String taskId, String reason, String userName) {
         if (!adTaskCache.contains(taskId)) {
             return ADTaskCancellationState.NOT_FOUND;
         }
         if (adTaskCache.isCancelled(taskId)) {
             return ADTaskCancellationState.ALREADY_CANCELLED;
         }
-        adTaskCache.cancel(taskId, reason);
+        adTaskCache.cancel(taskId, reason, userName);
         return ADTaskCancellationState.CANCELLED;
     }
 
@@ -774,7 +787,7 @@ public class ADTaskManager {
         Iterator<Map.Entry<String, ADBatchTaskCacheEntity>> iterator = adTaskCache.iterator();
         while (iterator.hasNext()) {
             Map.Entry<String, ADBatchTaskCacheEntity> taskCache = iterator.next();
-            cancelTask(taskCache.getKey(), reason);
+            cancelTask(taskCache.getKey(), reason, null);
         }
     }
 }

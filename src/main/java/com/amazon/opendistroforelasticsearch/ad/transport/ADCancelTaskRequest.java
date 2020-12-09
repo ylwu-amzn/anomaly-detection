@@ -30,20 +30,24 @@ import static org.elasticsearch.action.ValidateActions.addValidationError;
 public class ADCancelTaskRequest extends BaseNodesRequest<ADCancelTaskRequest> {
 
     private String adTaskId;
+    private String userName;
 
     public ADCancelTaskRequest(StreamInput in) throws IOException {
         super(in);
         this.adTaskId = in.readString();
+        this.userName = in.readOptionalString();
     }
 
-    public ADCancelTaskRequest(String adTaskId, String... nodeIds) {
+    public ADCancelTaskRequest(String adTaskId, String userName, String... nodeIds) {
         super(nodeIds);
         this.adTaskId = adTaskId;
+        this.userName = userName;
     }
 
-    public ADCancelTaskRequest(String adTaskId, DiscoveryNode... nodes) {
+    public ADCancelTaskRequest(String adTaskId, String userName, DiscoveryNode... nodes) {
         super(nodes);
         this.adTaskId = adTaskId;
+        this.userName = userName;
     }
 
     @Override
@@ -59,9 +63,14 @@ public class ADCancelTaskRequest extends BaseNodesRequest<ADCancelTaskRequest> {
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
         out.writeString(adTaskId);
+        out.writeOptionalString(userName);
     }
 
     public String getAdTaskId() {
         return adTaskId;
+    }
+
+    public String getUserName() {
+        return userName;
     }
 }

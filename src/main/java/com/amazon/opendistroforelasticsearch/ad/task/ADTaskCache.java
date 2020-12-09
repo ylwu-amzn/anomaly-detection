@@ -244,9 +244,14 @@ public class ADTaskCache {
         return taskCache.getCancelReason();
     }
 
-    public void cancel(String taskId, String reason) {
+    public String getCancelledBy(String taskId) {
         ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
-        taskCache.cancel(reason);
+        return taskCache.getCancelledBy();
+    }
+
+    public void cancel(String taskId, String reason, String userName) {
+        ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
+        taskCache.cancel(reason, userName);
     }
 
     public int size() {
