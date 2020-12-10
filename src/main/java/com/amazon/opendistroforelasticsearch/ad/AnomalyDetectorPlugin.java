@@ -29,11 +29,15 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.amazon.opendistroforelasticsearch.ad.rest.RestSearchADTasksAction;
 import com.amazon.opendistroforelasticsearch.ad.task.ADTaskCache;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADCancelTaskAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADCancelTaskTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileTransportAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.SearchADTasksAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.SearchADTasksTransportAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.handler.SearchHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.SpecialPermission;
@@ -248,6 +252,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
         RestIndexAnomalyDetectorAction restIndexAnomalyDetectorAction = new RestIndexAnomalyDetectorAction(settings, clusterService);
         RestSearchAnomalyDetectorAction searchAnomalyDetectorAction = new RestSearchAnomalyDetectorAction();
         RestSearchAnomalyResultAction searchAnomalyResultAction = new RestSearchAnomalyResultAction();
+        RestSearchADTasksAction searchADTasksAction = new RestSearchADTasksAction();
         RestDeleteAnomalyDetectorAction deleteAnomalyDetectorAction = new RestDeleteAnomalyDetectorAction();
         RestExecuteAnomalyDetectorAction executeAnomalyDetectorAction = new RestExecuteAnomalyDetectorAction(
             settings,
@@ -264,6 +269,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 restIndexAnomalyDetectorAction,
                 searchAnomalyDetectorAction,
                 searchAnomalyResultAction,
+                searchADTasksAction,
                 deleteAnomalyDetectorAction,
                 executeAnomalyDetectorAction,
                 anomalyDetectorJobAction,
@@ -511,6 +517,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             xContentRegistry,
             stateManager
         );
+        SearchHandler searchHandler =  new SearchHandler(settings, clusterService, client);
         adBatchTaskCache = new ADTaskCache(settings, clusterService, memoryTracker);
         adTaskManager = new ADTaskManager(
             settings,
@@ -576,6 +583,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 modelPartitioner,
                 cacheProvider,
                 anomalyResultBulkIndexHandler,
+                searchHandler,
                 adTaskManager,
                 adBatchTaskRunner
             );
@@ -640,7 +648,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 AnomalyDetectorSettings.MAX_CACHE_MISS_HANDLING_PER_SECOND,
                 AnomalyDetectorSettings.MAX_BATCH_TASK_PER_NODE,
                 AnomalyDetectorSettings.MAX_BATCH_TASK_PIECE_SIZE,
-                AnomalyDetectorSettings.MAX_BATCH_TASK_PIECE_INTERVAL_SECONDS,
+                AnomalyDetectorSettings.BATCH_TASK_PIECE_INTERVAL_SECONDS,
                 AnomalyDetectorSettings.MAX_AD_TASK_DOCS_PER_DETECTOR
             );
         return unmodifiableList(Stream.concat(enabledSetting.stream(), systemSetting.stream()).collect(Collectors.toList()));
@@ -675,6 +683,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 new ActionHandler<>(RCFPollingAction.INSTANCE, RCFPollingTransportAction.class),
                 new ActionHandler<>(SearchAnomalyDetectorAction.INSTANCE, SearchAnomalyDetectorTransportAction.class),
                 new ActionHandler<>(SearchAnomalyResultAction.INSTANCE, SearchAnomalyResultTransportAction.class),
+                new ActionHandler<>(SearchADTasksAction.INSTANCE, SearchADTasksTransportAction.class),
                 new ActionHandler<>(StatsAnomalyDetectorAction.INSTANCE, StatsAnomalyDetectorTransportAction.class),
                 new ActionHandler<>(DeleteAnomalyDetectorAction.INSTANCE, DeleteAnomalyDetectorTransportAction.class),
                 new ActionHandler<>(GetAnomalyDetectorAction.INSTANCE, GetAnomalyDetectorTransportAction.class),

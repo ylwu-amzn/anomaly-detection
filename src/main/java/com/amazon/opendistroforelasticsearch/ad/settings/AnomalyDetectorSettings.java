@@ -342,9 +342,9 @@ public final class AnomalyDetectorSettings {
                     Setting.Property.Dynamic
             );
 
-    public static final Setting<Integer> MAX_BATCH_TASK_PIECE_INTERVAL_SECONDS = Setting
+    public static final Setting<Integer> BATCH_TASK_PIECE_INTERVAL_SECONDS = Setting
             .intSetting(
-                    "opendistro.anomaly_detection.max_batch_task_piece_interval_seconds",
+                    "opendistro.anomaly_detection.batch_task_piece_interval_seconds",
                     5,
                     1,
                     600,
@@ -356,7 +356,7 @@ public final class AnomalyDetectorSettings {
             .intSetting(
                     "opendistro.anomaly_detection.max_ad_task_docs_per_detector",
                     // Total documents in primary replica.
-                    // One AD task is roughly 1.5KB for normal case. Support task's size
+                    // One AD task is roughly 1.5KB for normal case. Suppose task's size
                     // is 2KB conservatively. We allow 1000 anomaly detectors by default.
                     // If we store 1000 AD tasks for one detector, that will be 2GB.
                     // If we limit total size as 50 GB, then we can store 25_000 AD tasks

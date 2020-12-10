@@ -102,7 +102,7 @@ import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.LAST_UPDATE_
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.STATE_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.STOPPED_BY_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_AD_TASK_DOCS_PER_DETECTOR;
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_BATCH_TASK_PIECE_INTERVAL_SECONDS;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.BATCH_TASK_PIECE_INTERVAL_SECONDS;
 import static org.elasticsearch.action.DocWriteResponse.Result.CREATED;
 import static org.elasticsearch.action.DocWriteResponse.Result.UPDATED;
 import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
@@ -142,10 +142,10 @@ public class ADTaskManager {
         this.detectorStateHandler = detectorStateHandler;
         this.adTaskCache = adTaskCache;
 
-        this.pieceIntervalSeconds = MAX_BATCH_TASK_PIECE_INTERVAL_SECONDS.get(settings);
+        this.pieceIntervalSeconds = BATCH_TASK_PIECE_INTERVAL_SECONDS.get(settings);
         clusterService
                 .getClusterSettings()
-                .addSettingsUpdateConsumer(MAX_BATCH_TASK_PIECE_INTERVAL_SECONDS, it -> pieceIntervalSeconds = it);        this.pieceIntervalSeconds = MAX_BATCH_TASK_PIECE_INTERVAL_SECONDS.get(settings);
+                .addSettingsUpdateConsumer(BATCH_TASK_PIECE_INTERVAL_SECONDS, it -> pieceIntervalSeconds = it);        this.pieceIntervalSeconds = BATCH_TASK_PIECE_INTERVAL_SECONDS.get(settings);
 
         this.maxAdTaskDocsPerDetector = MAX_AD_TASK_DOCS_PER_DETECTOR.get(settings);
         clusterService
