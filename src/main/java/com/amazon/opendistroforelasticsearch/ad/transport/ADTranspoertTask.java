@@ -22,14 +22,7 @@ import org.elasticsearch.tasks.TaskId;
 
 public class ADTranspoertTask extends CancellableTask {
 
-    public ADTranspoertTask(
-        long id,
-        String type,
-        String action,
-        String description,
-        TaskId parentTaskId,
-        Map<String, String> headers
-    ) {
+    public ADTranspoertTask(long id, String type, String action, String description, TaskId parentTaskId, Map<String, String> headers) {
         super(id, type, action, description, parentTaskId, headers);
     }
 

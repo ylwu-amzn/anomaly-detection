@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.amazon.opendistroforelasticsearch.ad.stats.StatNames;
 import org.elasticsearch.action.FailedNodeException;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.nodes.TransportNodesAction;
@@ -33,6 +32,7 @@ import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
 import com.amazon.opendistroforelasticsearch.ad.stats.ADStats;
+import com.amazon.opendistroforelasticsearch.ad.stats.StatNames;
 
 /**
  *  ADStatsNodesTransportAction contains the logic to extract the stats from the nodes
@@ -51,6 +51,7 @@ public class ADStatsNodesTransportAction extends
      * @param transportService TransportService
      * @param actionFilters Action Filters
      * @param adStats ADStats object
+     * @param jvmService JVM service
      */
     @Inject
     public ADStatsNodesTransportAction(
@@ -105,7 +106,7 @@ public class ADStatsNodesTransportAction extends
         Set<String> statsToBeRetrieved = adStatsRequest.getStatsToBeRetrieved();
 
         if (statsToBeRetrieved.contains(StatNames.JVM_HEAP_USAGE.getName())) {
-            adStats.getStat(StatNames.JVM_HEAP_USAGE.getName()).setValue((long)jvmService.stats().getMem().getHeapUsedPercent());
+            adStats.getStat(StatNames.JVM_HEAP_USAGE.getName()).setValue((long) jvmService.stats().getMem().getHeapUsedPercent());
         }
 
         for (String statName : adStats.getNodeStats().keySet()) {

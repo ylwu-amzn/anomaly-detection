@@ -15,15 +15,15 @@
 
 package com.amazon.opendistroforelasticsearch.ad.task;
 
-import com.amazon.opendistroforelasticsearch.ad.ml.ThresholdingModel;
-import com.amazon.randomcutforest.RandomCutForest;
-
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+
+import com.amazon.opendistroforelasticsearch.ad.ml.ThresholdingModel;
+import com.amazon.randomcutforest.RandomCutForest;
 
 public class ADBatchTaskCacheEntity {
     private final String detectorId;

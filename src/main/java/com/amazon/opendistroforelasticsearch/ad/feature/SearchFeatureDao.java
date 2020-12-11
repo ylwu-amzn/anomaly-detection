@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
@@ -313,7 +312,7 @@ public class SearchFeatureDao {
             List<InternalComposite.InternalBucket> buckets = ((InternalComposite) agg).getBuckets();
             buckets.forEach(bucket -> {
                 Optional<double[]> featureData = parseAggregations(Optional.ofNullable(bucket.getAggregations()), featureIds);
-                dataPoints.put((Long)bucket.getKey().get("date_histogram"), featureData);
+                dataPoints.put((Long) bucket.getKey().get("date_histogram"), featureData);
             });
         }
         return dataPoints;

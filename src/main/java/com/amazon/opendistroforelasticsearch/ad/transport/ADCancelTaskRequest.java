@@ -15,7 +15,10 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
-import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
+import static org.elasticsearch.action.ValidateActions.addValidationError;
+
+import java.io.IOException;
+
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.support.nodes.BaseNodesRequest;
 import org.elasticsearch.cluster.node.DiscoveryNode;
@@ -23,9 +26,7 @@ import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 
-import java.io.IOException;
-
-import static org.elasticsearch.action.ValidateActions.addValidationError;
+import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
 
 public class ADCancelTaskRequest extends BaseNodesRequest<ADCancelTaskRequest> {
 

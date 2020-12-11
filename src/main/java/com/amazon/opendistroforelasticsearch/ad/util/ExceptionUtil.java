@@ -15,10 +15,10 @@
 
 package com.amazon.opendistroforelasticsearch.ad.util;
 
-import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.common.io.stream.NotSerializableExceptionWrapper;
 
+import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.ResourceNotFoundException;
 
 public class ExceptionUtil {
@@ -59,8 +59,7 @@ public class ExceptionUtil {
     }
 
     public static boolean isServerError(Exception e) {
-        if (e instanceof ResourceNotFoundException || e instanceof IllegalArgumentException
-                || e instanceof LimitExceededException) {
+        if (e instanceof ResourceNotFoundException || e instanceof IllegalArgumentException || e instanceof LimitExceededException) {
             return false;
         }
         return true;

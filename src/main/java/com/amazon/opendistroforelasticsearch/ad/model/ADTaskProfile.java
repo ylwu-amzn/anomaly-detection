@@ -15,20 +15,16 @@
 
 package com.amazon.opendistroforelasticsearch.ad.model;
 
-import com.amazon.opendistroforelasticsearch.ad.annotation.Generated;
-import com.amazon.opendistroforelasticsearch.ad.util.ParseUtils;
-import com.google.common.base.Objects;
+import java.io.IOException;
+
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
 import org.elasticsearch.common.xcontent.ToXContentObject;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.common.xcontent.XContentParser;
 
-import java.io.IOException;
-import java.time.Instant;
-
-import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
+import com.amazon.opendistroforelasticsearch.ad.annotation.Generated;
+import com.google.common.base.Objects;
 
 /**
  * One anomaly detection task means one detector starts to run until stopped.
@@ -51,12 +47,12 @@ public class ADTaskProfile implements ToXContentObject, Writeable {
     private String nodeId;
 
     public ADTaskProfile(
-            ADTask adTask,
-            Integer shingleSize,
-            Long rcfTotalUpdates,
-            Boolean thresholdModelTrained,
-            Integer thresholdNodelTrainingDataSize,
-            String nodeId
+        ADTask adTask,
+        Integer shingleSize,
+        Long rcfTotalUpdates,
+        Boolean thresholdModelTrained,
+        Integer thresholdNodelTrainingDataSize,
+        String nodeId
     ) {
         this.adTask = adTask;
         this.shingleSize = shingleSize;
@@ -138,15 +134,7 @@ public class ADTaskProfile implements ToXContentObject, Writeable {
     @Generated
     @Override
     public int hashCode() {
-        return Objects
-                .hashCode(
-                        adTask,
-                        shingleSize,
-                        rcfTotalUpdates,
-                        thresholdModelTrained,
-                        thresholdNodelTrainingDataSize,
-                        nodeId
-                );
+        return Objects.hashCode(adTask, shingleSize, rcfTotalUpdates, thresholdModelTrained, thresholdNodelTrainingDataSize, nodeId);
     }
 
     public ADTask getAdTask() {
@@ -199,13 +187,20 @@ public class ADTaskProfile implements ToXContentObject, Writeable {
 
     @Override
     public String toString() {
-        return "ADTaskProfile{" +
-                "adTask=" + adTask +
-                ", shingleSize=" + shingleSize +
-                ", rcfTotalUpdates=" + rcfTotalUpdates +
-                ", thresholdModelTrained=" + thresholdModelTrained +
-                ", thresholdNodelTrainingDataSize=" + thresholdNodelTrainingDataSize +
-                ", nodeId='" + nodeId + '\'' +
-                '}';
+        return "ADTaskProfile{"
+            + "adTask="
+            + adTask
+            + ", shingleSize="
+            + shingleSize
+            + ", rcfTotalUpdates="
+            + rcfTotalUpdates
+            + ", thresholdModelTrained="
+            + thresholdModelTrained
+            + ", thresholdNodelTrainingDataSize="
+            + thresholdNodelTrainingDataSize
+            + ", nodeId='"
+            + nodeId
+            + '\''
+            + '}';
     }
 }

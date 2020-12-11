@@ -15,7 +15,6 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
-import com.amazon.opendistroforelasticsearch.ad.transport.handler.SearchHandler;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchResponse;
@@ -25,15 +24,13 @@ import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.transport.TransportService;
 
+import com.amazon.opendistroforelasticsearch.ad.transport.handler.SearchHandler;
+
 public class SearchADTasksTransportAction extends HandledTransportAction<SearchRequest, SearchResponse> {
     private SearchHandler searchHandler;
 
     @Inject
-    public SearchADTasksTransportAction(
-        TransportService transportService,
-        ActionFilters actionFilters,
-        SearchHandler searchHandler
-    ) {
+    public SearchADTasksTransportAction(TransportService transportService, ActionFilters actionFilters, SearchHandler searchHandler) {
         super(SearchADTasksAction.NAME, transportService, actionFilters, SearchRequest::new);
         this.searchHandler = searchHandler;
     }

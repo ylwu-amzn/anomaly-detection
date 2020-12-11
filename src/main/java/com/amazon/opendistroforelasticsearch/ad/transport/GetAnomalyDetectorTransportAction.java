@@ -189,11 +189,11 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
     }
 
     private void getDetectorAndJob(
-            String detectorID,
-            boolean returnJob,
-            boolean returnTask,
-            Optional<ADTask> adTask,
-            ActionListener<GetAnomalyDetectorResponse> listener
+        String detectorID,
+        boolean returnJob,
+        boolean returnTask,
+        Optional<ADTask> adTask,
+        ActionListener<GetAnomalyDetectorResponse> listener
     ) {
         MultiGetRequest.Item adItem = new MultiGetRequest.Item(ANOMALY_DETECTORS_INDEX, detectorID);
         MultiGetRequest multiGetRequest = new MultiGetRequest().add(adItem);
@@ -205,11 +205,11 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
     }
 
     private ActionListener<MultiGetResponse> onMultiGetResponse(
-            ActionListener<GetAnomalyDetectorResponse> listener,
-            boolean returnJob,
-            boolean returnTask,
-            Optional<ADTask> adTask,
-            String detectorId
+        ActionListener<GetAnomalyDetectorResponse> listener,
+        boolean returnJob,
+        boolean returnTask,
+        Optional<ADTask> adTask,
+        String detectorId
     ) {
         return new ActionListener<MultiGetResponse>() {
             @Override

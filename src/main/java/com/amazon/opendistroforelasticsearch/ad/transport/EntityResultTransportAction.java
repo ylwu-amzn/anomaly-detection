@@ -24,7 +24,6 @@ import java.util.Arrays;
 import java.util.Map.Entry;
 import java.util.Optional;
 
-import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
@@ -54,6 +53,7 @@ import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyResult;
 import com.amazon.opendistroforelasticsearch.ad.model.Entity;
 import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.transport.handler.MultiEntityResultHandler;
 import com.amazon.opendistroforelasticsearch.ad.util.ParseUtils;
 
@@ -134,8 +134,7 @@ public class EntityResultTransportAction extends HandledTransportAction<EntityRe
             listener
                 .onFailure(new LimitExceededException(request.getDetectorId(), CommonErrorMessages.MEMORY_CIRCUIT_BROKEN_ERR_MSG, false));
             if (adTaskManager.hasCancellableTask()) {
-                String error = "Cancel task to release resource for realtime high cardinality detector: "
-                        + request.getDetectorId();
+                String error = "Cancel task to release resource for realtime high cardinality detector: " + request.getDetectorId();
                 LOG.warn(error);
                 adTaskManager.cancelAllFeasibleTasks(error);
             }

@@ -15,12 +15,11 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
-import com.amazon.opendistroforelasticsearch.ad.function.AnomalyDetectorFunction;
-import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
-import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
-import com.amazon.opendistroforelasticsearch.ad.model.DetectorInternalState;
-import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
-import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
+import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob.ANOMALY_DETECTOR_JOB_INDEX;
+import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
+
+import java.io.IOException;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchStatusException;
@@ -44,10 +43,12 @@ import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.transport.TransportService;
 
-import java.io.IOException;
-
-import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob.ANOMALY_DETECTOR_JOB_INDEX;
-import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
+import com.amazon.opendistroforelasticsearch.ad.function.AnomalyDetectorFunction;
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
+import com.amazon.opendistroforelasticsearch.ad.model.DetectorInternalState;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
+import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 
 public class DeleteAnomalyDetectorTransportAction extends HandledTransportAction<DeleteAnomalyDetectorRequest, DeleteResponse> {
 
@@ -91,8 +92,8 @@ public class DeleteAnomalyDetectorTransportAction extends HandledTransportAction
                     detector -> adTaskManager.getLatestADTask(detectorId, adTask -> {
                         if (adTask.isPresent()) {
                             if (adTaskManager.isADTaskRunning(adTask.get())) {
-                                listener.onFailure(new ElasticsearchStatusException("Detector is running",
-                                        RestStatus.INTERNAL_SERVER_ERROR));
+                                listener
+                                    .onFailure(new ElasticsearchStatusException("Detector is running", RestStatus.INTERNAL_SERVER_ERROR));
                             } else {
                                 adTaskManager.deleteADTasks(detectorId, r -> deleteDetectorStateDoc(detectorId, listener), listener);
                             }

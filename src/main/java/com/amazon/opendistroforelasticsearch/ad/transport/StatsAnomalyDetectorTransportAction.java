@@ -15,11 +15,11 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
-import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
-import com.amazon.opendistroforelasticsearch.ad.stats.ADStats;
-import com.amazon.opendistroforelasticsearch.ad.stats.ADStatsResponse;
-import com.amazon.opendistroforelasticsearch.ad.stats.StatNames;
-import com.amazon.opendistroforelasticsearch.ad.util.MultiResponsesDelegateActionListener;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchStatusException;
@@ -39,10 +39,11 @@ import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.transport.TransportService;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
+import com.amazon.opendistroforelasticsearch.ad.stats.ADStats;
+import com.amazon.opendistroforelasticsearch.ad.stats.ADStatsResponse;
+import com.amazon.opendistroforelasticsearch.ad.stats.StatNames;
+import com.amazon.opendistroforelasticsearch.ad.util.MultiResponsesDelegateActionListener;
 
 public class StatsAnomalyDetectorTransportAction extends HandledTransportAction<ADStatsRequest, StatsAnomalyDetectorResponse> {
     public static final String DETECTOR_TYPE_AGG = "detector_type_agg";
@@ -125,20 +126,21 @@ public class StatsAnomalyDetectorTransportAction extends HandledTransportAction<
         ADStatsRequest adStatsRequest
     ) {
         ADStatsResponse adStatsResponse = new ADStatsResponse();
-        if ((adStatsRequest.getStatsToBeRetrieved().contains(StatNames.DETECTOR_COUNT.getName()) ||
-                adStatsRequest.getStatsToBeRetrieved().contains(StatNames.HISTORICAL_DETECTOR_COUNT.getName()))
-                && clusterService.state().getRoutingTable().hasIndex(AnomalyDetector.ANOMALY_DETECTORS_INDEX)) {
+        if ((adStatsRequest.getStatsToBeRetrieved().contains(StatNames.DETECTOR_COUNT.getName())
+            || adStatsRequest.getStatsToBeRetrieved().contains(StatNames.HISTORICAL_DETECTOR_COUNT.getName()))
+            && clusterService.state().getRoutingTable().hasIndex(AnomalyDetector.ANOMALY_DETECTORS_INDEX)) {
 
             TermsAggregationBuilder termsAgg = AggregationBuilders.terms(DETECTOR_TYPE_AGG).field(AnomalyDetector.DETECTOR_TYPE_FIELD);
-            SearchRequest request = new SearchRequest().indices(AnomalyDetector.ANOMALY_DETECTORS_INDEX)
-                    .source(new SearchSourceBuilder().aggregation(termsAgg).size(0));
+            SearchRequest request = new SearchRequest()
+                .indices(AnomalyDetector.ANOMALY_DETECTORS_INDEX)
+                .source(new SearchSourceBuilder().aggregation(termsAgg).size(0));
 
             client.search(request, ActionListener.wrap(r -> {
                 StringTerms aggregation = r.getAggregations().get(DETECTOR_TYPE_AGG);
                 List<StringTerms.Bucket> buckets = aggregation.getBuckets();
                 long totalDetectors = 0;
                 long totalHistoricalDetectors = 0;
-                for(StringTerms.Bucket b : buckets) {
+                for (StringTerms.Bucket b : buckets) {
                     totalDetectors += b.getDocCount();
                     if (b.getKeyAsString().contains("HISTORICAL")) {
                         totalHistoricalDetectors += b.getDocCount();

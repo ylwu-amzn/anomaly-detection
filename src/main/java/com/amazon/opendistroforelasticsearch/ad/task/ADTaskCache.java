@@ -15,17 +15,13 @@
 
 package com.amazon.opendistroforelasticsearch.ad.task;
 
-import com.amazon.opendistroforelasticsearch.ad.MemoryTracker;
-import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException;
-import com.amazon.opendistroforelasticsearch.ad.ml.HybridThresholdingModel;
-import com.amazon.opendistroforelasticsearch.ad.ml.ThresholdingModel;
-import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
-import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
-import com.amazon.randomcutforest.RandomCutForest;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.settings.Settings;
+import static com.amazon.opendistroforelasticsearch.ad.MemoryTracker.Origin.HISTORICAL_SINGLE_ENTITY_DETECTOR;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_BATCH_TASK_PER_NODE;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_MIN_SAMPLES;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_SAMPLES_PER_TREE;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_TREES;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.THRESHOLD_MODEL_TRAINING_SIZE;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.TIME_DECAY;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -37,13 +33,18 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static com.amazon.opendistroforelasticsearch.ad.MemoryTracker.Origin.HISTORICAL_SINGLE_ENTITY_DETECTOR;
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_BATCH_TASK_PER_NODE;
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_MIN_SAMPLES;
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_SAMPLES_PER_TREE;
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_TREES;
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.THRESHOLD_MODEL_TRAINING_SIZE;
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.TIME_DECAY;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.settings.Settings;
+
+import com.amazon.opendistroforelasticsearch.ad.MemoryTracker;
+import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException;
+import com.amazon.opendistroforelasticsearch.ad.ml.HybridThresholdingModel;
+import com.amazon.opendistroforelasticsearch.ad.ml.ThresholdingModel;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
+import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
+import com.amazon.randomcutforest.RandomCutForest;
 
 public class ADTaskCache {
 
@@ -54,9 +55,7 @@ public class ADTaskCache {
 
     public ADTaskCache(Settings settings, ClusterService clusterService, MemoryTracker memoryTracker) {
         this.maxAdBatchTaskPerNode = MAX_BATCH_TASK_PER_NODE.get(settings);
-        clusterService
-                .getClusterSettings()
-                .addSettingsUpdateConsumer(MAX_BATCH_TASK_PER_NODE, it -> maxAdBatchTaskPerNode = it);
+        clusterService.getClusterSettings().addSettingsUpdateConsumer(MAX_BATCH_TASK_PER_NODE, it -> maxAdBatchTaskPerNode = it);
         taskCaches = new ConcurrentHashMap<>();
         this.memoryTracker = memoryTracker;
     }
@@ -65,14 +64,14 @@ public class ADTaskCache {
         ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
         if (taskCache.getRcfModel() == null) {
             RandomCutForest rcf = RandomCutForest
-                    .builder()
-                    .dimensions(shingleSize * enabledFeatureSize)
-                    .numberOfTrees(NUM_TREES)
-                    .lambda(TIME_DECAY)
-                    .sampleSize(NUM_SAMPLES_PER_TREE)
-                    .outputAfter(NUM_MIN_SAMPLES)
-                    .parallelExecutionEnabled(false)
-                    .build();
+                .builder()
+                .dimensions(shingleSize * enabledFeatureSize)
+                .numberOfTrees(NUM_TREES)
+                .lambda(TIME_DECAY)
+                .sampleSize(NUM_SAMPLES_PER_TREE)
+                .outputAfter(NUM_MIN_SAMPLES)
+                .parallelExecutionEnabled(false)
+                .build();
             taskCache.setRcfModel(rcf);
             taskCache.setShingle(new ArrayDeque<>(shingleSize));
         }
@@ -90,12 +89,12 @@ public class ADTaskCache {
         ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
         if (taskCache.getThresholdModel() == null) {
             ThresholdingModel thresholdModel = new HybridThresholdingModel(
-                    AnomalyDetectorSettings.THRESHOLD_MIN_PVALUE,
-                    AnomalyDetectorSettings.THRESHOLD_MAX_RANK_ERROR,
-                    AnomalyDetectorSettings.THRESHOLD_MAX_SCORE,
-                    AnomalyDetectorSettings.THRESHOLD_NUM_LOGNORMAL_QUANTILES,
-                    AnomalyDetectorSettings.THRESHOLD_DOWNSAMPLES,
-                    AnomalyDetectorSettings.THRESHOLD_MAX_SAMPLES
+                AnomalyDetectorSettings.THRESHOLD_MIN_PVALUE,
+                AnomalyDetectorSettings.THRESHOLD_MAX_RANK_ERROR,
+                AnomalyDetectorSettings.THRESHOLD_MAX_SCORE,
+                AnomalyDetectorSettings.THRESHOLD_NUM_LOGNORMAL_QUANTILES,
+                AnomalyDetectorSettings.THRESHOLD_DOWNSAMPLES,
+                AnomalyDetectorSettings.THRESHOLD_MAX_SAMPLES
             );
             taskCache.setThresholdModel(thresholdModel);
             taskCache.setThresholdModelTrainingData(new ArrayList<>(THRESHOLD_MODEL_TRAINING_SIZE));
@@ -142,17 +141,17 @@ public class ADTaskCache {
         return get(taskId).getShingle();
     }
 
-//    public void putAdTransportTask(String taskId, ADTranspoertTask task) {
-//        ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
-//        taskCache.setAdTranspoertTask(task);
-//    }
+    // public void putAdTransportTask(String taskId, ADTranspoertTask task) {
+    // ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
+    // taskCache.setAdTranspoertTask(task);
+    // }
 
-//    public ADTranspoertTask getAdTransportTask(String taskId) {
-//        if (!contains(taskId)) {
-//            return null;
-//        }
-//        return get(taskId).getAdTranspoertTask();
-//    }
+    // public ADTranspoertTask getAdTransportTask(String taskId) {
+    // if (!contains(taskId)) {
+    // return null;
+    // }
+    // return get(taskId).getAdTranspoertTask();
+    // }
 
     public int getTaskNumber() {
         return taskCaches.size();
@@ -185,9 +184,9 @@ public class ADTaskCache {
             throw new IllegalArgumentException("AD task is already running");
         }
         checkRunningTaskLimit();
-        long  neededCacheSize = calculateADTaskCacheSize(adTask);
+        long neededCacheSize = calculateADTaskCacheSize(adTask);
         if (!memoryTracker.canAllocate(neededCacheSize)) {
-            //TODO: tune the error message
+            // TODO: tune the error message
             throw new LimitExceededException("AD can't consume more memory than 10%");
         }
         memoryTracker.consumeMemory(neededCacheSize, false, HISTORICAL_SINGLE_ENTITY_DETECTOR);
@@ -197,17 +196,17 @@ public class ADTaskCache {
     }
 
     private long calculateADTaskCacheSize(ADTask adTask) {
-        return memoryTracker.estimateModelSize(adTask.getDetector(), NUM_TREES)
-                + ADTaskResourceEstimator.maxTrainingDataMemorySize(THRESHOLD_MODEL_TRAINING_SIZE)
-                + ADTaskResourceEstimator.maxShingleMemorySize(adTask.getDetector().getShingleSize());
+        return memoryTracker.estimateModelSize(adTask.getDetector(), NUM_TREES) + ADTaskResourceEstimator
+            .maxTrainingDataMemorySize(THRESHOLD_MODEL_TRAINING_SIZE) + ADTaskResourceEstimator
+                .maxShingleMemorySize(adTask.getDetector().getShingleSize());
     }
 
-//    public ADBatchTaskModel putIfAbsent(String taskId) {
-//        if (!contains(taskId)) {
-//            return put(taskId);
-//        }
-//        return get(taskId);
-//    }
+    // public ADBatchTaskModel putIfAbsent(String taskId) {
+    // if (!contains(taskId)) {
+    // return put(taskId);
+    // }
+    // return get(taskId);
+    // }
 
     public void remove(String taskId) {
         if (contains(taskId)) {

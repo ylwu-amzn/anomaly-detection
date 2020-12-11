@@ -15,8 +15,9 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
-import com.amazon.opendistroforelasticsearch.ad.task.ADTaskCancellationState;
-import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
+import java.io.IOException;
+import java.util.List;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.FailedNodeException;
@@ -29,42 +30,45 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
-import java.io.IOException;
-import java.util.List;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskCancellationState;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 
 public class ADCancelTaskTransportAction extends
-        TransportNodesAction<ADCancelTaskRequest, ADCancelTaskResponse, ADCancelTaskNodeRequest, ADCancelTaskNodeResponse> {
+    TransportNodesAction<ADCancelTaskRequest, ADCancelTaskResponse, ADCancelTaskNodeRequest, ADCancelTaskNodeResponse> {
     private final Logger logger = LogManager.getLogger(ADCancelTaskTransportAction.class);
     private Client client;
     private ADTaskManager adTaskManager;
 
     @Inject
     public ADCancelTaskTransportAction(
-            ThreadPool threadPool,
-            ClusterService clusterService,
-            TransportService transportService,
-            ActionFilters actionFilters,
-            ADTaskManager adTaskManager,
-            Client client
+        ThreadPool threadPool,
+        ClusterService clusterService,
+        TransportService transportService,
+        ActionFilters actionFilters,
+        ADTaskManager adTaskManager,
+        Client client
     ) {
         super(
-                ADCancelTaskAction.NAME,
-                threadPool,
-                clusterService,
-                transportService,
-                actionFilters,
-                ADCancelTaskRequest::new,
-                ADCancelTaskNodeRequest::new,
-                ThreadPool.Names.MANAGEMENT,
-                ADCancelTaskNodeResponse.class
+            ADCancelTaskAction.NAME,
+            threadPool,
+            clusterService,
+            transportService,
+            actionFilters,
+            ADCancelTaskRequest::new,
+            ADCancelTaskNodeRequest::new,
+            ThreadPool.Names.MANAGEMENT,
+            ADCancelTaskNodeResponse.class
         );
         this.adTaskManager = adTaskManager;
         this.client = client;
     }
 
-
     @Override
-    protected ADCancelTaskResponse newResponse(ADCancelTaskRequest request, List<ADCancelTaskNodeResponse> responses, List<FailedNodeException> failures) {
+    protected ADCancelTaskResponse newResponse(
+        ADCancelTaskRequest request,
+        List<ADCancelTaskNodeResponse> responses,
+        List<FailedNodeException> failures
+    ) {
         return new ADCancelTaskResponse(clusterService.getClusterName(), responses, failures);
     }
 

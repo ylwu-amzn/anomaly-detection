@@ -25,7 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.util.Throwables;
@@ -63,6 +62,7 @@ import com.amazon.opendistroforelasticsearch.ad.model.DetectorProfileName;
 import com.amazon.opendistroforelasticsearch.ad.model.DetectorState;
 import com.amazon.opendistroforelasticsearch.ad.model.InitProgressProfile;
 import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.transport.ProfileAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ProfileRequest;
 import com.amazon.opendistroforelasticsearch.ad.transport.ProfileResponse;
@@ -81,11 +81,12 @@ public class AnomalyDetectorProfileRunner extends AbstractProfileRunner {
     private final ADTaskManager adTaskManager;
 
     public AnomalyDetectorProfileRunner(
-            Client client,
-            NamedXContentRegistry xContentRegistry,
-            DiscoveryNodeFilterer nodeFilter,
-            long requiredSamples,
-            ADTaskManager adTaskManager) {
+        Client client,
+        NamedXContentRegistry xContentRegistry,
+        DiscoveryNodeFilterer nodeFilter,
+        long requiredSamples,
+        ADTaskManager adTaskManager
+    ) {
         super(requiredSamples);
         this.client = client;
         this.xContentRegistry = xContentRegistry;

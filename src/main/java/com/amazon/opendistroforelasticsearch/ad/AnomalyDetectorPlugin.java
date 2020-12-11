@@ -29,15 +29,6 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.amazon.opendistroforelasticsearch.ad.rest.RestSearchADTasksAction;
-import com.amazon.opendistroforelasticsearch.ad.task.ADTaskCache;
-import com.amazon.opendistroforelasticsearch.ad.transport.ADCancelTaskAction;
-import com.amazon.opendistroforelasticsearch.ad.transport.ADCancelTaskTransportAction;
-import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileAction;
-import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileTransportAction;
-import com.amazon.opendistroforelasticsearch.ad.transport.SearchADTasksAction;
-import com.amazon.opendistroforelasticsearch.ad.transport.SearchADTasksTransportAction;
-import com.amazon.opendistroforelasticsearch.ad.transport.handler.SearchHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.SpecialPermission;
@@ -103,6 +94,7 @@ import com.amazon.opendistroforelasticsearch.ad.rest.RestDeleteAnomalyDetectorAc
 import com.amazon.opendistroforelasticsearch.ad.rest.RestExecuteAnomalyDetectorAction;
 import com.amazon.opendistroforelasticsearch.ad.rest.RestGetAnomalyDetectorAction;
 import com.amazon.opendistroforelasticsearch.ad.rest.RestIndexAnomalyDetectorAction;
+import com.amazon.opendistroforelasticsearch.ad.rest.RestSearchADTasksAction;
 import com.amazon.opendistroforelasticsearch.ad.rest.RestSearchAnomalyDetectorAction;
 import com.amazon.opendistroforelasticsearch.ad.rest.RestSearchAnomalyDetectorInfoAction;
 import com.amazon.opendistroforelasticsearch.ad.rest.RestSearchAnomalyResultAction;
@@ -117,15 +109,20 @@ import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.IndexStatusSuppl
 import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.ModelsOnNodeSupplier;
 import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.SettableSupplier;
 import com.amazon.opendistroforelasticsearch.ad.task.ADBatchTaskRunner;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskCache;
 import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchTaskRemoteExecutionAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchTaskRemoteExecutionTransportAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADCancelTaskAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADCancelTaskTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADResultBulkAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADResultBulkTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADStatsNodesAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADStatsNodesTransportAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyDetectorJobAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyDetectorJobTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultAction;
@@ -150,6 +147,8 @@ import com.amazon.opendistroforelasticsearch.ad.transport.RCFPollingAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.RCFPollingTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.RCFResultAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.RCFResultTransportAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.SearchADTasksAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.SearchADTasksTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.SearchAnomalyDetectorAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.SearchAnomalyDetectorInfoAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.SearchAnomalyDetectorInfoTransportAction;
@@ -166,6 +165,7 @@ import com.amazon.opendistroforelasticsearch.ad.transport.handler.AnomalyIndexHa
 import com.amazon.opendistroforelasticsearch.ad.transport.handler.AnomalyResultBulkIndexHandler;
 import com.amazon.opendistroforelasticsearch.ad.transport.handler.DetectionStateHandler;
 import com.amazon.opendistroforelasticsearch.ad.transport.handler.MultiEntityResultHandler;
+import com.amazon.opendistroforelasticsearch.ad.transport.handler.SearchHandler;
 import com.amazon.opendistroforelasticsearch.ad.util.ClientUtil;
 import com.amazon.opendistroforelasticsearch.ad.util.DiscoveryNodeFilterer;
 import com.amazon.opendistroforelasticsearch.ad.util.IndexUtils;
@@ -517,7 +517,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             xContentRegistry,
             stateManager
         );
-        SearchHandler searchHandler =  new SearchHandler(settings, clusterService, client);
+        SearchHandler searchHandler = new SearchHandler(settings, clusterService, client);
         adBatchTaskCache = new ADTaskCache(settings, clusterService, memoryTracker);
         adTaskManager = new ADTaskManager(
             settings,

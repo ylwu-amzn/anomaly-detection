@@ -15,7 +15,8 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
-import com.amazon.opendistroforelasticsearch.ad.task.ADTaskCancellationState;
+import java.io.IOException;
+
 import org.elasticsearch.action.support.nodes.BaseNodeResponse;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.io.stream.StreamInput;
@@ -23,7 +24,7 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.ToXContentFragment;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 
-import java.io.IOException;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskCancellationState;
 
 public class ADCancelTaskNodeResponse extends BaseNodeResponse implements ToXContentFragment {
 
@@ -38,7 +39,6 @@ public class ADCancelTaskNodeResponse extends BaseNodeResponse implements ToXCon
         super(in);
         this.state = in.readEnum(ADTaskCancellationState.class);
     }
-
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {

@@ -15,8 +15,9 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
-import com.amazon.opendistroforelasticsearch.ad.model.ADTaskProfile;
-import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
+import java.io.IOException;
+import java.util.List;
+
 import org.elasticsearch.action.FailedNodeException;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.nodes.TransportNodesAction;
@@ -26,39 +27,42 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
-import java.io.IOException;
-import java.util.List;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTaskProfile;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 
 public class ADTaskProfileTransportAction extends
-        TransportNodesAction<ADTaskProfileRequest, ADTaskProfileResponse, ADTaskProfileNodeRequest, ADTaskProfileNodeResponse> {
+    TransportNodesAction<ADTaskProfileRequest, ADTaskProfileResponse, ADTaskProfileNodeRequest, ADTaskProfileNodeResponse> {
 
     private ADTaskManager adTaskManager;
 
     @Inject
     public ADTaskProfileTransportAction(
-            ThreadPool threadPool,
-            ClusterService clusterService,
-            TransportService transportService,
-            ActionFilters actionFilters,
-            ADTaskManager adTaskManager
+        ThreadPool threadPool,
+        ClusterService clusterService,
+        TransportService transportService,
+        ActionFilters actionFilters,
+        ADTaskManager adTaskManager
     ) {
         super(
-                ADTaskProfileAction.NAME,
-                threadPool,
-                clusterService,
-                transportService,
-                actionFilters,
-                ADTaskProfileRequest::new,
-                ADTaskProfileNodeRequest::new,
-                ThreadPool.Names.MANAGEMENT,
-                ADTaskProfileNodeResponse.class
+            ADTaskProfileAction.NAME,
+            threadPool,
+            clusterService,
+            transportService,
+            actionFilters,
+            ADTaskProfileRequest::new,
+            ADTaskProfileNodeRequest::new,
+            ThreadPool.Names.MANAGEMENT,
+            ADTaskProfileNodeResponse.class
         );
         this.adTaskManager = adTaskManager;
     }
 
-
     @Override
-    protected ADTaskProfileResponse newResponse(ADTaskProfileRequest request, List<ADTaskProfileNodeResponse> responses, List<FailedNodeException> failures) {
+    protected ADTaskProfileResponse newResponse(
+        ADTaskProfileRequest request,
+        List<ADTaskProfileNodeResponse> responses,
+        List<FailedNodeException> failures
+    ) {
         return new ADTaskProfileResponse(clusterService.getClusterName(), responses, failures);
     }
 

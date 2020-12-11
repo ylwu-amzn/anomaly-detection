@@ -43,7 +43,6 @@ import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.search.aggregations.AggregationBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 
 import com.amazon.opendistroforelasticsearch.ad.annotation.Generated;
@@ -505,11 +504,13 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         }
         String detectorType;
         if (AnomalyDetector.isRealTimeDetector(detectionDateRange)) {
-            detectorType = AnomalyDetector.isMultientityDetector(categoryField) ?
-                    AnomalyDetectorType.REALTIME_MULTI_ENTITY.name() : AnomalyDetectorType.REALTIME_SIGLE_ENTITY.name();
+            detectorType = AnomalyDetector.isMultientityDetector(categoryField)
+                ? AnomalyDetectorType.REALTIME_MULTI_ENTITY.name()
+                : AnomalyDetectorType.REALTIME_SIGLE_ENTITY.name();
         } else {
-            detectorType = AnomalyDetector.isMultientityDetector(categoryField) ?
-                    AnomalyDetectorType.HISTORICAL_MULTI_ENTITY.name() : AnomalyDetectorType.HISTORICAL_SIGLE_ENTITY.name();
+            detectorType = AnomalyDetector.isMultientityDetector(categoryField)
+                ? AnomalyDetectorType.HISTORICAL_MULTI_ENTITY.name()
+                : AnomalyDetectorType.HISTORICAL_SIGLE_ENTITY.name();
         }
         return new AnomalyDetector(
             detectorId,

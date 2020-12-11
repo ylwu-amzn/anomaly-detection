@@ -15,8 +15,13 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
-import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
-import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
+import static com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager.AD_TASK_ID_HEADER;
+import static org.elasticsearch.action.ValidateActions.addValidationError;
+
+import java.io.IOException;
+import java.util.Locale;
+import java.util.Map;
+
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.common.Strings;
@@ -26,12 +31,8 @@ import org.elasticsearch.tasks.Task;
 import org.elasticsearch.tasks.TaskAwareRequest;
 import org.elasticsearch.tasks.TaskId;
 
-import java.io.IOException;
-import java.util.Locale;
-import java.util.Map;
-
-import static com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager.AD_TASK_ID_HEADER;
-import static org.elasticsearch.action.ValidateActions.addValidationError;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 
 public class ADBatchAnomalyResultRequest extends ActionRequest implements TaskAwareRequest {
     static final String INVALID_TIMESTAMP_ERR_MSG = "timestamp is invalid";
@@ -88,20 +89,20 @@ public class ADBatchAnomalyResultRequest extends ActionRequest implements TaskAw
         return validationException;
     }
 
-//    public static ADBatchAnomalyResultRequest fromActionRequest(final ActionRequest actionRequest) {
-//        if (actionRequest instanceof ADBatchAnomalyResultRequest) {
-//            return (ADBatchAnomalyResultRequest) actionRequest;
-//        }
-//
-//        try (ByteArrayOutputStream baos = new ByteArrayOutputStream(); OutputStreamStreamOutput osso = new OutputStreamStreamOutput(baos)) {
-//            actionRequest.writeTo(osso);
-//            try (StreamInput input = new InputStreamStreamInput(new ByteArrayInputStream(baos.toByteArray()))) {
-//                return new ADBatchAnomalyResultRequest(input);
-//            }
-//        } catch (IOException e) {
-//            throw new IllegalArgumentException("failed to parse ActionRequest into AnomalyResultRequest", e);
-//        }
-//    }
+    // public static ADBatchAnomalyResultRequest fromActionRequest(final ActionRequest actionRequest) {
+    // if (actionRequest instanceof ADBatchAnomalyResultRequest) {
+    // return (ADBatchAnomalyResultRequest) actionRequest;
+    // }
+    //
+    // try (ByteArrayOutputStream baos = new ByteArrayOutputStream(); OutputStreamStreamOutput osso = new OutputStreamStreamOutput(baos)) {
+    // actionRequest.writeTo(osso);
+    // try (StreamInput input = new InputStreamStreamInput(new ByteArrayInputStream(baos.toByteArray()))) {
+    // return new ADBatchAnomalyResultRequest(input);
+    // }
+    // } catch (IOException e) {
+    // throw new IllegalArgumentException("failed to parse ActionRequest into AnomalyResultRequest", e);
+    // }
+    // }
 
     @Override
     public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
