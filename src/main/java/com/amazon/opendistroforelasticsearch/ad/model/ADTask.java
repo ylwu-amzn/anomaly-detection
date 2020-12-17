@@ -36,13 +36,6 @@ import com.google.common.base.Objects;
  */
 public class ADTask implements ToXContentObject, Writeable {
 
-    // public static final String PARSE_FIELD_NAME = "DetectorInternalState";
-    // public static final NamedXContentRegistry.Entry XCONTENT_REGISTRY = new NamedXContentRegistry.Entry(
-    // AnomalyDetectionState.class,
-    // new ParseField(PARSE_FIELD_NAME),
-    // it -> parse(it)
-    // );
-
     public static final String DETECTOR_STATE_INDEX = ".opendistro-anomaly-detection-state";
 
     public static final String TASK_ID_FIELD = "task_id";
@@ -127,6 +120,10 @@ public class ADTask implements ToXContentObject, Writeable {
         out.writeOptionalInstant(lastUpdateTime);
         out.writeOptionalString(startedBy);
         out.writeOptionalString(stoppedBy);
+    }
+
+    public static Builder builder() {
+        return new Builder();
     }
 
     public static class Builder {
@@ -474,16 +471,8 @@ public class ADTask implements ToXContentObject, Writeable {
         return startedBy;
     }
 
-    public void setStartedBy(String startedBy) {
-        this.startedBy = startedBy;
-    }
-
     public String getStoppedBy() {
         return stoppedBy;
-    }
-
-    public void setStoppedBy(String stoppedBy) {
-        this.stoppedBy = stoppedBy;
     }
 
     public String getError() {
@@ -574,11 +563,10 @@ public class ADTask implements ToXContentObject, Writeable {
         this.checkpointId = checkpointId;
     }
 
-    public AnomalyDetector getDetector() {
-        return detector;
-    }
-
     public void setDetector(AnomalyDetector detector) {
         this.detector = detector;
+    }
+    public AnomalyDetector getDetector() {
+        return detector;
     }
 }

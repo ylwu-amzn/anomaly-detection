@@ -33,7 +33,6 @@ import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
 import com.amazon.opendistroforelasticsearch.ad.stats.ADStats;
-import com.amazon.opendistroforelasticsearch.ad.stats.StatNames;
 
 /**
  *  ADStatsNodesTransportAction contains the logic to extract the stats from the nodes
@@ -107,7 +106,8 @@ public class ADStatsNodesTransportAction extends
         Set<String> statsToBeRetrieved = adStatsRequest.getStatsToBeRetrieved();
 
         if (statsToBeRetrieved.contains(InternalStatNames.JVM_HEAP_USAGE.getName())) {
-            adStats.getStat(InternalStatNames.JVM_HEAP_USAGE.getName()).setValue((long) jvmService.stats().getMem().getHeapUsedPercent());
+            long heapUsedPercent = jvmService.stats().getMem().getHeapUsedPercent();
+            statValues.put(InternalStatNames.JVM_HEAP_USAGE.getName(), heapUsedPercent);
         }
 
         for (String statName : adStats.getNodeStats().keySet()) {

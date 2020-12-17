@@ -15,6 +15,7 @@
 
 package com.amazon.opendistroforelasticsearch.ad;
 
+import static org.apache.http.entity.ContentType.APPLICATION_JSON;
 import static org.elasticsearch.cluster.node.DiscoveryNodeRole.BUILT_IN_ROLES;
 import static org.elasticsearch.index.query.AbstractQueryBuilder.parseInnerQueryBuilder;
 import static org.elasticsearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
@@ -41,6 +42,7 @@ import java.util.function.Consumer;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.entity.ContentType;
+import org.apache.http.entity.StringEntity;
 import org.apache.http.nio.entity.NStringEntity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -49,11 +51,13 @@ import org.apache.lucene.search.TotalHits;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthResponse;
+import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
 import org.elasticsearch.action.admin.indices.mapping.get.GetFieldMappingsResponse.FieldMappingMetadata;
 import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.search.ShardSearchFailure;
+import org.elasticsearch.client.AdminClient;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.Request;
 import org.elasticsearch.client.RequestOptions;
@@ -105,10 +109,14 @@ import org.elasticsearch.threadpool.ThreadPool;
 
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonValue;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTaskState;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTaskType;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorExecutionInput;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyResult;
+import com.amazon.opendistroforelasticsearch.ad.model.DetectionDateRange;
 import com.amazon.opendistroforelasticsearch.ad.model.DetectorInternalState;
 import com.amazon.opendistroforelasticsearch.ad.model.Entity;
 import com.amazon.opendistroforelasticsearch.ad.model.Feature;
@@ -203,16 +211,38 @@ public class TestHelpers {
     }
 
     public static AnomalyDetector randomAnomalyDetector(Map<String, Object> uiMetadata, Instant lastUpdateTime) throws IOException {
-        return randomAnomalyDetector(ImmutableList.of(randomFeature()), uiMetadata, lastUpdateTime);
+        return randomAnomalyDetector(ImmutableList.of(randomFeature()), uiMetadata, lastUpdateTime, null, null);
     }
 
     public static AnomalyDetector randomAnomalyDetector(Map<String, Object> uiMetadata, Instant lastUpdateTime, boolean featureEnabled)
         throws IOException {
-        return randomAnomalyDetector(ImmutableList.of(randomFeature(featureEnabled)), uiMetadata, lastUpdateTime);
+        return randomAnomalyDetector(ImmutableList.of(randomFeature(featureEnabled)), uiMetadata, lastUpdateTime, null, null);
     }
 
     public static AnomalyDetector randomAnomalyDetector(List<Feature> features, Map<String, Object> uiMetadata, Instant lastUpdateTime)
         throws IOException {
+        return randomAnomalyDetector(features, uiMetadata, lastUpdateTime, null, null);
+    }
+
+    public static AnomalyDetector randomAnomalyDetector(
+        List<Feature> features,
+        Map<String, Object> uiMetadata,
+        Instant lastUpdateTime,
+        String detectorType,
+        DetectionDateRange dateRange
+    ) throws IOException {
+        return randomAnomalyDetector(features, uiMetadata, lastUpdateTime, detectorType, dateRange, true);
+    }
+
+    public static AnomalyDetector randomAnomalyDetector(
+        List<Feature> features,
+        Map<String, Object> uiMetadata,
+        Instant lastUpdateTime,
+        String detectorType,
+        DetectionDateRange dateRange,
+        boolean withUser
+    ) throws IOException {
+        User user = withUser ? randomUser() : null;
         return new AnomalyDetector(
             randomAlphaOfLength(10),
             randomLong(),
@@ -229,7 +259,16 @@ public class TestHelpers {
             randomInt(),
             lastUpdateTime,
             null,
-            randomUser()
+            user,
+            detectorType,
+            dateRange
+        );
+    }
+
+    public static DetectionDateRange randomDetectionDateRange() {
+        return new DetectionDateRange(
+            Instant.now().truncatedTo(ChronoUnit.SECONDS).minus(10, ChronoUnit.DAYS),
+            Instant.now().truncatedTo(ChronoUnit.SECONDS)
         );
     }
 
@@ -432,20 +471,26 @@ public class TestHelpers {
     }
 
     public static AnomalyResult randomAnomalyDetectResult() {
-        return randomAnomalyDetectResult(randomDouble(), randomAlphaOfLength(5));
+        return randomAnomalyDetectResult(randomDouble(), randomAlphaOfLength(5), null);
     }
 
     public static AnomalyResult randomAnomalyDetectResult(double score) {
-        return randomAnomalyDetectResult(randomDouble(), null);
+        return randomAnomalyDetectResult(randomDouble(), null, null);
     }
 
     public static AnomalyResult randomAnomalyDetectResult(String error) {
-        return randomAnomalyDetectResult(Double.NaN, error);
+        return randomAnomalyDetectResult(Double.NaN, error, null);
     }
 
-    public static AnomalyResult randomAnomalyDetectResult(double score, String error) {
+    public static AnomalyResult randomAnomalyDetectResult(double score, String error, String taskId) {
+        return randomAnomalyDetectResult(score, error, taskId, true);
+    }
+
+    public static AnomalyResult randomAnomalyDetectResult(double score, String error, String taskId, boolean withUser) {
+        User user = withUser ? randomUser() : null;
         return new AnomalyResult(
             randomAlphaOfLength(5),
+            taskId,
             score,
             randomDouble(),
             randomDouble(),
@@ -455,7 +500,8 @@ public class TestHelpers {
             Instant.now().truncatedTo(ChronoUnit.SECONDS),
             Instant.now().truncatedTo(ChronoUnit.SECONDS),
             error,
-            randomUser(),
+            null,
+            user,
             CommonValue.NO_SCHEMA_VERSION
         );
     }
@@ -585,6 +631,11 @@ public class TestHelpers {
         return pool;
     }
 
+    public static CreateIndexResponse createIndex(AdminClient adminClient, String indexName, String indexMapping) {
+        CreateIndexRequest request = new CreateIndexRequest(indexName).mapping(AnomalyDetector.TYPE, indexMapping, XContentType.JSON);
+        return adminClient.indices().create(request).actionGet(5_000);
+    }
+
     public static void createIndex(RestClient client, String indexName, HttpEntity data) throws IOException {
         TestHelpers
             .makeRequest(
@@ -662,10 +713,6 @@ public class TestHelpers {
         );
     }
 
-    public static AnomalyResult randomDetectState() {
-        return randomAnomalyDetectResult(randomDouble(), randomAlphaOfLength(5));
-    }
-
     public static DetectorInternalState randomDetectState(String error) {
         return randomDetectState(error, Instant.now());
     }
@@ -690,5 +737,46 @@ public class TestHelpers {
         );
         mappings.put(index, Collections.singletonMap(CommonName.MAPPING_TYPE, Collections.singletonMap(fieldName, fieldMappingMetadata)));
         return mappings;
+    }
+
+    public static ADTask randomAdTask(String taskId, ADTaskState state, Instant executionEndTime, String stoppedBy, boolean withDetector)
+        throws IOException {
+        AnomalyDetector detector = withDetector
+            ? randomAnomalyDetector(ImmutableMap.of(), Instant.now().truncatedTo(ChronoUnit.SECONDS))
+            : null;
+        executionEndTime = executionEndTime == null ? null : executionEndTime.truncatedTo(ChronoUnit.SECONDS);
+        ADTask task = ADTask
+            .builder()
+            .taskId(taskId)
+            .taskType(ADTaskType.HISTORICAL.name())
+            .detectorId(randomAlphaOfLength(5))
+            .detector(detector)
+            .state(state.name())
+            .taskProgress(0.5f)
+            .initProgress(1.0f)
+            .currentPiece(Instant.now().truncatedTo(ChronoUnit.SECONDS).minus(randomIntBetween(1, 100), ChronoUnit.MINUTES))
+            .executionStartTime(Instant.now().truncatedTo(ChronoUnit.SECONDS).minus(100, ChronoUnit.MINUTES))
+            .executionEndTime(executionEndTime)
+            .isLatest(true)
+            .error(randomAlphaOfLength(5))
+            .checkpointId(randomAlphaOfLength(5))
+            .lastUpdateTime(Instant.now().truncatedTo(ChronoUnit.SECONDS))
+            .startedBy(randomAlphaOfLength(5))
+            .stoppedBy(stoppedBy)
+            .build();
+        return task;
+    }
+
+    public static HttpEntity toHttpEntity(ToXContentObject object) throws IOException {
+        return new StringEntity(toJsonString(object), APPLICATION_JSON);
+    }
+
+    public static HttpEntity toHttpEntity(String jsonString) throws IOException {
+        return new StringEntity(jsonString, APPLICATION_JSON);
+    }
+
+    public static String toJsonString(ToXContentObject object) throws IOException {
+        XContentBuilder builder = XContentFactory.jsonBuilder();
+        return TestHelpers.xContentBuilderToString(object.toXContent(builder, ToXContent.EMPTY_PARAMS));
     }
 }

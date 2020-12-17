@@ -23,7 +23,9 @@ import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.security.InvalidParameterException;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.get.GetRequest;
@@ -31,6 +33,8 @@ import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.transport.Transport;
 import org.elasticsearch.transport.TransportService;
@@ -40,6 +44,7 @@ import org.junit.BeforeClass;
 import com.amazon.opendistroforelasticsearch.ad.AbstractADTest;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
 import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
+import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
 import com.amazon.opendistroforelasticsearch.ad.util.DiscoveryNodeFilterer;
 
 public class GetAnomalyDetectorTests extends AbstractADTest {
@@ -69,6 +74,12 @@ public class GetAnomalyDetectorTests extends AbstractADTest {
     @Override
     public void setUp() throws Exception {
         super.setUp();
+        ClusterService clusterService = mock(ClusterService.class);
+        ClusterSettings clusterSettings = new ClusterSettings(
+            Settings.EMPTY,
+            Collections.unmodifiableSet(new HashSet<>(Arrays.asList(AnomalyDetectorSettings.FILTER_BY_BACKEND_ROLES)))
+        );
+        when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
 
         transportService = new TransportService(
             Settings.EMPTY,
@@ -92,9 +103,11 @@ public class GetAnomalyDetectorTests extends AbstractADTest {
             transportService,
             nodeFilter,
             actionFilters,
+            clusterService,
             client,
+            Settings.EMPTY,
             xContentRegistry(),
-            adTaskManger
+                adTaskManger
         );
     }
 
