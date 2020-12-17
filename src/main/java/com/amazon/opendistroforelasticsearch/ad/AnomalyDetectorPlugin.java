@@ -109,7 +109,7 @@ import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.IndexStatusSuppl
 import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.ModelsOnNodeSupplier;
 import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.SettableSupplier;
 import com.amazon.opendistroforelasticsearch.ad.task.ADBatchTaskRunner;
-import com.amazon.opendistroforelasticsearch.ad.task.ADTaskCache;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskCacheManager;
 import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultTransportAction;
@@ -196,7 +196,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
     private static Gson gson;
     private AnomalyDetectionIndices anomalyDetectionIndices;
     private AnomalyDetectorRunner anomalyDetectorRunner;
-    private ADTaskCache adBatchTaskCache;
+    private ADTaskCacheManager adTaskCacheManager;
     private ADTaskManager adTaskManager;
     private ADBatchTaskRunner adBatchTaskRunner;
     private Client client;
@@ -483,12 +483,11 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 new ADStat<>(true, new IndexStatusSupplier(indexUtils, DetectorInternalState.DETECTOR_STATE_INDEX))
             )
             .put(StatNames.DETECTOR_COUNT.getName(), new ADStat<>(true, new SettableSupplier()))
-            .put(StatNames.HISTORICAL_DETECTOR_COUNT.getName(), new ADStat<>(true, new SettableSupplier()))
+            .put(StatNames.HISTORICAL_SINGLE_ENTITY_DETECTOR_COUNT.getName(), new ADStat<>(true, new SettableSupplier()))
             .put(StatNames.AD_TOTAL_BATCH_TASK_EXECUTION_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
             .put(StatNames.AD_CANCELED_BATCH_TASK_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
             .put(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
             .put(StatNames.AD_BATCH_TASK_FAILURE_COUNT.getName(), new ADStat<>(false, new CounterSupplier()))
-            .put(StatNames.JVM_HEAP_USAGE.getName(), new ADStat<>(false, new SettableSupplier()))
             .build();
 
         adStats = new ADStats(indexUtils, modelManager, stats);
@@ -518,7 +517,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             stateManager
         );
         SearchHandler searchHandler = new SearchHandler(settings, clusterService, client);
-        adBatchTaskCache = new ADTaskCache(settings, clusterService, memoryTracker);
+        adTaskCacheManager = new ADTaskCacheManager(settings, clusterService, memoryTracker);
         adTaskManager = new ADTaskManager(
             settings,
             threadPool,
@@ -528,7 +527,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             nodeFilter,
             anomalyDetectionIndices,
             detectorStateHandler,
-            adBatchTaskCache
+            adTaskCacheManager
         );
         adBatchTaskRunner = new ADBatchTaskRunner(
             settings,
@@ -543,7 +542,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             anomalyDetectionIndices,
             adStats,
             anomalyResultBulkIndexHandler,
-            adBatchTaskCache
+            adTaskCacheManager
         );
 
         MultiEntityResultHandler multiEntityResultHandler = new MultiEntityResultHandler(

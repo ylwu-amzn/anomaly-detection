@@ -13,13 +13,9 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.opendistroforelasticsearch.ad.task;
+package com.amazon.opendistroforelasticsearch.ad.model;
 
-public enum ADTaskState {
-    CREATED,
-    INIT,
-    RUNNING,
-    FAILED,
-    STOPPED,
-    FINISHED
+public enum ADTaskType {
+    REALTIME,
+    HISTORICAL
 }

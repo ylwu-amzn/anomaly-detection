@@ -41,6 +41,8 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import com.amazon.opendistroforelasticsearch.ad.model.ADTaskState;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTaskType;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -119,7 +121,7 @@ public class ADTaskManager {
     private final ClusterService clusterService;
     private final DetectionStateHandler detectorStateHandler;
     private final AnomalyDetectionIndices detectionIndices;
-    private final ADTaskCache adTaskCache;
+    private final ADTaskCacheManager adTaskCache;
     private volatile Integer pieceIntervalSeconds;
     private volatile Integer maxAdTaskDocsPerDetector;
 
@@ -132,7 +134,7 @@ public class ADTaskManager {
         DiscoveryNodeFilterer nodeFilter,
         AnomalyDetectionIndices detectionIndices,
         DetectionStateHandler detectorStateHandler,
-        ADTaskCache adTaskCache
+        ADTaskCacheManager adTaskCache
     ) {
         this.threadPool = threadPool;
         this.clusterService = clusterService;
@@ -851,9 +853,9 @@ public class ADTaskManager {
     }
 
     public void cancelAllFeasibleTasks(String reason) {
-        Iterator<Map.Entry<String, ADBatchTaskCacheEntity>> iterator = adTaskCache.iterator();
+        Iterator<Map.Entry<String, ADBatchTaskCache>> iterator = adTaskCache.iterator();
         while (iterator.hasNext()) {
-            Map.Entry<String, ADBatchTaskCacheEntity> taskCache = iterator.next();
+            Map.Entry<String, ADBatchTaskCache> taskCache = iterator.next();
             cancelTask(taskCache.getKey(), reason, null);
         }
     }

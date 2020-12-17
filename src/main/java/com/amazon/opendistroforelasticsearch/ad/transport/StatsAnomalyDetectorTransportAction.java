@@ -47,6 +47,7 @@ import com.amazon.opendistroforelasticsearch.ad.util.MultiResponsesDelegateActio
 
 public class StatsAnomalyDetectorTransportAction extends HandledTransportAction<ADStatsRequest, StatsAnomalyDetectorResponse> {
     public static final String DETECTOR_TYPE_AGG = "detector_type_agg";
+    private static final String HISTORICAL_DETECTOR_TYPE_PREFIX = "HISTORICAL";
     private final Logger logger = LogManager.getLogger(StatsAnomalyDetectorTransportAction.class);
 
     private final Client client;
@@ -133,16 +134,15 @@ public class StatsAnomalyDetectorTransportAction extends HandledTransportAction<
             TermsAggregationBuilder termsAgg = AggregationBuilders.terms(DETECTOR_TYPE_AGG).field(AnomalyDetector.DETECTOR_TYPE_FIELD);
             SearchRequest request = new SearchRequest()
                 .indices(AnomalyDetector.ANOMALY_DETECTORS_INDEX)
-                .source(new SearchSourceBuilder().aggregation(termsAgg).size(0));
+                .source(new SearchSourceBuilder().aggregation(termsAgg).size(0).trackTotalHits(true));
 
             client.search(request, ActionListener.wrap(r -> {
                 StringTerms aggregation = r.getAggregations().get(DETECTOR_TYPE_AGG);
                 List<StringTerms.Bucket> buckets = aggregation.getBuckets();
-                long totalDetectors = 0;
+                long totalDetectors = r.getHits().getTotalHits().value;
                 long totalHistoricalDetectors = 0;
                 for (StringTerms.Bucket b : buckets) {
-                    totalDetectors += b.getDocCount();
-                    if (b.getKeyAsString().contains("HISTORICAL")) {
+                    if (b.getKeyAsString().startsWith(HISTORICAL_DETECTOR_TYPE_PREFIX)) {
                         totalHistoricalDetectors += b.getDocCount();
                     }
                 }

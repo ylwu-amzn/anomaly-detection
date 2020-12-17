@@ -19,7 +19,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Enum containing names of all stats
+ * Enum containing names of all external stats which will be returned in
+ * AD stats REST API.
  */
 public enum StatNames {
     AD_EXECUTE_REQUEST_COUNT("ad_execute_request_count"),
@@ -32,10 +33,8 @@ public enum StatNames {
     MODELS_CHECKPOINT_INDEX_STATUS("models_checkpoint_index_status"),
     ANOMALY_DETECTION_JOB_INDEX_STATUS("anomaly_detection_job_index_status"),
     ANOMALY_DETECTION_STATE_STATUS("anomaly_detection_state_status"),
-    ANOMALY_DETECTION_TASK_INDEX_STATUS("anomaly_detection_task_index_status"),
     MODEL_INFORMATION("models"),
-    JVM_HEAP_USAGE("jvm_heap_usage"),
-    HISTORICAL_DETECTOR_COUNT("historical_detector_count"),
+    HISTORICAL_SINGLE_ENTITY_DETECTOR_COUNT("historical_single_entity_detector_count"),
     AD_EXECUTING_BATCH_TASK_COUNT("ad_executing_batch_task_count"),
     AD_CANCELED_BATCH_TASK_COUNT("ad_canceled_batch_task_count"),
     AD_TOTAL_BATCH_TASK_EXECUTION_COUNT("ad_total_batch_task_execution_count"),

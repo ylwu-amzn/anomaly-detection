@@ -13,9 +13,27 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.opendistroforelasticsearch.ad.task;
+package com.amazon.opendistroforelasticsearch.ad.stats;
 
-public enum ADTaskType {
-    REALTIME,
-    HISTORICAL
+/**
+ * Enum containing names of all internal stats which will not be returned
+ * in AD stats REST API.
+ */
+public enum InternalStatNames {
+    JVM_HEAP_USAGE("jvm_heap_usage");
+
+    private String name;
+
+    InternalStatNames(String name) {
+        this.name = name;
+    }
+
+    /**
+     * Get internal stat name
+     *
+     * @return name
+     */
+    public String getName() {
+        return name;
+    }
 }
