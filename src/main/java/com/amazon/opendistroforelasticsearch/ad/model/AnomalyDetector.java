@@ -196,7 +196,7 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
             throw new IllegalArgumentException("Detection interval should be set");
         }
         if (((IntervalTimeConfiguration)detectionInterval).getInterval() == 0) {
-            throw new IllegalArgumentException("Detection interval should not be zero set");
+            throw new IllegalArgumentException("Detection interval must be a positive integer");
         }
         if (shingleSize != null && shingleSize < 1) {
             throw new IllegalArgumentException("Shingle size must be a positive integer");
