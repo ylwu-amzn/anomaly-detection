@@ -59,7 +59,8 @@ public class ExceptionUtil {
     }
 
     public static boolean isServerError(Exception e) {
-        if (e instanceof ResourceNotFoundException || e instanceof IllegalArgumentException || e instanceof LimitExceededException) {
+        if (e instanceof ResourceNotFoundException || e instanceof org.elasticsearch.ResourceNotFoundException
+        || e instanceof IllegalArgumentException || e instanceof LimitExceededException) {
             return false;
         }
         return true;

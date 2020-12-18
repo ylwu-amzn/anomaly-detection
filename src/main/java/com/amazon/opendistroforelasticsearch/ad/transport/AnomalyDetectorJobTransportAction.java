@@ -15,14 +15,18 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.FILTER_BY_BACKEND_ROLES;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.REQUEST_TIMEOUT;
+import static com.amazon.opendistroforelasticsearch.ad.util.ParseUtils.resolveUserAndExecute;
 
+import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
@@ -42,9 +46,11 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
     private final Logger logger = LogManager.getLogger(AnomalyDetectorJobTransportAction.class);
 
     private final Client client;
+    private final ClusterService clusterService;
     private final Settings settings;
     private final AnomalyDetectionIndices anomalyDetectionIndices;
     private final NamedXContentRegistry xContentRegistry;
+    private volatile Boolean filterByEnabled;
     private final ADTaskManager adTaskManager;
 
     @Inject
@@ -52,6 +58,7 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
         TransportService transportService,
         ActionFilters actionFilters,
         Client client,
+        ClusterService clusterService,
         Settings settings,
         AnomalyDetectionIndices anomalyDetectionIndices,
         NamedXContentRegistry xContentRegistry,
@@ -59,10 +66,13 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
     ) {
         super(AnomalyDetectorJobAction.NAME, transportService, actionFilters, AnomalyDetectorJobRequest::new);
         this.client = client;
+        this.clusterService = clusterService;
         this.settings = settings;
         this.anomalyDetectionIndices = anomalyDetectionIndices;
         this.xContentRegistry = xContentRegistry;
         this.adTaskManager = adTaskManager;
+        filterByEnabled = FILTER_BY_BACKEND_ROLES.get(settings);
+        clusterService.getClusterSettings().addSettingsUpdateConsumer(FILTER_BY_BACKEND_ROLES, it -> filterByEnabled = it);
     }
 
     @Override
@@ -74,30 +84,41 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
         TimeValue requestTimeout = REQUEST_TIMEOUT.get(settings);
 
         // By the time request reaches here, the user permissions are validated by Security plugin.
-        // Since the detectorID is provided, this can only happen if User is part of a role which has access
-        // to the detector. This is filtered by our Search Detector API.
         User user = ParseUtils.getUserContext(client);
         try (ThreadContext.StoredContext context = client.threadPool().getThreadContext().stashContext()) {
-            IndexAnomalyDetectorJobActionHandler handler = new IndexAnomalyDetectorJobActionHandler(
-                client,
+            resolveUserAndExecute(
+                    user,
+                    detectorId,
+                    filterByEnabled,
+                    listener,
+                    () -> executeDetector(listener, detectorId, seqNo, primaryTerm, rawPath, requestTimeout, user),
+                    client,
+                    clusterService,
+                    xContentRegistry
+            );
+        } catch (Exception e) {
+            logger.error(e);
+            listener.onFailure(e);
+        }
+    }
+
+    private void executeDetector(ActionListener<AnomalyDetectorJobResponse> listener, String detectorId, long seqNo, long primaryTerm, String rawPath, TimeValue requestTimeout, User user) {
+        IndexAnomalyDetectorJobActionHandler handler = new IndexAnomalyDetectorJobActionHandler(
+            client,
                 listener,
-                anomalyDetectionIndices,
+            anomalyDetectionIndices,
                 detectorId,
                 seqNo,
                 primaryTerm,
                 requestTimeout,
-                xContentRegistry
-            );
-            if (rawPath.endsWith(RestHandlerUtils.START_JOB)) {
-                // handler.startAnomalyDetectorJob();
-                adTaskManager.startDetector(detectorId, handler, user, listener);
-            } else if (rawPath.endsWith(RestHandlerUtils.STOP_JOB)) {
-                // handler.stopAnomalyDetectorJob(detectorId);
-                adTaskManager.stopDetector(detectorId, handler, user, listener);
-            }
-        } catch (Exception e) {
-            logger.error(e);
-            listener.onFailure(e);
+            xContentRegistry
+        );
+        if (rawPath.endsWith(RestHandlerUtils.START_JOB)) {
+            // handler.startAnomalyDetectorJob();
+            adTaskManager.startDetector(detectorId, handler, user, listener);
+        } else if (rawPath.endsWith(RestHandlerUtils.STOP_JOB)) {
+            // handler.stopAnomalyDetectorJob(detectorId);
+            adTaskManager.stopDetector(detectorId, handler, user, listener);
         }
     }
 }

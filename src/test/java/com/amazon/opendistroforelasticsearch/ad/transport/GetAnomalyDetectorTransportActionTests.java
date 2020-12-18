@@ -17,14 +17,21 @@ package com.amazon.opendistroforelasticsearch.ad.transport;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
 
+import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
 import org.elasticsearch.common.io.stream.NamedWriteableAwareStreamInput;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.common.settings.ClusterSettings;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.rest.RestStatus;
@@ -45,6 +52,9 @@ import com.amazon.opendistroforelasticsearch.ad.util.DiscoveryNodeFilterer;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 import com.google.common.collect.ImmutableMap;
 
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 public class GetAnomalyDetectorTransportActionTests extends ESSingleNodeTestCase {
     private GetAnomalyDetectorTransportAction action;
     private Task task;
@@ -54,15 +64,23 @@ public class GetAnomalyDetectorTransportActionTests extends ESSingleNodeTestCase
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        action = new GetAnomalyDetectorTransportAction(
-            Mockito.mock(TransportService.class),
-            Mockito.mock(DiscoveryNodeFilterer.class),
-            Mockito.mock(ActionFilters.class),
-            client(),
-            xContentRegistry(),
-            Mockito.mock(ADTaskManager.class)
+        ClusterService clusterService = mock(ClusterService.class);
+        ClusterSettings clusterSettings = new ClusterSettings(
+                Settings.EMPTY,
+                Collections.unmodifiableSet(new HashSet<>(Arrays.asList(AnomalyDetectorSettings.FILTER_BY_BACKEND_ROLES)))
         );
-        task = Mockito.mock(Task.class);
+        when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
+        action = new GetAnomalyDetectorTransportAction(
+            mock(TransportService.class),
+            mock(DiscoveryNodeFilterer.class),
+            mock(ActionFilters.class),
+            clusterService,
+            client(),
+            Settings.EMPTY,
+            xContentRegistry(),
+            mock(ADTaskManager.class)
+        );
+        task = mock(Task.class);
         response = new ActionListener<GetAnomalyDetectorResponse>() {
             @Override
             public void onResponse(GetAnomalyDetectorResponse getResponse) {
