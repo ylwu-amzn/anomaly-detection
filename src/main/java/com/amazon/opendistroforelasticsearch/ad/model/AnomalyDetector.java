@@ -143,40 +143,24 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         List<String> categoryFields,
         User user
     ) {
-        if (Strings.isBlank(name)) {
-            throw new IllegalArgumentException("Detector name should be set");
-        }
-        if (timeField == null) {
-            throw new IllegalArgumentException("Time field should be set");
-        }
-        if (indices == null || indices.isEmpty()) {
-            throw new IllegalArgumentException("Indices should be set");
-        }
-        if (detectionInterval == null) {
-            throw new IllegalArgumentException("Detection interval should be set");
-        }
-        if (shingleSize != null && shingleSize < 1) {
-            throw new IllegalArgumentException("Shingle size must be a positive integer");
-        }
-        if (categoryFields != null && categoryFields.size() > CATEGORY_FIELD_LIMIT) {
-            throw new IllegalArgumentException(CommonErrorMessages.CATEGORICAL_FIELD_NUMBER_SURPASSED + CATEGORY_FIELD_LIMIT);
-        }
-        this.detectorId = detectorId;
-        this.version = version;
-        this.name = name;
-        this.description = description;
-        this.timeField = timeField;
-        this.indices = indices;
-        this.featureAttributes = features;
-        this.filterQuery = filterQuery;
-        this.detectionInterval = detectionInterval;
-        this.windowDelay = windowDelay;
-        this.shingleSize = getShingleSize(shingleSize, categoryFields);
-        this.uiMetadata = uiMetadata;
-        this.schemaVersion = schemaVersion;
-        this.lastUpdateTime = lastUpdateTime;
-        this.categoryFields = categoryFields;
-        this.user = user;
+        this(detectorId,
+                version,
+                name,
+                description,
+                timeField,
+                indices,
+                features,
+                filterQuery,
+                detectionInterval,
+                windowDelay,
+                shingleSize,
+                uiMetadata,
+                schemaVersion,
+                lastUpdateTime,
+                categoryFields,
+                user,
+                null,
+                null);
     }
 
     public AnomalyDetector(
@@ -210,6 +194,9 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         }
         if (detectionInterval == null) {
             throw new IllegalArgumentException("Detection interval should be set");
+        }
+        if (((IntervalTimeConfiguration)detectionInterval).getInterval() == 0) {
+            throw new IllegalArgumentException("Detection interval should not be zero set");
         }
         if (shingleSize != null && shingleSize < 1) {
             throw new IllegalArgumentException("Shingle size must be a positive integer");
