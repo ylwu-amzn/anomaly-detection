@@ -504,6 +504,10 @@ public class IndexAnomalyDetectorActionHandler {
 
             @Override
             public void onFailure(Exception e) {
+                logger.warn("Failed to update detector", e);
+                if (e instanceof ElasticsearchStatusException && RestStatus.CONFLICT == ((ElasticsearchStatusException) e).status()) {
+                    listener.onFailure(new IllegalArgumentException("There was a problem updating the historical detector:[" + detectorId + "]"));
+                }
                 listener.onFailure(e);
             }
         });
