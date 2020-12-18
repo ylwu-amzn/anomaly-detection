@@ -109,7 +109,7 @@ import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.IndexStatusSuppl
 import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.ModelsOnNodeSupplier;
 import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.SettableSupplier;
 import com.amazon.opendistroforelasticsearch.ad.task.ADBatchTaskRunner;
-import com.amazon.opendistroforelasticsearch.ad.task.ADTaskCache;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskCacheManager;
 import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultTransportAction;
@@ -196,7 +196,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
     private static Gson gson;
     private AnomalyDetectionIndices anomalyDetectionIndices;
     private AnomalyDetectorRunner anomalyDetectorRunner;
-    private ADTaskCache adBatchTaskCache;
+    private ADTaskCacheManager adBatchTaskCache;
     private ADTaskManager adTaskManager;
     private ADBatchTaskRunner adBatchTaskRunner;
     private Client client;
@@ -518,7 +518,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             stateManager
         );
         SearchHandler searchHandler = new SearchHandler(settings, clusterService, client);
-        adBatchTaskCache = new ADTaskCache(settings, clusterService, memoryTracker);
+        adBatchTaskCache = new ADTaskCacheManager(settings, clusterService, memoryTracker);
         adTaskManager = new ADTaskManager(
             settings,
             threadPool,

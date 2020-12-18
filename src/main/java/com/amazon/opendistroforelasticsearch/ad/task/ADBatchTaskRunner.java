@@ -120,7 +120,7 @@ public class ADBatchTaskRunner {
     private final IndexNameExpressionResolver indexNameExpressionResolver;
     private AnomalyDetectionIndices anomalyDetectionIndices;
 
-    private final ADTaskCache adBatchTaskCache;
+    private final ADTaskCacheManager adTaskCacheManager;
     private final TransportRequestOptions option; // TODO, test this config
 
     private volatile Integer maxAdBatchTaskPerNode;
@@ -140,7 +140,7 @@ public class ADBatchTaskRunner {
         AnomalyDetectionIndices anomalyDetectionIndices,
         ADStats adStats,
         AnomalyResultBulkIndexHandler anomalyResultBulkIndexHandler,
-        ADTaskCache adBatchTaskCache
+        ADTaskCacheManager adTaskCacheManager
     ) {
         this.threadPool = threadPool;
         this.clusterService = clusterService;
@@ -160,7 +160,7 @@ public class ADBatchTaskRunner {
             .withTimeout(AnomalyDetectorSettings.REQUEST_TIMEOUT.get(settings))
             .build();
 
-        this.adBatchTaskCache = adBatchTaskCache;
+        this.adTaskCacheManager = adTaskCacheManager;
 
         this.maxAdBatchTaskPerNode = MAX_BATCH_TASK_PER_NODE.get(settings);
         clusterService.getClusterSettings().addSettingsUpdateConsumer(MAX_BATCH_TASK_PER_NODE, it -> maxAdBatchTaskPerNode = it);
@@ -310,7 +310,7 @@ public class ADBatchTaskRunner {
         // call checkBatchTaskLimitation() here
         adStats.getStat(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName()).increment();
         adStats.getStat(StatNames.AD_TOTAL_BATCH_TASK_EXECUTION_COUNT.getName()).increment();
-        adBatchTaskCache.put(adTask);
+        adTaskCacheManager.put(adTask);
         // adBatchTaskCache.putAdTransportTask(taskId, (ADTranspoertTask)task);
 
         // check if circuit breaker is open
@@ -335,11 +335,11 @@ public class ADBatchTaskRunner {
         // wrap original listener to process before return response/failure: 1.clean cache 2.track task stats
         String taskId = adTask.getTaskId();
         ActionListener<ADBatchAnomalyResultResponse> listener = ActionListener.wrap(response -> {
-            adBatchTaskCache.remove(taskId);
+            adTaskCacheManager.remove(taskId);
             adStats.getStat(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName()).decrement();
             // actionListener.onResponse(response);
         }, e -> {
-            adBatchTaskCache.remove(taskId);
+            adTaskCacheManager.remove(taskId);
             adStats.getStat(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName()).decrement();
             if (e instanceof TaskCancelledException) {
                 adStats.getStat(StatNames.AD_CANCELED_BATCH_TASK_COUNT.getName()).increment();
@@ -525,15 +525,15 @@ public class ADBatchTaskRunner {
     ) {
         String taskId = adTask.getTaskId();
         int shingleSize = adTask.getDetector().getShingleSize();
-        RandomCutForest rcf = adBatchTaskCache.getOrCreateRcfModel(taskId, shingleSize, enabledFeatureSize);
-        ThresholdingModel threshold = adBatchTaskCache.getOrCreateThresholdModel(taskId);
-        List<Double> thresholdTrainingScores = adBatchTaskCache.getThresholdTrainingData(taskId);
+        RandomCutForest rcf = adTaskCacheManager.getOrCreateRcfModel(taskId, shingleSize, enabledFeatureSize);
+        ThresholdingModel threshold = adTaskCacheManager.getOrCreateThresholdModel(taskId);
+        List<Double> thresholdTrainingScores = adTaskCacheManager.getThresholdTrainingData(taskId);
 
         List<AnomalyResult> anomalyResults = new ArrayList<>();
 
-        Deque<Map.Entry<Long, Optional<double[]>>> shingle = adBatchTaskCache.getShingle(taskId);
+        Deque<Map.Entry<Long, Optional<double[]>>> shingle = adTaskCacheManager.getShingle(taskId);
 
-        boolean thresholdTrained = adBatchTaskCache.isThresholdModelTrained(taskId);
+        boolean thresholdTrained = adTaskCacheManager.isThresholdModelTrained(taskId);
         long intervalEndTime = pieceStartTime;
         for (int i = 0; i < pieceSize && intervalEndTime < dataEndTime; i++) {
             intervalEndTime = intervalEndTime + interval;
@@ -579,7 +579,7 @@ public class ADBatchTaskRunner {
                         logger.debug("training threshold model with {} data points", thresholdTrainingScores.size());
                         threshold.train(doubles);
                         thresholdTrained = true;
-                        adBatchTaskCache.setThresholdModelTrained(taskId, thresholdTrained);
+                        adTaskCacheManager.setThresholdModelTrained(taskId, thresholdTrained);
                     }
                     grade = threshold.grade(score);
                     confidence = threshold.confidence();
@@ -642,7 +642,7 @@ public class ADBatchTaskRunner {
             checkCircuitBreaker(adTask, listener);
             // check running task exceeds limitation or not for every piece,
             // so we can end extra task in case any race condition
-            adBatchTaskCache.checkLimitation();
+            adTaskCacheManager.checkLimitation();
             long expectedPieceEndTime = pieceStartTime + pieceSize * interval;
             long pieceEndTime = expectedPieceEndTime > dataEndTime ? dataEndTime : expectedPieceEndTime;
             int i = 0;
@@ -684,7 +684,7 @@ public class ADBatchTaskRunner {
                 );
         } else {
             logger.info("all pieces finished for task {}, detector {}", taskId, adTask.getDetectorId());
-            adBatchTaskCache.remove(taskId);
+            adTaskCacheManager.remove(taskId);
             adTaskManager
                 .updateADTask(
                     taskId,
@@ -710,7 +710,7 @@ public class ADBatchTaskRunner {
     }
 
     private float calculateInitProgress(String taskId) {
-        RandomCutForest rcf = adBatchTaskCache.getRcfModel(taskId);
+        RandomCutForest rcf = adTaskCacheManager.getRcfModel(taskId);
         if (rcf == null) {
             return 0.0f;
         }
@@ -779,8 +779,8 @@ public class ADBatchTaskRunner {
     // }
 
     private void checkIfADTaskCancelled(String taskId) {
-        if (adBatchTaskCache.contains(taskId) && adBatchTaskCache.isCancelled(taskId)) {
-            throw new ADTaskCancelledException(adBatchTaskCache.getCancelReason(taskId), adBatchTaskCache.getCancelledBy(taskId));
+        if (adTaskCacheManager.contains(taskId) && adTaskCacheManager.isCancelled(taskId)) {
+            throw new ADTaskCancelledException(adTaskCacheManager.getCancelReason(taskId), adTaskCacheManager.getCancelledBy(taskId));
         }
     }
 

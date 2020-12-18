@@ -119,7 +119,7 @@ public class ADTaskManager {
     private final ClusterService clusterService;
     private final DetectionStateHandler detectorStateHandler;
     private final AnomalyDetectionIndices detectionIndices;
-    private final ADTaskCache adTaskCache;
+    private final ADTaskCacheManager adTaskCacheManager;
     private volatile Integer pieceIntervalSeconds;
     private volatile Integer maxAdTaskDocsPerDetector;
 
@@ -132,7 +132,7 @@ public class ADTaskManager {
         DiscoveryNodeFilterer nodeFilter,
         AnomalyDetectionIndices detectionIndices,
         DetectionStateHandler detectorStateHandler,
-        ADTaskCache adTaskCache
+        ADTaskCacheManager adTaskCacheManager
     ) {
         this.threadPool = threadPool;
         this.clusterService = clusterService;
@@ -141,7 +141,7 @@ public class ADTaskManager {
         this.nodeFilter = nodeFilter;
         this.detectionIndices = detectionIndices;
         this.detectorStateHandler = detectorStateHandler;
-        this.adTaskCache = adTaskCache;
+        this.adTaskCacheManager = adTaskCacheManager;
 
         this.pieceIntervalSeconds = BATCH_TASK_PIECE_INTERVAL_SECONDS.get(settings);
         clusterService.getClusterSettings().addSettingsUpdateConsumer(BATCH_TASK_PIECE_INTERVAL_SECONDS, it -> pieceIntervalSeconds = it);
@@ -462,11 +462,11 @@ public class ADTaskManager {
     // }
 
     private void createADTaskIndex(AnomalyDetector detector, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
-        if (adTaskCache.containsTaskOfDetector(detector.getDetectorId())) {
+        if (adTaskCacheManager.containsTaskOfDetector(detector.getDetectorId())) {
             listener.onFailure(new ElasticsearchStatusException("Detector is already running", RestStatus.BAD_REQUEST));
             return;
         }
-        adTaskCache.checkRunningTaskLimit();
+        adTaskCacheManager.checkRunningTaskLimit();
         if (detectionIndices.doesDetectorStateIndexExist()) {
             checkCurrentTaskState(detector, user, listener);
         } else {
@@ -779,7 +779,7 @@ public class ADTaskManager {
     private void getADTaskProfile(ADTask adTask, ActionListener<ADTaskProfile> listener) {
         String taskId = adTask.getTaskId();
 
-        if (adTaskCache.contains(taskId)) {
+        if (adTaskCacheManager.contains(taskId)) {
             ADTaskProfile adTaskProfile = getTaskProfile(taskId, adTask);
             listener.onResponse(adTaskProfile);
         } else {
@@ -819,15 +819,15 @@ public class ADTaskManager {
 
     private ADTaskProfile getTaskProfile(String taskId, ADTask adTask) {
         ADTaskProfile adTaskProfile = null;
-        if (adTaskCache.contains(taskId)) {
+        if (adTaskCacheManager.contains(taskId)) {
             adTaskProfile = new ADTaskProfile(
                 adTask,
-                adTaskCache.get(taskId).getShingle() == null ? 0 : adTaskCache.get(taskId).getShingle().size(),
-                adTaskCache.get(taskId).getRcfModel() == null ? 0 : adTaskCache.get(taskId).getRcfModel().getTotalUpdates(),
-                adTaskCache.get(taskId).isThresholdModelTrained(),
-                adTaskCache.get(taskId).getThresholdModelTrainingData() == null
+                adTaskCacheManager.get(taskId).getShingle() == null ? 0 : adTaskCacheManager.get(taskId).getShingle().size(),
+                adTaskCacheManager.get(taskId).getRcfModel() == null ? 0 : adTaskCacheManager.get(taskId).getRcfModel().getTotalUpdates(),
+                adTaskCacheManager.get(taskId).isThresholdModelTrained(),
+                adTaskCacheManager.get(taskId).getThresholdModelTrainingData() == null
                     ? 0
-                    : adTaskCache.get(taskId).getThresholdModelTrainingData().size(),
+                    : adTaskCacheManager.get(taskId).getThresholdModelTrainingData().size(),
                 clusterService.localNode().getId()
             );
         }
@@ -835,25 +835,25 @@ public class ADTaskManager {
     }
 
     public ADTaskCancellationState cancelTask(String taskId, String reason, String userName) {
-        if (!adTaskCache.contains(taskId)) {
+        if (!adTaskCacheManager.contains(taskId)) {
             return ADTaskCancellationState.NOT_FOUND;
         }
-        if (adTaskCache.isCancelled(taskId)) {
+        if (adTaskCacheManager.isCancelled(taskId)) {
             return ADTaskCancellationState.ALREADY_CANCELLED;
         }
-        adTaskCache.cancel(taskId, reason, userName);
+        adTaskCacheManager.cancel(taskId, reason, userName);
         return ADTaskCancellationState.CANCELLED;
     }
 
     // TODO: need to tune this part once we implement task priority
     public boolean hasCancellableTask() {
-        return adTaskCache.size() > 0;
+        return adTaskCacheManager.size() > 0;
     }
 
     public void cancelAllFeasibleTasks(String reason) {
-        Iterator<Map.Entry<String, ADBatchTaskCacheEntity>> iterator = adTaskCache.iterator();
+        Iterator<Map.Entry<String, ADBatchTaskCache>> iterator = adTaskCacheManager.iterator();
         while (iterator.hasNext()) {
-            Map.Entry<String, ADBatchTaskCacheEntity> taskCache = iterator.next();
+            Map.Entry<String, ADBatchTaskCache> taskCache = iterator.next();
             cancelTask(taskCache.getKey(), reason, null);
         }
     }

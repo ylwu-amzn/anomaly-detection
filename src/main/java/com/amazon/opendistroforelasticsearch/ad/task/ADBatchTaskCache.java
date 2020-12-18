@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.amazon.opendistroforelasticsearch.ad.ml.ThresholdingModel;
 import com.amazon.randomcutforest.RandomCutForest;
 
-public class ADBatchTaskCacheEntity {
+public class ADBatchTaskCache {
     private final String detectorId;
     private RandomCutForest rcfModel;
     private Deque<Map.Entry<Long, Optional<double[]>>> shingle;
@@ -37,7 +37,7 @@ public class ADBatchTaskCacheEntity {
     private String cancelReason;
     private String cancelledBy;
 
-    public ADBatchTaskCacheEntity(String detectorId) {
+    public ADBatchTaskCache(String detectorId) {
         this.detectorId = detectorId;
     }
 

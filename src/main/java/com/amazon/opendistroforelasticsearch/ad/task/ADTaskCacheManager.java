@@ -46,14 +46,14 @@ import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
 import com.amazon.randomcutforest.RandomCutForest;
 
-public class ADTaskCache {
+public class ADTaskCacheManager {
 
-    private final Map<String, ADBatchTaskCacheEntity> taskCaches;
+    private final Map<String, ADBatchTaskCache> taskCaches;
     private volatile Integer maxAdBatchTaskPerNode;
     private final MemoryTracker memoryTracker;
-    private final Logger logger = LogManager.getLogger(ADTaskCache.class);
+    private final Logger logger = LogManager.getLogger(ADTaskCacheManager.class);
 
-    public ADTaskCache(Settings settings, ClusterService clusterService, MemoryTracker memoryTracker) {
+    public ADTaskCacheManager(Settings settings, ClusterService clusterService, MemoryTracker memoryTracker) {
         this.maxAdBatchTaskPerNode = MAX_BATCH_TASK_PER_NODE.get(settings);
         clusterService.getClusterSettings().addSettingsUpdateConsumer(MAX_BATCH_TASK_PER_NODE, it -> maxAdBatchTaskPerNode = it);
         taskCaches = new ConcurrentHashMap<>();
@@ -61,7 +61,7 @@ public class ADTaskCache {
     }
 
     public RandomCutForest getOrCreateRcfModel(String taskId, int shingleSize, int enabledFeatureSize) {
-        ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
+        ADBatchTaskCache taskCache = getOrThrow(taskId);
         if (taskCache.getRcfModel() == null) {
             RandomCutForest rcf = RandomCutForest
                 .builder()
@@ -86,7 +86,7 @@ public class ADTaskCache {
     }
 
     public ThresholdingModel getOrCreateThresholdModel(String taskId) {
-        ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
+        ADBatchTaskCache taskCache = getOrThrow(taskId);
         if (taskCache.getThresholdModel() == null) {
             ThresholdingModel thresholdModel = new HybridThresholdingModel(
                 AnomalyDetectorSettings.THRESHOLD_MIN_PVALUE,
@@ -104,7 +104,7 @@ public class ADTaskCache {
     }
 
     public List<Double> getThresholdTrainingData(String taskId) {
-        ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
+        ADBatchTaskCache taskCache = getOrThrow(taskId);
         if (taskCache.getThresholdModelTrainingData() == null) {
             taskCache.setThresholdModelTrainingData(new ArrayList<>());
         }
@@ -122,7 +122,7 @@ public class ADTaskCache {
         if (!contains(taskId)) {
             throw new IllegalArgumentException("Task not in cache");
         }
-        ADBatchTaskCacheEntity taskCache = get(taskId);
+        ADBatchTaskCache taskCache = get(taskId);
         taskCache.setThresholdModelTrained(trained);
         if (trained) {
             int size = taskCache.getThresholdModelTrainingData().size();
@@ -166,19 +166,19 @@ public class ADTaskCache {
         return count > 0;
     }
 
-    public ADBatchTaskCacheEntity get(String taskId) {
+    public ADBatchTaskCache get(String taskId) {
         return taskCaches.get(taskId);
     }
 
-    private ADBatchTaskCacheEntity getOrThrow(String taskId) {
-        ADBatchTaskCacheEntity taskCache = taskCaches.get(taskId);
+    private ADBatchTaskCache getOrThrow(String taskId) {
+        ADBatchTaskCache taskCache = taskCaches.get(taskId);
         if (taskCache == null) {
             throw new IllegalArgumentException("Task not in cache");
         }
         return taskCache;
     }
 
-    public ADBatchTaskCacheEntity put(ADTask adTask) {
+    public ADBatchTaskCache put(ADTask adTask) {
         String taskId = adTask.getTaskId();
         if (contains(taskId)) {
             throw new IllegalArgumentException("AD task is already running");
@@ -190,7 +190,7 @@ public class ADTaskCache {
             throw new LimitExceededException("AD can't consume more memory than 10%");
         }
         memoryTracker.consumeMemory(neededCacheSize, false, HISTORICAL_SINGLE_ENTITY_DETECTOR);
-        ADBatchTaskCacheEntity cacheEntity = new ADBatchTaskCacheEntity(adTask.getDetectorId());
+        ADBatchTaskCache cacheEntity = new ADBatchTaskCache(adTask.getDetectorId());
         cacheEntity.getCacheMemorySize().getAndSet(neededCacheSize);
         return taskCaches.put(taskId, cacheEntity);
     }
@@ -234,22 +234,22 @@ public class ADTaskCache {
     }
 
     public boolean isCancelled(String taskId) {
-        ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
+        ADBatchTaskCache taskCache = getOrThrow(taskId);
         return taskCache.isCancelled();
     }
 
     public String getCancelReason(String taskId) {
-        ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
+        ADBatchTaskCache taskCache = getOrThrow(taskId);
         return taskCache.getCancelReason();
     }
 
     public String getCancelledBy(String taskId) {
-        ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
+        ADBatchTaskCache taskCache = getOrThrow(taskId);
         return taskCache.getCancelledBy();
     }
 
     public void cancel(String taskId, String reason, String userName) {
-        ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
+        ADBatchTaskCache taskCache = getOrThrow(taskId);
         taskCache.cancel(reason, userName);
     }
 
@@ -257,7 +257,7 @@ public class ADTaskCache {
         return taskCaches.size();
     }
 
-    public Iterator<Map.Entry<String, ADBatchTaskCacheEntity>> iterator() {
+    public Iterator<Map.Entry<String, ADBatchTaskCache>> iterator() {
         return taskCaches.entrySet().iterator();
     }
 }
