@@ -36,13 +36,6 @@ import com.google.common.base.Objects;
  */
 public class ADTask implements ToXContentObject, Writeable {
 
-    // public static final String PARSE_FIELD_NAME = "DetectorInternalState";
-    // public static final NamedXContentRegistry.Entry XCONTENT_REGISTRY = new NamedXContentRegistry.Entry(
-    // AnomalyDetectionState.class,
-    // new ParseField(PARSE_FIELD_NAME),
-    // it -> parse(it)
-    // );
-
     public static final String DETECTOR_STATE_INDEX = ".opendistro-anomaly-detection-state";
 
     public static final String TASK_ID_FIELD = "task_id";
@@ -127,6 +120,10 @@ public class ADTask implements ToXContentObject, Writeable {
         out.writeOptionalInstant(lastUpdateTime);
         out.writeOptionalString(startedBy);
         out.writeOptionalString(stoppedBy);
+    }
+
+    public static Builder builder() {
+        return new Builder();
     }
 
     public static class Builder {
@@ -385,23 +382,23 @@ public class ADTask implements ToXContentObject, Writeable {
             }
         }
         return new Builder()
-            .taskId(taskId)
-            .lastUpdateTime(lastUpdateTime)
-            .startedBy(startedBy)
-            .stoppedBy(stoppedBy)
-            .error(error)
-            .state(state)
-            .detectorId(detectorId)
-            .taskProgress(taskProgress)
-            .initProgress(initProgress)
-            .currentPiece(currentPiece)
-            .executionStartTime(executionStartTime)
-            .executionEndTime(executionEndTime)
-            .isLatest(isLatest)
-            .taskType(taskType)
-            .checkpointId(checkpointId)
-            .detector(detector)
-            .build();
+                .taskId(taskId)
+                .lastUpdateTime(lastUpdateTime)
+                .startedBy(startedBy)
+                .stoppedBy(stoppedBy)
+                .error(error)
+                .state(state)
+                .detectorId(detectorId)
+                .taskProgress(taskProgress)
+                .initProgress(initProgress)
+                .currentPiece(currentPiece)
+                .executionStartTime(executionStartTime)
+                .executionEndTime(executionEndTime)
+                .isLatest(isLatest)
+                .taskType(taskType)
+                .checkpointId(checkpointId)
+                .detector(detector)
+                .build();
     }
 
     @Generated
@@ -413,45 +410,45 @@ public class ADTask implements ToXContentObject, Writeable {
             return false;
         ADTask that = (ADTask) o;
         return Objects.equal(getTaskId(), that.getTaskId())
-            && Objects.equal(getLastUpdateTime(), that.getLastUpdateTime())
-            && Objects.equal(getStartedBy(), that.getStartedBy())
-            && Objects.equal(getStoppedBy(), that.getStoppedBy())
-            && Objects.equal(getError(), that.getError())
-            && Objects.equal(getState(), that.getState())
-            && Objects.equal(getDetectorId(), that.getDetectorId())
-            && Objects.equal(getTaskProgress(), that.getTaskProgress())
-            && Objects.equal(getInitProgress(), that.getInitProgress())
-            && Objects.equal(getCurrentPiece(), that.getCurrentPiece())
-            && Objects.equal(getExecutionStartTime(), that.getExecutionStartTime())
-            && Objects.equal(getExecutionEndTime(), that.getExecutionEndTime())
-            && Objects.equal(getLatest(), that.getLatest())
-            && Objects.equal(getTaskType(), that.getTaskType())
-            && Objects.equal(getCheckpointId(), that.getCheckpointId())
-            && Objects.equal(getDetector(), that.getDetector());
+                && Objects.equal(getLastUpdateTime(), that.getLastUpdateTime())
+                && Objects.equal(getStartedBy(), that.getStartedBy())
+                && Objects.equal(getStoppedBy(), that.getStoppedBy())
+                && Objects.equal(getError(), that.getError())
+                && Objects.equal(getState(), that.getState())
+                && Objects.equal(getDetectorId(), that.getDetectorId())
+                && Objects.equal(getTaskProgress(), that.getTaskProgress())
+                && Objects.equal(getInitProgress(), that.getInitProgress())
+                && Objects.equal(getCurrentPiece(), that.getCurrentPiece())
+                && Objects.equal(getExecutionStartTime(), that.getExecutionStartTime())
+                && Objects.equal(getExecutionEndTime(), that.getExecutionEndTime())
+                && Objects.equal(getLatest(), that.getLatest())
+                && Objects.equal(getTaskType(), that.getTaskType())
+                && Objects.equal(getCheckpointId(), that.getCheckpointId())
+                && Objects.equal(getDetector(), that.getDetector());
     }
 
     @Generated
     @Override
     public int hashCode() {
         return Objects
-            .hashCode(
-                taskId,
-                lastUpdateTime,
-                startedBy,
-                stoppedBy,
-                error,
-                state,
-                detectorId,
-                taskProgress,
-                initProgress,
-                currentPiece,
-                executionStartTime,
-                executionEndTime,
-                isLatest,
-                taskType,
-                checkpointId,
-                detector
-            );
+                .hashCode(
+                        taskId,
+                        lastUpdateTime,
+                        startedBy,
+                        stoppedBy,
+                        error,
+                        state,
+                        detectorId,
+                        taskProgress,
+                        initProgress,
+                        currentPiece,
+                        executionStartTime,
+                        executionEndTime,
+                        isLatest,
+                        taskType,
+                        checkpointId,
+                        detector
+                );
     }
 
     public String getTaskId() {
@@ -466,32 +463,16 @@ public class ADTask implements ToXContentObject, Writeable {
         return lastUpdateTime;
     }
 
-    public void setLastUpdateTime(Instant lastUpdateTime) {
-        this.lastUpdateTime = lastUpdateTime;
-    }
-
     public String getStartedBy() {
         return startedBy;
-    }
-
-    public void setStartedBy(String startedBy) {
-        this.startedBy = startedBy;
     }
 
     public String getStoppedBy() {
         return stoppedBy;
     }
 
-    public void setStoppedBy(String stoppedBy) {
-        this.stoppedBy = stoppedBy;
-    }
-
     public String getError() {
         return error;
-    }
-
-    public void setError(String error) {
-        this.error = error;
     }
 
     public String getState() {
@@ -506,10 +487,6 @@ public class ADTask implements ToXContentObject, Writeable {
         return detectorId;
     }
 
-    public void setDetectorId(String detectorId) {
-        this.detectorId = detectorId;
-    }
-
     public Float getTaskProgress() {
         return taskProgress;
     }
@@ -518,67 +495,31 @@ public class ADTask implements ToXContentObject, Writeable {
         return initProgress;
     }
 
-    public void setInitProgress(Float initProgress) {
-        this.initProgress = initProgress;
-    }
-
-    public void setTaskProgress(Float taskProgress) {
-        this.taskProgress = taskProgress;
-    }
-
     public Instant getCurrentPiece() {
         return currentPiece;
-    }
-
-    public void setCurrentPiece(Instant currentPiece) {
-        this.currentPiece = currentPiece;
     }
 
     public Instant getExecutionStartTime() {
         return executionStartTime;
     }
 
-    public void setExecutionStartTime(Instant executionStartTime) {
-        this.executionStartTime = executionStartTime;
-    }
-
     public Instant getExecutionEndTime() {
         return executionEndTime;
-    }
-
-    public void setExecutionEndTime(Instant executionEndTime) {
-        this.executionEndTime = executionEndTime;
     }
 
     public Boolean getLatest() {
         return isLatest;
     }
 
-    public void setLatest(Boolean latest) {
-        isLatest = latest;
-    }
-
     public String getTaskType() {
         return taskType;
-    }
-
-    public void setTaskType(String taskType) {
-        this.taskType = taskType;
     }
 
     public String getCheckpointId() {
         return checkpointId;
     }
 
-    public void setCheckpointId(String checkpointId) {
-        this.checkpointId = checkpointId;
-    }
-
     public AnomalyDetector getDetector() {
         return detector;
-    }
-
-    public void setDetector(AnomalyDetector detector) {
-        this.detector = detector;
     }
 }

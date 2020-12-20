@@ -525,9 +525,9 @@ public class ADBatchTaskRunner {
     ) {
         String taskId = adTask.getTaskId();
         int shingleSize = adTask.getDetector().getShingleSize();
-        RandomCutForest rcf = adTaskCacheManager.getOrCreateRcfModel(taskId, shingleSize, enabledFeatureSize);
-        ThresholdingModel threshold = adTaskCacheManager.getOrCreateThresholdModel(taskId);
-        List<Double> thresholdTrainingScores = adTaskCacheManager.getThresholdTrainingData(taskId);
+        RandomCutForest rcf = adTaskCacheManager.getRcfModel(taskId);
+        ThresholdingModel threshold = adTaskCacheManager.getThresholdModel(taskId);
+        List<Double> thresholdTrainingScores = adTaskCacheManager.getThresholdModelTrainingData(taskId);
 
         List<AnomalyResult> anomalyResults = new ArrayList<>();
 
@@ -642,7 +642,7 @@ public class ADBatchTaskRunner {
             checkCircuitBreaker(adTask, listener);
             // check running task exceeds limitation or not for every piece,
             // so we can end extra task in case any race condition
-            adTaskCacheManager.checkLimitation();
+//            adTaskCacheManager.checkLimitation();
             long expectedPieceEndTime = pieceStartTime + pieceSize * interval;
             long pieceEndTime = expectedPieceEndTime > dataEndTime ? dataEndTime : expectedPieceEndTime;
             int i = 0;

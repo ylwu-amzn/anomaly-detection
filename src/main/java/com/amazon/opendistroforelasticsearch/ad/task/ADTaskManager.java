@@ -41,6 +41,7 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import com.amazon.opendistroforelasticsearch.ad.MemoryTracker;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -822,12 +823,12 @@ public class ADTaskManager {
         if (adTaskCacheManager.contains(taskId)) {
             adTaskProfile = new ADTaskProfile(
                 adTask,
-                adTaskCacheManager.get(taskId).getShingle() == null ? 0 : adTaskCacheManager.get(taskId).getShingle().size(),
-                adTaskCacheManager.get(taskId).getRcfModel() == null ? 0 : adTaskCacheManager.get(taskId).getRcfModel().getTotalUpdates(),
-                adTaskCacheManager.get(taskId).isThresholdModelTrained(),
-                adTaskCacheManager.get(taskId).getThresholdModelTrainingData() == null
+                adTaskCacheManager.getShingle(taskId) == null ? 0 : adTaskCacheManager.getShingle(taskId).size(),
+                adTaskCacheManager.getRcfModel(taskId) == null ? 0 : adTaskCacheManager.getRcfModel(taskId).getTotalUpdates(),
+                adTaskCacheManager.isThresholdModelTrained(taskId),
+                adTaskCacheManager.getThresholdModelTrainingData(taskId) == null
                     ? 0
-                    : adTaskCacheManager.get(taskId).getThresholdModelTrainingData().size(),
+                    : adTaskCacheManager.getThresholdModelTrainingData(taskId).size(),
                 clusterService.localNode().getId()
             );
         }
@@ -851,10 +852,11 @@ public class ADTaskManager {
     }
 
     public void cancelAllFeasibleTasks(String reason) {
-        Iterator<Map.Entry<String, ADBatchTaskCache>> iterator = adTaskCacheManager.iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<String, ADBatchTaskCache> taskCache = iterator.next();
-            cancelTask(taskCache.getKey(), reason, null);
-        }
+        adTaskCacheManager.cancelAll(reason);
+//        Iterator<Map.Entry<String, ADBatchTaskCache>> iterator = adTaskCacheManager.iterator();
+//        while (iterator.hasNext()) {
+//            Map.Entry<String, ADBatchTaskCache> taskCache = iterator.next();
+//            cancelTask(taskCache.getKey(), reason, null);
+//        }
     }
 }

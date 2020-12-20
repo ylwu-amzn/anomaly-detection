@@ -17,14 +17,9 @@ package com.amazon.opendistroforelasticsearch.ad.task;
 
 import static com.amazon.opendistroforelasticsearch.ad.MemoryTracker.Origin.HISTORICAL_SINGLE_ENTITY_DETECTOR;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_BATCH_TASK_PER_NODE;
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_MIN_SAMPLES;
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_SAMPLES_PER_TREE;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_TREES;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.THRESHOLD_MODEL_TRAINING_SIZE;
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.TIME_DECAY;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.List;
@@ -33,17 +28,13 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Settings;
 
 import com.amazon.opendistroforelasticsearch.ad.MemoryTracker;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException;
-import com.amazon.opendistroforelasticsearch.ad.ml.HybridThresholdingModel;
 import com.amazon.opendistroforelasticsearch.ad.ml.ThresholdingModel;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
-import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
 import com.amazon.randomcutforest.RandomCutForest;
 
 public class ADTaskCacheManager {
@@ -51,8 +42,14 @@ public class ADTaskCacheManager {
     private final Map<String, ADBatchTaskCache> taskCaches;
     private volatile Integer maxAdBatchTaskPerNode;
     private final MemoryTracker memoryTracker;
-    private final Logger logger = LogManager.getLogger(ADTaskCacheManager.class);
 
+    /**
+     * Constructor to create AD task cache manager.
+     *
+     * @param settings ES settings
+     * @param clusterService ES cluster service
+     * @param memoryTracker AD memory tracker
+     */
     public ADTaskCacheManager(Settings settings, ClusterService clusterService, MemoryTracker memoryTracker) {
         this.maxAdBatchTaskPerNode = MAX_BATCH_TASK_PER_NODE.get(settings);
         clusterService.getClusterSettings().addSettingsUpdateConsumer(MAX_BATCH_TASK_PER_NODE, it -> maxAdBatchTaskPerNode = it);
@@ -60,201 +57,259 @@ public class ADTaskCacheManager {
         this.memoryTracker = memoryTracker;
     }
 
-    public RandomCutForest getOrCreateRcfModel(String taskId, int shingleSize, int enabledFeatureSize) {
-        ADBatchTaskCache taskCache = getOrThrow(taskId);
-        if (taskCache.getRcfModel() == null) {
-            RandomCutForest rcf = RandomCutForest
-                .builder()
-                .dimensions(shingleSize * enabledFeatureSize)
-                .numberOfTrees(NUM_TREES)
-                .lambda(TIME_DECAY)
-                .sampleSize(NUM_SAMPLES_PER_TREE)
-                .outputAfter(NUM_MIN_SAMPLES)
-                .parallelExecutionEnabled(false)
-                .build();
-            taskCache.setRcfModel(rcf);
-            taskCache.setShingle(new ArrayDeque<>(shingleSize));
-        }
-        return taskCache.getRcfModel();
-    }
-
-    public RandomCutForest getRcfModel(String taskId) {
-        if (!contains(taskId)) {
-            return null;
-        }
-        return get(taskId).getRcfModel();
-    }
-
-    public ThresholdingModel getOrCreateThresholdModel(String taskId) {
-        ADBatchTaskCache taskCache = getOrThrow(taskId);
-        if (taskCache.getThresholdModel() == null) {
-            ThresholdingModel thresholdModel = new HybridThresholdingModel(
-                AnomalyDetectorSettings.THRESHOLD_MIN_PVALUE,
-                AnomalyDetectorSettings.THRESHOLD_MAX_RANK_ERROR,
-                AnomalyDetectorSettings.THRESHOLD_MAX_SCORE,
-                AnomalyDetectorSettings.THRESHOLD_NUM_LOGNORMAL_QUANTILES,
-                AnomalyDetectorSettings.THRESHOLD_DOWNSAMPLES,
-                AnomalyDetectorSettings.THRESHOLD_MAX_SAMPLES
-            );
-            taskCache.setThresholdModel(thresholdModel);
-            taskCache.setThresholdModelTrainingData(new ArrayList<>(THRESHOLD_MODEL_TRAINING_SIZE));
-            taskCache.setThresholdModelTrained(false);
-        }
-        return taskCache.getThresholdModel();
-    }
-
-    public List<Double> getThresholdTrainingData(String taskId) {
-        ADBatchTaskCache taskCache = getOrThrow(taskId);
-        if (taskCache.getThresholdModelTrainingData() == null) {
-            taskCache.setThresholdModelTrainingData(new ArrayList<>());
-        }
-        return taskCache.getThresholdModelTrainingData();
-    }
-
-    public boolean isThresholdModelTrained(String taskId) {
-        if (!contains(taskId)) {
-            return false;
-        }
-        return get(taskId).isThresholdModelTrained();
-    }
-
-    public void setThresholdModelTrained(String taskId, boolean trained) {
-        if (!contains(taskId)) {
-            throw new IllegalArgumentException("Task not in cache");
-        }
-        ADBatchTaskCache taskCache = get(taskId);
-        taskCache.setThresholdModelTrained(trained);
-        if (trained) {
-            int size = taskCache.getThresholdModelTrainingData().size();
-            long cacheSize = ADTaskResourceEstimator.maxTrainingDataMemorySize(size);
-            taskCache.getThresholdModelTrainingData().clear();
-            taskCache.setThresholdModelTrainingData(null);
-            taskCache.getCacheMemorySize().getAndAdd(-cacheSize);
-            memoryTracker.releaseMemory(ADTaskResourceEstimator.maxTrainingDataMemorySize(size), false, HISTORICAL_SINGLE_ENTITY_DETECTOR);
-        }
-    }
-
-    public Deque<Map.Entry<Long, Optional<double[]>>> getShingle(String taskId) {
-        if (!contains(taskId)) {
-            return null;
-        }
-        return get(taskId).getShingle();
-    }
-
-    // public void putAdTransportTask(String taskId, ADTranspoertTask task) {
-    // ADBatchTaskCacheEntity taskCache = getOrThrow(taskId);
-    // taskCache.setAdTranspoertTask(task);
-    // }
-
-    // public ADTranspoertTask getAdTransportTask(String taskId) {
-    // if (!contains(taskId)) {
-    // return null;
-    // }
-    // return get(taskId).getAdTranspoertTask();
-    // }
-
-    public int getTaskNumber() {
-        return taskCaches.size();
-    }
-
-    public boolean contains(String taskId) {
-        return taskCaches.containsKey(taskId);
-    }
-
-    public boolean containsTaskOfDetector(String detectorId) {
-        long count = taskCaches.entrySet().stream().filter(entry -> Objects.equals(detectorId, entry.getValue().getDetectorId())).count();
-        return count > 0;
-    }
-
-    public ADBatchTaskCache get(String taskId) {
-        return taskCaches.get(taskId);
-    }
-
-    private ADBatchTaskCache getOrThrow(String taskId) {
-        ADBatchTaskCache taskCache = taskCaches.get(taskId);
-        if (taskCache == null) {
-            throw new IllegalArgumentException("Task not in cache");
-        }
-        return taskCache;
-    }
-
-    public ADBatchTaskCache put(ADTask adTask) {
+    /**
+     * Put AD task into cache.
+     *
+     * @param adTask AD task
+     */
+    public synchronized void put(ADTask adTask) {
         String taskId = adTask.getTaskId();
         if (contains(taskId)) {
             throw new IllegalArgumentException("AD task is already running");
         }
+        if (containsTaskOfDetector(adTask.getDetectorId())) {
+            throw new IllegalArgumentException("There is one task executing for detector");
+        }
         checkRunningTaskLimit();
         long neededCacheSize = calculateADTaskCacheSize(adTask);
         if (!memoryTracker.canAllocate(neededCacheSize)) {
-            // TODO: tune the error message
-            throw new LimitExceededException("AD can't consume more memory than 10%");
+            throw new LimitExceededException("No enough memory to run detector");
         }
         memoryTracker.consumeMemory(neededCacheSize, false, HISTORICAL_SINGLE_ENTITY_DETECTOR);
-        ADBatchTaskCache cacheEntity = new ADBatchTaskCache(adTask.getDetectorId());
-        cacheEntity.getCacheMemorySize().getAndSet(neededCacheSize);
-        return taskCaches.put(taskId, cacheEntity);
-    }
-
-    private long calculateADTaskCacheSize(ADTask adTask) {
-        return memoryTracker.estimateModelSize(adTask.getDetector(), NUM_TREES) + ADTaskResourceEstimator
-            .maxTrainingDataMemorySize(THRESHOLD_MODEL_TRAINING_SIZE) + ADTaskResourceEstimator
-                .maxShingleMemorySize(adTask.getDetector().getShingleSize());
-    }
-
-    // public ADBatchTaskModel putIfAbsent(String taskId) {
-    // if (!contains(taskId)) {
-    // return put(taskId);
-    // }
-    // return get(taskId);
-    // }
-
-    public void remove(String taskId) {
-        if (contains(taskId)) {
-            memoryTracker.releaseMemory(get(taskId).getCacheMemorySize().get(), false, HISTORICAL_SINGLE_ENTITY_DETECTOR);
-            taskCaches.remove(taskId);
-        }
+        ADBatchTaskCache taskCache = new ADBatchTaskCache(adTask);
+        taskCache.getCacheMemorySize().set(neededCacheSize);
+        taskCaches.put(taskId, taskCache);
     }
 
     /**
-     * check if current running batch task on current node exceeds max running task limitation.
+     * check if current running batch task on current node exceeds
+     * max running task limitation.
      */
     public void checkRunningTaskLimit() {
-        checkTaskCount(maxAdBatchTaskPerNode);
-    }
-
-    public void checkLimitation() {
-        checkTaskCount(maxAdBatchTaskPerNode + 1);
-    }
-
-    private void checkTaskCount(int maxTasks) {
-        if (this.getTaskNumber() >= maxTasks) {
+        if (size() >= maxAdBatchTaskPerNode) {
             String error = "Can't run more than " + maxAdBatchTaskPerNode + " historical detectors per data node";
             throw new LimitExceededException(error);
         }
     }
 
+    /**
+     * Get task RCF model.
+     * If task doesn't exist in cache, will throw {@link java.lang.IllegalArgumentException}.
+     *
+     * @param taskId AD task id
+     * @return RCF model
+     */
+    public RandomCutForest getRcfModel(String taskId) {
+        return getBatchTaskCache(taskId).getRcfModel();
+    }
+
+    /**
+     * Get task threshold model.
+     * If task doesn't exist in cache, will throw {@link java.lang.IllegalArgumentException}.
+     *
+     * @param taskId AD task id
+     * @return threshold model
+     */
+    public ThresholdingModel getThresholdModel(String taskId) {
+        return getBatchTaskCache(taskId).getThresholdModel();
+    }
+
+    /**
+     * Get threshold model training data.
+     * If task doesn't exist in cache, will throw {@link java.lang.IllegalArgumentException}.
+     *
+     * @param taskId AD task id
+     * @return threshold model training data
+     */
+    public List<Double> getThresholdModelTrainingData(String taskId) {
+        return getBatchTaskCache(taskId).getThresholdModelTrainingData();
+    }
+
+    /**
+     * Threshold model trained or not.
+     * If task doesn't exist in cache, will throw {@link java.lang.IllegalArgumentException}.
+     *
+     * @param taskId AD task id
+     * @return true if threshold model trained; otherwise, return false
+     */
+    public boolean isThresholdModelTrained(String taskId) {
+        return getBatchTaskCache(taskId).isThresholdModelTrained();
+    }
+
+    /**
+     * Set threshold model trained or not.
+     *
+     * @param taskId task id
+     * @param trained threshold model trained or not
+     */
+    public void setThresholdModelTrained(String taskId, boolean trained) {
+        ADBatchTaskCache taskCache = getBatchTaskCache(taskId);
+        taskCache.setThresholdModelTrained(trained);
+        if (trained) {
+            int size = taskCache.getThresholdModelTrainingData().size();
+            long cacheSize = trainingDataMemorySize(size);
+            taskCache.getThresholdModelTrainingData().clear();
+            taskCache.getCacheMemorySize().getAndAdd(-cacheSize);
+            memoryTracker.releaseMemory(cacheSize, false, HISTORICAL_SINGLE_ENTITY_DETECTOR);
+        }
+    }
+
+    /**
+     * Get shingle data.
+     *
+     * @param taskId AD task id
+     * @return shingle data
+     */
+    public Deque<Map.Entry<Long, Optional<double[]>>> getShingle(String taskId) {
+        return getBatchTaskCache(taskId).getShingle();
+    }
+
+    /**
+     * Check if task exists in cache.
+     *
+     * @param taskId task id
+     * @return true if task exists in cache; otherwise, return false.
+     */
+    public boolean contains(String taskId) {
+        return taskCaches.containsKey(taskId);
+    }
+
+    /**
+     * Check if there is task in cache for detector.
+     *
+     * @param detectorId detector id
+     * @return true if there is task in cache; otherwise return false
+     */
+    public boolean containsTaskOfDetector(String detectorId) {
+        return taskCaches.values().stream().filter(v -> Objects.equals(detectorId, v.getDetectorId())).findAny().isPresent();
+    }
+
+    /**
+     * Get batch task cache. If task doesn't exist in cache, will throw
+     * {@link java.lang.IllegalArgumentException}
+     *
+     * @param taskId task id
+     * @return AD batch task cache
+     */
+    private ADBatchTaskCache getBatchTaskCache(String taskId) {
+        if (!contains(taskId)) {
+            throw new IllegalArgumentException("AD task not in cache");
+        }
+        return taskCaches.get(taskId);
+    }
+
+    /**
+     * Calculate AD task cache memory usage.
+     *
+     * @param adTask AD task
+     * @return how many bytes will consume
+     */
+    private long calculateADTaskCacheSize(ADTask adTask) {
+        return memoryTracker.estimateModelSize(adTask.getDetector(), NUM_TREES) + trainingDataMemorySize(THRESHOLD_MODEL_TRAINING_SIZE)
+                + shingleMemorySize(adTask.getDetector().getShingleSize());
+    }
+
+    /**
+     * Remove task from cache.
+     *
+     * @param taskId AD task id
+     */
+    public void remove(String taskId) {
+        if (contains(taskId)) {
+            memoryTracker.releaseMemory(getBatchTaskCache(taskId).getCacheMemorySize().get(), false, HISTORICAL_SINGLE_ENTITY_DETECTOR);
+            taskCaches.remove(taskId);
+        }
+    }
+
+    /**
+     * Cancel AD task.
+     *
+     * @param taskId AD task id
+     * @param reason why need to cancel task
+     * @param userName user name
+     */
+    public void cancel(String taskId, String reason, String userName) {
+        getBatchTaskCache(taskId).cancel(reason, userName);
+    }
+
+    /**
+     * Task is cancelled or not.
+     *
+     * @param taskId AD task id
+     * @return true if task is cancelled; otherwise return false
+     */
     public boolean isCancelled(String taskId) {
-        ADBatchTaskCache taskCache = getOrThrow(taskId);
+        ADBatchTaskCache taskCache = getBatchTaskCache(taskId);
         return taskCache.isCancelled();
     }
 
+    /**
+     * Get why task cancelled.
+     *
+     * @param taskId AD task id
+     * @return task cancellation reason
+     */
     public String getCancelReason(String taskId) {
-        ADBatchTaskCache taskCache = getOrThrow(taskId);
-        return taskCache.getCancelReason();
+        return getBatchTaskCache(taskId).getCancelReason();
     }
 
+    /**
+     * Get task cancelled by which user.
+     *
+     * @param taskId AD task id
+     * @return user name
+     */
     public String getCancelledBy(String taskId) {
-        ADBatchTaskCache taskCache = getOrThrow(taskId);
-        return taskCache.getCancelledBy();
+        return getBatchTaskCache(taskId).getCancelledBy();
     }
 
-    public void cancel(String taskId, String reason, String userName) {
-        ADBatchTaskCache taskCache = getOrThrow(taskId);
-        taskCache.cancel(reason, userName);
-    }
-
+    /**
+     * Get current task count in cache.
+     *
+     * @return task count
+     */
     public int size() {
         return taskCaches.size();
+    }
+
+    /**
+     * Clear all tasks.
+     */
+    public void clear() {
+        taskCaches.clear();
+    }
+
+    /**
+     * Estimate max memory usage of model training data.
+     * The training data is double and will cache in {@link java.util.ArrayList}.
+     * Check {@link ADBatchTaskCache#getThresholdModelTrainingData()}
+     *
+     * @param size training data point count
+     * @return how many bytes will consume
+     */
+    public long trainingDataMemorySize(int size) {
+        return 24 * size;
+    }
+
+    /**
+     * Estimate max memory usage of shingle data.
+     * Based on the test, one shingle data point consumes about 96 bytes.
+     * The shingle data is stored in {@link java.util.Deque}
+     * Check {@link ADBatchTaskCache#getShingle()}
+     *
+     * @param shingleSize shingle data point count
+     * @return how many bytes will consume
+     */
+    public long shingleMemorySize(int shingleSize) {
+        return 96 * shingleSize;
+    }
+
+    protected void cancelAll(String reason) {
+        Iterator<Map.Entry<String, ADBatchTaskCache>> iterator = iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, ADBatchTaskCache> taskCache = iterator.next();
+            cancel(taskCache.getKey(), reason, null);
+        }
     }
 
     public Iterator<Map.Entry<String, ADBatchTaskCache>> iterator() {
