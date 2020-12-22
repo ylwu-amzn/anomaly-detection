@@ -43,17 +43,25 @@ public class DetectionDateRange implements ToXContentObject, Writeable {
     public DetectionDateRange(Instant startTime, Instant endTime) {
         this.startTime = startTime;
         this.endTime = endTime;
+        validate();
+    }
+
+    public DetectionDateRange(StreamInput in) throws IOException {
+        this.startTime = in.readInstant();
+        this.endTime = in.readInstant();
+        validate();
+    }
+
+    private void validate() {
         if (startTime == null) {
             throw new IllegalArgumentException("Detection data range's start time must not be null");
         }
         if (endTime == null) {
             throw new IllegalArgumentException("Detection data range's end time must not be null");
         }
-    }
-
-    public DetectionDateRange(StreamInput in) throws IOException {
-        this.startTime = in.readInstant();
-        this.endTime = in.readInstant();
+        if (startTime.isAfter(endTime)) {
+            throw new IllegalArgumentException("Detection data range's end time must be after start time");
+        }
     }
 
     @Override

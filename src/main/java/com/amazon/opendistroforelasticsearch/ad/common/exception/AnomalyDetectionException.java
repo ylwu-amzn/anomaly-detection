@@ -20,7 +20,11 @@ package com.amazon.opendistroforelasticsearch.ad.common.exception;
  */
 public class AnomalyDetectionException extends RuntimeException {
 
-    private final String anomalyDetectorId;
+    private String anomalyDetectorId;
+
+    public AnomalyDetectionException(String message) {
+        super(message);
+    }
 
     /**
      * Constructor with an anomaly detector ID and a message.

@@ -30,6 +30,7 @@ import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.regex.Matcher;
 
+import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.search.join.ScoreMode;
@@ -38,7 +39,9 @@ import org.elasticsearch.ResourceNotFoundException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.get.GetRequest;
 import org.elasticsearch.action.get.GetResponse;
+import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.action.support.replication.ReplicationResponse;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.ParsingException;
@@ -58,6 +61,10 @@ import org.elasticsearch.search.aggregations.AggregationBuilder;
 import org.elasticsearch.search.aggregations.AggregatorFactories;
 import org.elasticsearch.search.aggregations.BaseAggregationBuilder;
 import org.elasticsearch.search.aggregations.PipelineAggregationBuilder;
+import org.elasticsearch.search.aggregations.bucket.composite.CompositeAggregationBuilder;
+import org.elasticsearch.search.aggregations.bucket.composite.CompositeValuesSourceBuilder;
+import org.elasticsearch.search.aggregations.bucket.composite.DateHistogramValuesSourceBuilder;
+import org.elasticsearch.search.aggregations.bucket.histogram.DateHistogramInterval;
 import org.elasticsearch.search.aggregations.bucket.range.DateRangeAggregationBuilder;
 import org.elasticsearch.search.aggregations.metrics.Max;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
@@ -597,4 +604,66 @@ public final class ParseUtils {
             .map(map -> (Max) map.get(CommonName.AGG_NAME_MAX))
             .map(agg -> (long) agg.getValue());
     }
+
+    public static String checkShardsFailure(IndexResponse response) {
+        StringBuilder failureReasons = new StringBuilder();
+        if (response.getShardInfo().getFailed() > 0) {
+            for (ReplicationResponse.ShardInfo.Failure failure : response.getShardInfo().getFailures()) {
+                failureReasons.append(failure);
+            }
+            return failureReasons.toString();
+        }
+        return null;
+    }
+
+
+    public static SearchSourceBuilder generateFeatureQuerySearchRequest(
+            AnomalyDetector task,
+            long startTime,
+            long endTime,
+            NamedXContentRegistry xContentRegistry
+    ) throws IOException {
+
+        RangeQueryBuilder rangeQuery = new RangeQueryBuilder(task.getTimeField())
+                .from(startTime)
+                .to(endTime)
+                .format("epoch_millis")
+                .includeLower(true)
+                .includeUpper(false);
+
+        BoolQueryBuilder internalFilterQuery = QueryBuilders.boolQuery().must(rangeQuery).must(task.getFilterQuery());
+
+        long intervalSeconds = ((IntervalTimeConfiguration) task.getDetectionInterval()).toDuration().getSeconds();
+
+        List<CompositeValuesSourceBuilder<?>> sources = new ArrayList<>();
+        sources
+                .add(
+                        new DateHistogramValuesSourceBuilder("date_histogram")
+                                .field(task.getTimeField())
+                                .fixedInterval(DateHistogramInterval.seconds((int) intervalSeconds))
+                );
+
+        CompositeAggregationBuilder aggregationBuilder = new CompositeAggregationBuilder("feature_data", sources).size(1000);
+
+        if (task.getFeatureAttributes() != null) {
+            for (Feature feature : task.getFeatureAttributes()) {
+                if (feature.getEnabled()) {
+                    AggregatorFactories.Builder internalAgg = parseAggregators(
+                            feature.getAggregation().toString(),
+                            xContentRegistry,
+                            feature.getId()
+                    );
+                    aggregationBuilder.subAggregation(internalAgg.getAggregatorFactories().iterator().next());
+                }
+            }
+        }
+
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        searchSourceBuilder.aggregation(aggregationBuilder);
+        searchSourceBuilder.query(internalFilterQuery);
+        searchSourceBuilder.size(0);
+
+        return searchSourceBuilder;
+    }
+
 }

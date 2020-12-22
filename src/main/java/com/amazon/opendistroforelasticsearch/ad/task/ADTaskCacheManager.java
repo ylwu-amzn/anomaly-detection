@@ -146,7 +146,7 @@ public class ADTaskCacheManager {
      * @param taskId task id
      * @param trained threshold model trained or not
      */
-    public void setThresholdModelTrained(String taskId, boolean trained) {
+    protected void setThresholdModelTrained(String taskId, boolean trained) {
         ADBatchTaskCache taskCache = getBatchTaskCache(taskId);
         taskCache.setThresholdModelTrained(trained);
         if (trained) {
@@ -210,7 +210,7 @@ public class ADTaskCacheManager {
      */
     private long calculateADTaskCacheSize(ADTask adTask) {
         return memoryTracker.estimateModelSize(adTask.getDetector(), NUM_TREES) + trainingDataMemorySize(THRESHOLD_MODEL_TRAINING_SIZE)
-            + shingleMemorySize(adTask.getDetector().getShingleSize());
+            + shingleMemorySize(adTask.getDetector().getShingleSize() * adTask.getDetector().getEnabledFeatureIds().size());
     }
 
     /**
