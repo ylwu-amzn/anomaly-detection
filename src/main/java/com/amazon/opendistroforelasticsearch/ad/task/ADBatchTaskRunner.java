@@ -530,7 +530,7 @@ public class ADBatchTaskRunner {
         int shingleSize = adTask.getDetector().getShingleSize();
         RandomCutForest rcf = adTaskCacheManager.getRcfModel(taskId);
         ThresholdingModel threshold = adTaskCacheManager.getThresholdModel(taskId);
-        List<Double> thresholdTrainingScores = adTaskCacheManager.getThresholdModelTrainingData(taskId);
+        double[] thresholdTrainingScores = adTaskCacheManager.getThresholdModelTrainingData(taskId);
 
         List<AnomalyResult> anomalyResults = new ArrayList<>();
 
@@ -572,15 +572,15 @@ public class ADBatchTaskRunner {
                 rcf.update(point);
                 double grade = 0d;
                 double confidence = 0d;
-                if (!thresholdTrained && thresholdTrainingScores.size() < THRESHOLD_MODEL_TRAINING_SIZE) {
+                if (!thresholdTrained && thresholdTrainingScores.length < THRESHOLD_MODEL_TRAINING_SIZE) {
                     if (score > 0) {
-                        thresholdTrainingScores.add(score);
+                        thresholdTrainingScores[thresholdTrainingScores.length] = score;
                     }
                 } else {
-                    if (!thresholdTrained && thresholdTrainingScores.size() >= THRESHOLD_MODEL_TRAINING_SIZE) {
-                        double[] doubles = thresholdTrainingScores.stream().mapToDouble(d -> d).toArray();
-                        logger.debug("training threshold model with {} data points", thresholdTrainingScores.size());
-                        threshold.train(doubles);
+                    if (!thresholdTrained && thresholdTrainingScores.length >= THRESHOLD_MODEL_TRAINING_SIZE) {
+//                        double[] doubles = thresholdTrainingScores.stream().mapToDouble(d -> d).toArray();
+                        logger.debug("training threshold model with {} data points", thresholdTrainingScores.length);
+                        threshold.train(thresholdTrainingScores);
                         thresholdTrained = true;
                         adTaskCacheManager.setThresholdModelTrained(taskId, thresholdTrained);
                     }

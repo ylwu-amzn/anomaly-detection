@@ -43,7 +43,6 @@ import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededEx
 import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTaskState;
 import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
-import com.google.common.collect.ImmutableList;
 
 public class ADTaskCacheManagerTests extends ESTestCase {
     private MemoryTracker memoryTracker;
@@ -60,13 +59,13 @@ public class ADTaskCacheManagerTests extends ESTestCase {
 
         clusterService = mock(ClusterService.class);
         ClusterSettings clusterSettings = new ClusterSettings(
-            settings,
-            Collections.unmodifiableSet(new HashSet<>(Arrays.asList(AnomalyDetectorSettings.MAX_BATCH_TASK_PER_NODE)))
+                settings,
+                Collections.unmodifiableSet(new HashSet<>(Arrays.asList(AnomalyDetectorSettings.MAX_BATCH_TASK_PER_NODE)))
         );
         when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
         memoryTracker = mock(MemoryTracker.class);
         adTaskCacheManager = new ADTaskCacheManager(settings, clusterService, memoryTracker);
-    }
+    }EntityModel
 
     @Override
     @After
@@ -100,14 +99,14 @@ public class ADTaskCacheManagerTests extends ESTestCase {
         assertEquals("AD task is already running", e1.getMessage());
 
         ADTask adTask2 = TestHelpers
-            .randomAdTask(
-                randomAlphaOfLength(5),
-                ADTaskState.INIT,
-                adTask1.getExecutionEndTime(),
-                adTask1.getStoppedBy(),
-                adTask1.getDetectorId(),
-                adTask1.getDetector()
-            );
+                .randomAdTask(
+                        randomAlphaOfLength(5),
+                        ADTaskState.INIT,
+                        adTask1.getExecutionEndTime(),
+                        adTask1.getStoppedBy(),
+                        adTask1.getDetectorId(),
+                        adTask1.getDetector()
+                );
         IllegalArgumentException e2 = expectThrows(IllegalArgumentException.class, () -> adTaskCacheManager.put(adTask2));
         assertEquals("There is one task executing for detector", e2.getMessage());
     }
@@ -115,8 +114,8 @@ public class ADTaskCacheManagerTests extends ESTestCase {
     public void testPutTaskWithMemoryExceedLimit() {
         when(memoryTracker.canAllocate(anyLong())).thenReturn(false);
         LimitExceededException exception = expectThrows(
-            LimitExceededException.class,
-            () -> adTaskCacheManager.put(TestHelpers.randomAdTask())
+                LimitExceededException.class,
+                () -> adTaskCacheManager.put(TestHelpers.randomAdTask())
         );
         assertEquals("No enough memory to run detector", exception.getMessage());
     }
@@ -126,8 +125,7 @@ public class ADTaskCacheManagerTests extends ESTestCase {
         ADTask adTask = TestHelpers.randomAdTask();
         adTaskCacheManager.put(adTask);
         assertEquals(1, adTaskCacheManager.size());
-        adTaskCacheManager.getThresholdModelTrainingData(adTask.getTaskId()).addAll(ImmutableList.of(randomDouble(), randomDouble()));
-        int size = adTaskCacheManager.getThresholdModelTrainingData(adTask.getTaskId()).size();
+        int size = adTaskCacheManager.addThresholdModelTrainingData(adTask.getTaskId(), randomDouble(), randomDouble());
         long cacheSize = adTaskCacheManager.trainingDataMemorySize(size);
         adTaskCacheManager.setThresholdModelTrained(adTask.getTaskId(), false);
         verify(memoryTracker, never()).releaseMemory(anyLong(), anyBoolean(), eq(HISTORICAL_SINGLE_ENTITY_DETECTOR));
@@ -151,8 +149,8 @@ public class ADTaskCacheManagerTests extends ESTestCase {
 
     public void testTaskNotExist() {
         IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> adTaskCacheManager.getRcfModel(randomAlphaOfLength(5))
+                IllegalArgumentException.class,
+                () -> adTaskCacheManager.getRcfModel(randomAlphaOfLength(5))
         );
         assertEquals("AD task not in cache", e.getMessage());
     }
