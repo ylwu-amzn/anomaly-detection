@@ -228,6 +228,7 @@ public class ADTaskManager {
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.source(searchSourceBuilder);
         searchRequest.indices(ADTask.DETECTOR_STATE_INDEX);
+        //TODO: send out task profile request to check if task is running, if not, reset task status as stopped
         client.search(searchRequest, ActionListener.wrap(r -> {
             if (r.getHits().getTotalHits().value > 0) {
                 listener.onFailure(new ElasticsearchStatusException("Detector is already running", RestStatus.BAD_REQUEST));
@@ -255,7 +256,6 @@ public class ADTaskManager {
                 updateByQueryRequest,
                 ActionListener.wrap(
                         r -> {
-                            BulkByScrollTask.Status status = r.getStatus();
                             List<BulkItemResponse.Failure> bulkFailures = r.getBulkFailures();
                             if (bulkFailures.isEmpty()) {
                                 createNewADTask(detector, user, listener);
@@ -297,8 +297,7 @@ public class ADTaskManager {
                     request,
                     ActionListener
                         .wrap(
-                            r -> onIndexADTaskResponse(r, adTask,
-                                    () -> cleanOldAdTaskDocs(detector.getDetectorId()), listener),
+                            r -> onIndexADTaskResponse(r, adTask, () -> cleanOldAdTaskDocs(detector.getDetectorId()), listener),
                             e -> {
                                 logger.error("Failed to create AD task for detector " + detector.getDetectorId(), e);
                                 listener.onFailure(e);

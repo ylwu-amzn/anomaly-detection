@@ -71,7 +71,6 @@ import org.elasticsearch.search.aggregations.metrics.InternalMax;
 import org.elasticsearch.search.aggregations.metrics.InternalMin;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.tasks.Task;
-import org.elasticsearch.tasks.TaskCancelledException;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportRequestOptions;
 import org.elasticsearch.transport.TransportService;
@@ -181,7 +180,6 @@ public class ADBatchTaskRunner {
         updatedFields.put(INIT_PROGRESS_FIELD, 0.0f);
         adTaskManager.updateADTask(adTask.getTaskId(), updatedFields, ActionListener.wrap(r -> {
             getNodeStats(adTask, ActionListener.wrap(node -> {
-                boolean runTaskRemotely = false;
                 if (clusterService.localNode().getId().equals(node.getId())) {
                     // Execute batch task locally
                     logger
@@ -191,10 +189,9 @@ public class ADBatchTaskRunner {
                             node.getId(),
                             adTask.getDetectorId()
                         );
-                    startADBatchTask(adTask, task, listener);
+                    startADBatchTask(adTask, false, listener);
                 } else {
                     // Execute batch task remotely
-                    runTaskRemotely = true;
                     logger
                         .info(
                             "execute task {} remotely on node {} for detector {}",
@@ -202,8 +199,7 @@ public class ADBatchTaskRunner {
                             node.getId(),
                             adTask.getDetectorId()
                         );
-                    transportService
-                        .sendRequest(
+                    transportService.sendRequest(
                             node,
                             ADBatchTaskRemoteExecutionAction.NAME,
                             new ADBatchAnomalyResultRequest(adTask),
@@ -211,7 +207,6 @@ public class ADBatchTaskRunner {
                             new ActionListenerResponseHandler<>(listener, ADBatchAnomalyResultResponse::new)
                         );
                 }
-                listener.onResponse(new ADBatchAnomalyResultResponse(node.getId(), runTaskRemotely));
             }, e -> listener.onFailure(e)));
         }, e -> {
             logger.warn("Failed to move task to INIT state, task id " + adTask.getTaskId());
@@ -256,7 +251,6 @@ public class ADBatchTaskRunner {
                 .collect(Collectors.toList());
 
             if (candidateNodeResponse.size() == 1) {
-                logger.info("Dispatch AD task to node: {}", candidateNodeResponse.get(0).getNode().getId());
                 listener.onResponse(candidateNodeResponse.get(0).getNode());
             } else {
                 Long minTaskCount = (Long) candidateNodeResponse
@@ -273,7 +267,6 @@ public class ADBatchTaskRunner {
                                         .compareTo((Long) r2.getStatsMap().get(JVM_HEAP_USAGE.getName()))
                         )
                         .findFirst();
-                logger.info("Will Dispatch AD task to node: {}", first.get().getNode().getId());
                 listener.onResponse(first.get().getNode());
             }
         }, exception -> {
@@ -282,7 +275,7 @@ public class ADBatchTaskRunner {
         }));
     }
 
-    public void startADBatchTask(ADTask adTask, Task task, ActionListener<ADBatchAnomalyResultResponse> listener) {
+    public void startADBatchTask(ADTask adTask, boolean runTaskRemotely, ActionListener<ADBatchAnomalyResultResponse> listener) {
         try {
             if (!EnabledSetting.isADPluginEnabled()) {
                 throw new EndRunException(adTask.getDetectorId(), CommonErrorMessages.DISABLED_ERR_MSG, true);
@@ -296,7 +289,7 @@ public class ADBatchTaskRunner {
                     adTaskManager.handleADTaskException(adTask, e);
                 }
             });
-            listener.onResponse(new ADBatchAnomalyResultResponse(clusterService.localNode().getId(), true));
+            listener.onResponse(new ADBatchAnomalyResultResponse(clusterService.localNode().getId(), runTaskRemotely));
         } catch (Exception e) {
             logger.error("Fail to start AD batch task " + adTask.getTaskId(), e);
             listener.onFailure(e);
