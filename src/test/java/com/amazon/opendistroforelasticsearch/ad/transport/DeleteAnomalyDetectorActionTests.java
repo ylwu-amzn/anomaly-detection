@@ -23,7 +23,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 
-import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.delete.DeleteResponse;
@@ -41,6 +40,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 
 public class DeleteAnomalyDetectorActionTests extends ESIntegTestCase {
     private DeleteAnomalyDetectorTransportAction action;
@@ -63,7 +63,7 @@ public class DeleteAnomalyDetectorActionTests extends ESIntegTestCase {
             clusterService,
             Settings.EMPTY,
             xContentRegistry(),
-                mock(ADTaskManager.class)
+            mock(ADTaskManager.class)
         );
         response = new ActionListener<DeleteResponse>() {
             @Override

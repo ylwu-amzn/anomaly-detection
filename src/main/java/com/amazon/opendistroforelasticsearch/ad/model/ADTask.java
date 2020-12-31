@@ -463,10 +463,6 @@ public class ADTask implements ToXContentObject, Writeable {
         return lastUpdateTime;
     }
 
-    public void setLastUpdateTime(Instant lastUpdateTime) {
-        this.lastUpdateTime = lastUpdateTime;
-    }
-
     public String getStartedBy() {
         return startedBy;
     }
@@ -477,10 +473,6 @@ public class ADTask implements ToXContentObject, Writeable {
 
     public String getError() {
         return error;
-    }
-
-    public void setError(String error) {
-        this.error = error;
     }
 
     public String getState() {
@@ -495,10 +487,6 @@ public class ADTask implements ToXContentObject, Writeable {
         return detectorId;
     }
 
-    public void setDetectorId(String detectorId) {
-        this.detectorId = detectorId;
-    }
-
     public Float getTaskProgress() {
         return taskProgress;
     }
@@ -507,65 +495,30 @@ public class ADTask implements ToXContentObject, Writeable {
         return initProgress;
     }
 
-    public void setInitProgress(Float initProgress) {
-        this.initProgress = initProgress;
-    }
-
-    public void setTaskProgress(Float taskProgress) {
-        this.taskProgress = taskProgress;
-    }
-
     public Instant getCurrentPiece() {
         return currentPiece;
-    }
-
-    public void setCurrentPiece(Instant currentPiece) {
-        this.currentPiece = currentPiece;
     }
 
     public Instant getExecutionStartTime() {
         return executionStartTime;
     }
 
-    public void setExecutionStartTime(Instant executionStartTime) {
-        this.executionStartTime = executionStartTime;
-    }
-
     public Instant getExecutionEndTime() {
         return executionEndTime;
-    }
-
-    public void setExecutionEndTime(Instant executionEndTime) {
-        this.executionEndTime = executionEndTime;
     }
 
     public Boolean getLatest() {
         return isLatest;
     }
 
-    public void setLatest(Boolean latest) {
-        isLatest = latest;
-    }
-
     public String getTaskType() {
         return taskType;
-    }
-
-    public void setTaskType(String taskType) {
-        this.taskType = taskType;
     }
 
     public String getCheckpointId() {
         return checkpointId;
     }
 
-    public void setCheckpointId(String checkpointId) {
-        this.checkpointId = checkpointId;
-    }
-
-    public void setDetector(AnomalyDetector detector) {
-        this.detector = detector;
-    }
     public AnomalyDetector getDetector() {
         return detector;
     }

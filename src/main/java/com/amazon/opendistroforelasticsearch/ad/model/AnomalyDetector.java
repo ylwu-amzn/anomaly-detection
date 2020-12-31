@@ -225,64 +225,6 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         this.detectionDateRange = detectionDateRange;
     }
 
-//    public AnomalyDetector(
-//        String detectorId,
-//        Long version,
-//        String name,
-//        String description,
-//        String timeField,
-//        List<String> indices,
-//        List<Feature> features,
-//        QueryBuilder filterQuery,
-//        TimeConfiguration detectionInterval,
-//        TimeConfiguration windowDelay,
-//        Integer shingleSize,
-//        Map<String, Object> uiMetadata,
-//        Integer schemaVersion,
-//        Instant lastUpdateTime,
-//        List<String> categoryFields,
-//        User user,
-//        String detectorType,
-//        DetectionDateRange detectionDateRange
-//    ) {
-//        if (Strings.isBlank(name)) {
-//            throw new IllegalArgumentException("Detector name should be set");
-//        }
-//        if (timeField == null) {
-//            throw new IllegalArgumentException("Time field should be set");
-//        }
-//        if (indices == null || indices.isEmpty()) {
-//            throw new IllegalArgumentException("Indices should be set");
-//        }
-//        if (detectionInterval == null) {
-//            throw new IllegalArgumentException("Detection interval should be set");
-//        }
-//        if (shingleSize != null && shingleSize < 1) {
-//            throw new IllegalArgumentException("Shingle size must be a positive integer");
-//        }
-//        if (categoryFields != null && categoryFields.size() > CATEGORY_FIELD_LIMIT) {
-//            throw new IllegalArgumentException(CommonErrorMessages.CATEGORICAL_FIELD_NUMBER_SURPASSED + CATEGORY_FIELD_LIMIT);
-//        }
-//        this.detectorId = detectorId;
-//        this.version = version;
-//        this.name = name;
-//        this.description = description;
-//        this.timeField = timeField;
-//        this.indices = indices;
-//        this.featureAttributes = features;
-//        this.filterQuery = filterQuery;
-//        this.detectionInterval = detectionInterval;
-//        this.windowDelay = windowDelay;
-//        this.shingleSize = getShingleSize(shingleSize, categoryFields);
-//        this.uiMetadata = uiMetadata;
-//        this.schemaVersion = schemaVersion;
-//        this.lastUpdateTime = lastUpdateTime;
-//        this.categoryFields = categoryFields;
-//        this.user = user;
-//        this.detectorType = detectorType;
-//        this.detectionDateRange = detectionDateRange;
-//    }
-
     public AnomalyDetector(StreamInput input) throws IOException {
         detectorId = input.readString();
         version = input.readLong();

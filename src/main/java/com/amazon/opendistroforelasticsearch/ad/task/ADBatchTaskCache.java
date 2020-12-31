@@ -15,97 +15,124 @@
 
 package com.amazon.opendistroforelasticsearch.ad.task;
 
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_MIN_SAMPLES;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_SAMPLES_PER_TREE;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_TREES;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.THRESHOLD_MODEL_TRAINING_SIZE;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.TIME_DECAY;
+
+import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.amazon.opendistroforelasticsearch.ad.ml.HybridThresholdingModel;
 import com.amazon.opendistroforelasticsearch.ad.ml.ThresholdingModel;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
+import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
 import com.amazon.randomcutforest.RandomCutForest;
 
+/**
+ * AD batch task cache which will hold RCF, threshold model, shingle and training data.
+ */
 public class ADBatchTaskCache {
     private final String detectorId;
     private RandomCutForest rcfModel;
-    private Deque<Map.Entry<Long, Optional<double[]>>> shingle;
     private ThresholdingModel thresholdModel;
     private boolean thresholdModelTrained;
-    private List<Double> thresholdModelTrainingData;
+    private Deque<Map.Entry<Long, Optional<double[]>>> shingle;
+    private AtomicInteger thresholdModelTrainingDataSize = new AtomicInteger(0);
+    private double[] thresholdModelTrainingData;
     private AtomicBoolean cancelled = new AtomicBoolean(false);
     private AtomicLong cacheMemorySize = new AtomicLong(0);
     private String cancelReason;
     private String cancelledBy;
 
-    public ADBatchTaskCache(String detectorId) {
-        this.detectorId = detectorId;
+    protected ADBatchTaskCache(ADTask adTask) {
+        this.detectorId = adTask.getDetectorId();
+
+        AnomalyDetector detector = adTask.getDetector();
+        rcfModel = RandomCutForest
+            .builder()
+            .dimensions(detector.getShingleSize() * detector.getEnabledFeatureIds().size())
+            .numberOfTrees(NUM_TREES)
+            .lambda(TIME_DECAY)
+            .sampleSize(NUM_SAMPLES_PER_TREE)
+            .outputAfter(NUM_MIN_SAMPLES)
+            .parallelExecutionEnabled(false)
+            .build();
+
+        this.thresholdModel = new HybridThresholdingModel(
+            AnomalyDetectorSettings.THRESHOLD_MIN_PVALUE,
+            AnomalyDetectorSettings.THRESHOLD_MAX_RANK_ERROR,
+            AnomalyDetectorSettings.THRESHOLD_MAX_SCORE,
+            AnomalyDetectorSettings.THRESHOLD_NUM_LOGNORMAL_QUANTILES,
+            AnomalyDetectorSettings.THRESHOLD_DOWNSAMPLES,
+            AnomalyDetectorSettings.THRESHOLD_MAX_SAMPLES
+        );
+        this.thresholdModelTrainingData = new double[THRESHOLD_MODEL_TRAINING_SIZE];
+        this.thresholdModelTrained = false;
+        this.shingle = new ArrayDeque<>(detector.getShingleSize());
     }
 
-    public String getDetectorId() {
+    protected String getDetectorId() {
         return detectorId;
     }
 
-    public RandomCutForest getRcfModel() {
+    protected RandomCutForest getRcfModel() {
         return rcfModel;
     }
 
-    public void setRcfModel(RandomCutForest rcfModel) {
-        this.rcfModel = rcfModel;
-    }
-
-    public Deque<Map.Entry<Long, Optional<double[]>>> getShingle() {
+    protected Deque<Map.Entry<Long, Optional<double[]>>> getShingle() {
         return shingle;
     }
 
-    public void setShingle(Deque<Map.Entry<Long, Optional<double[]>>> shingle) {
-        this.shingle = shingle;
-    }
-
-    public ThresholdingModel getThresholdModel() {
+    protected ThresholdingModel getThresholdModel() {
         return thresholdModel;
     }
 
-    public void setThresholdModel(ThresholdingModel thresholdModel) {
-        this.thresholdModel = thresholdModel;
-    }
-
-    public void setThresholdModelTrained(boolean thresholdModelTrained) {
+    protected void setThresholdModelTrained(boolean thresholdModelTrained) {
         this.thresholdModelTrained = thresholdModelTrained;
     }
 
-    public boolean isThresholdModelTrained() {
+    protected boolean isThresholdModelTrained() {
         return thresholdModelTrained;
     }
 
-    public List<Double> getThresholdModelTrainingData() {
+    protected double[] getThresholdModelTrainingData() {
         return thresholdModelTrainingData;
     }
 
-    public void setThresholdModelTrainingData(List<Double> thresholdModelTrainingData) {
-        this.thresholdModelTrainingData = thresholdModelTrainingData;
+    protected void clearTrainingData() {
+        this.thresholdModelTrainingData = null;
+        this.thresholdModelTrainingDataSize.set(0);
     }
 
-    public AtomicLong getCacheMemorySize() {
+    public AtomicInteger getThresholdModelTrainingDataSize() {
+        return thresholdModelTrainingDataSize;
+    }
+
+    protected AtomicLong getCacheMemorySize() {
         return cacheMemorySize;
     }
 
-    public boolean isCancelled() {
+    protected boolean isCancelled() {
         return cancelled.get();
     }
 
-    public String getCancelReason() {
+    protected String getCancelReason() {
         return cancelReason;
     }
 
-    public String getCancelledBy() {
+    protected String getCancelledBy() {
         return cancelledBy;
     }
 
-    public void setCancelReason(String cancelReason) {
-        this.cancelReason = cancelReason;
-    }
-
-    public void cancel(String reason, String userName) {
+    protected void cancel(String reason, String userName) {
         this.cancelled.compareAndSet(false, true);
         this.cancelReason = reason;
         this.cancelledBy = userName;

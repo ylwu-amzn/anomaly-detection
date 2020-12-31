@@ -338,9 +338,9 @@ public final class AnomalyDetectorSettings {
     public static final Setting<Integer> BATCH_TASK_PIECE_INTERVAL_SECONDS = Setting
         .intSetting(
             "opendistro.anomaly_detection.batch_task_piece_interval_seconds",
-            5,
+            2,
             1,
-            600,
+            100,
             Setting.Property.NodeScope,
             Setting.Property.Dynamic
         );

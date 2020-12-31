@@ -41,8 +41,6 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import com.amazon.opendistroforelasticsearch.ad.model.ADTaskState;
-import com.amazon.opendistroforelasticsearch.ad.model.ADTaskType;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -92,6 +90,8 @@ import com.amazon.opendistroforelasticsearch.ad.function.AnomalyDetectorFunction
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTaskProfile;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTaskState;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTaskType;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.DetectorProfile;
 import com.amazon.opendistroforelasticsearch.ad.rest.handler.IndexAnomalyDetectorJobActionHandler;
@@ -121,7 +121,7 @@ public class ADTaskManager {
     private final ClusterService clusterService;
     private final DetectionStateHandler detectorStateHandler;
     private final AnomalyDetectionIndices detectionIndices;
-    private final ADTaskCacheManager adTaskCache;
+    private final ADTaskCacheManager adTaskCacheManager;
     private volatile Integer pieceIntervalSeconds;
     private volatile Integer maxAdTaskDocsPerDetector;
 
@@ -143,7 +143,7 @@ public class ADTaskManager {
         this.nodeFilter = nodeFilter;
         this.detectionIndices = detectionIndices;
         this.detectorStateHandler = detectorStateHandler;
-        this.adTaskCache = adTaskCache;
+        this.adTaskCacheManager = adTaskCache;
 
         this.pieceIntervalSeconds = BATCH_TASK_PIECE_INTERVAL_SECONDS.get(settings);
         clusterService.getClusterSettings().addSettingsUpdateConsumer(BATCH_TASK_PIECE_INTERVAL_SECONDS, it -> pieceIntervalSeconds = it);
@@ -464,11 +464,11 @@ public class ADTaskManager {
     // }
 
     private void createADTaskIndex(AnomalyDetector detector, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
-        if (adTaskCache.containsTaskOfDetector(detector.getDetectorId())) {
+        if (adTaskCacheManager.containsTaskOfDetector(detector.getDetectorId())) {
             listener.onFailure(new ElasticsearchStatusException("Detector is already running", RestStatus.BAD_REQUEST));
             return;
         }
-        adTaskCache.checkRunningTaskLimit();
+        adTaskCacheManager.checkRunningTaskLimit();
         if (detectionIndices.doesDetectorStateIndexExist()) {
             checkCurrentTaskState(detector, user, listener);
         } else {
@@ -781,7 +781,7 @@ public class ADTaskManager {
     private void getADTaskProfile(ADTask adTask, ActionListener<ADTaskProfile> listener) {
         String taskId = adTask.getTaskId();
 
-        if (adTaskCache.contains(taskId)) {
+        if (adTaskCacheManager.contains(taskId)) {
             ADTaskProfile adTaskProfile = getTaskProfile(taskId, adTask);
             listener.onResponse(adTaskProfile);
         } else {
@@ -821,15 +821,15 @@ public class ADTaskManager {
 
     private ADTaskProfile getTaskProfile(String taskId, ADTask adTask) {
         ADTaskProfile adTaskProfile = null;
-        if (adTaskCache.contains(taskId)) {
+        if (adTaskCacheManager.contains(taskId)) {
             adTaskProfile = new ADTaskProfile(
                 adTask,
-                adTaskCache.get(taskId).getShingle() == null ? 0 : adTaskCache.get(taskId).getShingle().size(),
-                adTaskCache.get(taskId).getRcfModel() == null ? 0 : adTaskCache.get(taskId).getRcfModel().getTotalUpdates(),
-                adTaskCache.get(taskId).isThresholdModelTrained(),
-                adTaskCache.get(taskId).getThresholdModelTrainingData() == null
+                adTaskCacheManager.getShingle(taskId) == null ? 0 : adTaskCacheManager.getShingle(taskId).size(),
+                adTaskCacheManager.getRcfModel(taskId) == null ? 0 : adTaskCacheManager.getRcfModel(taskId).getTotalUpdates(),
+                adTaskCacheManager.isThresholdModelTrained(taskId),
+                adTaskCacheManager.getThresholdModelTrainingData(taskId) == null
                     ? 0
-                    : adTaskCache.get(taskId).getThresholdModelTrainingData().size(),
+                    : adTaskCacheManager.getThresholdModelTrainingData(taskId).length,
                 clusterService.localNode().getId()
             );
         }
@@ -837,26 +837,22 @@ public class ADTaskManager {
     }
 
     public ADTaskCancellationState cancelTask(String taskId, String reason, String userName) {
-        if (!adTaskCache.contains(taskId)) {
+        if (!adTaskCacheManager.contains(taskId)) {
             return ADTaskCancellationState.NOT_FOUND;
         }
-        if (adTaskCache.isCancelled(taskId)) {
+        if (adTaskCacheManager.isCancelled(taskId)) {
             return ADTaskCancellationState.ALREADY_CANCELLED;
         }
-        adTaskCache.cancel(taskId, reason, userName);
+        adTaskCacheManager.cancel(taskId, reason, userName);
         return ADTaskCancellationState.CANCELLED;
     }
 
     // TODO: need to tune this part once we implement task priority
     public boolean hasCancellableTask() {
-        return adTaskCache.size() > 0;
+        return adTaskCacheManager.size() > 0;
     }
 
     public void cancelAllFeasibleTasks(String reason) {
-        Iterator<Map.Entry<String, ADBatchTaskCache>> iterator = adTaskCache.iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<String, ADBatchTaskCache> taskCache = iterator.next();
-            cancelTask(taskCache.getKey(), reason, null);
-        }
+        adTaskCacheManager.cancelAll(reason);
     }
 }

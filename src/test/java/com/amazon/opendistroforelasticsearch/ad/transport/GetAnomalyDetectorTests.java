@@ -43,8 +43,8 @@ import org.junit.BeforeClass;
 
 import com.amazon.opendistroforelasticsearch.ad.AbstractADTest;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
-import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.util.DiscoveryNodeFilterer;
 
 public class GetAnomalyDetectorTests extends AbstractADTest {
@@ -107,7 +107,7 @@ public class GetAnomalyDetectorTests extends AbstractADTest {
             client,
             Settings.EMPTY,
             xContentRegistry(),
-                adTaskManger
+            adTaskManger
         );
     }
 

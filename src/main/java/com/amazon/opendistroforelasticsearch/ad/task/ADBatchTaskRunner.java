@@ -37,8 +37,6 @@ import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
-import com.amazon.opendistroforelasticsearch.ad.model.ADTaskState;
-import com.amazon.opendistroforelasticsearch.ad.stats.InternalStatNames;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
@@ -77,6 +75,7 @@ import com.amazon.opendistroforelasticsearch.ad.indices.ADIndex;
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.ml.ThresholdingModel;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTaskState;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyResult;
 import com.amazon.opendistroforelasticsearch.ad.model.DetectionDateRange;
 import com.amazon.opendistroforelasticsearch.ad.model.FeatureData;
@@ -84,6 +83,7 @@ import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
 import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
 import com.amazon.opendistroforelasticsearch.ad.settings.EnabledSetting;
 import com.amazon.opendistroforelasticsearch.ad.stats.ADStats;
+import com.amazon.opendistroforelasticsearch.ad.stats.InternalStatNames;
 import com.amazon.opendistroforelasticsearch.ad.stats.StatNames;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultRequest;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultResponse;
@@ -218,7 +218,8 @@ public class ADBatchTaskRunner {
     private void getNodeStats(ADTask adTask, ActionListener<DiscoveryNode> listener) {
         DiscoveryNode[] dataNodes = nodeFilter.getEligibleDataNodes();
         ADStatsRequest adStatsRequest = new ADStatsRequest(dataNodes);
-        adStatsRequest.addAll(ImmutableSet.of(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName(), InternalStatNames.JVM_HEAP_USAGE.getName()));
+        adStatsRequest
+            .addAll(ImmutableSet.of(StatNames.AD_EXECUTING_BATCH_TASK_COUNT.getName(), InternalStatNames.JVM_HEAP_USAGE.getName()));
 
         client.execute(ADStatsNodesAction.INSTANCE, adStatsRequest, ActionListener.wrap(adStatsResponse -> {
             List<ADStatsNodeResponse> candidateNodeResponse = adStatsResponse
@@ -412,8 +413,8 @@ public class ADBatchTaskRunner {
                                 long firstPieceEndTime = expectedPieceEndTime > dataEndTime ? dataEndTime : expectedPieceEndTime;
                                 logger
                                     .info(
-                                        "start first piece from {} to {}, interval {}, dataStartTime {}, dataEndTime {}," +
-                                                " detectorId {}, taskId {}",
+                                        "start first piece from {} to {}, interval {}, dataStartTime {}, dataEndTime {},"
+                                            + " detectorId {}, taskId {}",
                                         dataStartTime,
                                         firstPieceEndTime,
                                         interval,
@@ -527,9 +528,9 @@ public class ADBatchTaskRunner {
     ) {
         String taskId = adTask.getTaskId();
         int shingleSize = adTask.getDetector().getShingleSize();
-        RandomCutForest rcf = adTaskCacheManager.getOrCreateRcfModel(taskId, shingleSize, enabledFeatureSize);
-        ThresholdingModel threshold = adTaskCacheManager.getOrCreateThresholdModel(taskId);
-        List<Double> thresholdTrainingScores = adTaskCacheManager.getThresholdTrainingData(taskId);
+        RandomCutForest rcf = adTaskCacheManager.getRcfModel(taskId);
+        ThresholdingModel threshold = adTaskCacheManager.getThresholdModel(taskId);
+        double[] thresholdTrainingScores = adTaskCacheManager.getThresholdModelTrainingData(taskId);
 
         List<AnomalyResult> anomalyResults = new ArrayList<>();
 
@@ -571,15 +572,14 @@ public class ADBatchTaskRunner {
                 rcf.update(point);
                 double grade = 0d;
                 double confidence = 0d;
-                if (!thresholdTrained && thresholdTrainingScores.size() < THRESHOLD_MODEL_TRAINING_SIZE) {
+                if (!thresholdTrained && thresholdTrainingScores.length < THRESHOLD_MODEL_TRAINING_SIZE) {
                     if (score > 0) {
-                        thresholdTrainingScores.add(score);
+                        adTaskCacheManager.addThresholdModelTrainingData(taskId, score);
                     }
                 } else {
-                    if (!thresholdTrained && thresholdTrainingScores.size() >= THRESHOLD_MODEL_TRAINING_SIZE) {
-                        double[] doubles = thresholdTrainingScores.stream().mapToDouble(d -> d).toArray();
-                        logger.debug("training threshold model with {} data points", thresholdTrainingScores.size());
-                        threshold.train(doubles);
+                    if (!thresholdTrained && thresholdTrainingScores.length >= THRESHOLD_MODEL_TRAINING_SIZE) {
+                        logger.debug("training threshold model with {} data points", thresholdTrainingScores.length);
+                        threshold.train(thresholdTrainingScores);
                         thresholdTrained = true;
                         adTaskCacheManager.setThresholdModelTrained(taskId, thresholdTrained);
                     }
@@ -644,7 +644,6 @@ public class ADBatchTaskRunner {
             checkCircuitBreaker(adTask, listener);
             // check running task exceeds limitation or not for every piece,
             // so we can end extra task in case any race condition
-            adTaskCacheManager.checkLimitation();
             long expectedPieceEndTime = pieceStartTime + pieceSize * interval;
             long pieceEndTime = expectedPieceEndTime > dataEndTime ? dataEndTime : expectedPieceEndTime;
             int i = 0;
