@@ -18,6 +18,7 @@ package com.amazon.opendistroforelasticsearch.ad.task;
 import static com.amazon.opendistroforelasticsearch.ad.MemoryTracker.Origin.HISTORICAL_SINGLE_ENTITY_DETECTOR;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -59,13 +60,13 @@ public class ADTaskCacheManagerTests extends ESTestCase {
 
         clusterService = mock(ClusterService.class);
         ClusterSettings clusterSettings = new ClusterSettings(
-                settings,
-                Collections.unmodifiableSet(new HashSet<>(Arrays.asList(AnomalyDetectorSettings.MAX_BATCH_TASK_PER_NODE)))
+            settings,
+            Collections.unmodifiableSet(new HashSet<>(Arrays.asList(AnomalyDetectorSettings.MAX_BATCH_TASK_PER_NODE)))
         );
         when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
         memoryTracker = mock(MemoryTracker.class);
         adTaskCacheManager = new ADTaskCacheManager(settings, clusterService, memoryTracker);
-    }EntityModel
+    }
 
     @Override
     @After
@@ -75,7 +76,7 @@ public class ADTaskCacheManagerTests extends ESTestCase {
     }
 
     public void testPutTask() throws IOException {
-        when(memoryTracker.canAllocate(anyLong())).thenReturn(true);
+        when(memoryTracker.canAllocateReserved(anyString(), anyLong())).thenReturn(true);
         ADTask adTask = TestHelpers.randomAdTask();
         adTaskCacheManager.put(adTask);
         assertEquals(1, adTaskCacheManager.size());
@@ -91,7 +92,7 @@ public class ADTaskCacheManagerTests extends ESTestCase {
     }
 
     public void testPutDuplicateTask() throws IOException {
-        when(memoryTracker.canAllocate(anyLong())).thenReturn(true);
+        when(memoryTracker.canAllocateReserved(anyString(), anyLong())).thenReturn(true);
         ADTask adTask1 = TestHelpers.randomAdTask();
         adTaskCacheManager.put(adTask1);
         assertEquals(1, adTaskCacheManager.size());
@@ -99,29 +100,29 @@ public class ADTaskCacheManagerTests extends ESTestCase {
         assertEquals("AD task is already running", e1.getMessage());
 
         ADTask adTask2 = TestHelpers
-                .randomAdTask(
-                        randomAlphaOfLength(5),
-                        ADTaskState.INIT,
-                        adTask1.getExecutionEndTime(),
-                        adTask1.getStoppedBy(),
-                        adTask1.getDetectorId(),
-                        adTask1.getDetector()
-                );
+            .randomAdTask(
+                randomAlphaOfLength(5),
+                ADTaskState.INIT,
+                adTask1.getExecutionEndTime(),
+                adTask1.getStoppedBy(),
+                adTask1.getDetectorId(),
+                adTask1.getDetector()
+            );
         IllegalArgumentException e2 = expectThrows(IllegalArgumentException.class, () -> adTaskCacheManager.put(adTask2));
         assertEquals("There is one task executing for detector", e2.getMessage());
     }
 
     public void testPutTaskWithMemoryExceedLimit() {
-        when(memoryTracker.canAllocate(anyLong())).thenReturn(false);
+        when(memoryTracker.canAllocateReserved(anyString(), anyLong())).thenReturn(false);
         LimitExceededException exception = expectThrows(
-                LimitExceededException.class,
-                () -> adTaskCacheManager.put(TestHelpers.randomAdTask())
+            LimitExceededException.class,
+            () -> adTaskCacheManager.put(TestHelpers.randomAdTask())
         );
         assertEquals("No enough memory to run detector", exception.getMessage());
     }
 
     public void testThresholdModelTrained() throws IOException {
-        when(memoryTracker.canAllocate(anyLong())).thenReturn(true);
+        when(memoryTracker.canAllocateReserved(anyString(), anyLong())).thenReturn(true);
         ADTask adTask = TestHelpers.randomAdTask();
         adTaskCacheManager.put(adTask);
         assertEquals(1, adTaskCacheManager.size());
@@ -134,7 +135,7 @@ public class ADTaskCacheManagerTests extends ESTestCase {
     }
 
     public void testCancel() throws IOException {
-        when(memoryTracker.canAllocate(anyLong())).thenReturn(true);
+        when(memoryTracker.canAllocateReserved(anyString(), anyLong())).thenReturn(true);
         ADTask adTask = TestHelpers.randomAdTask();
         adTaskCacheManager.put(adTask);
         assertEquals(1, adTaskCacheManager.size());
@@ -149,8 +150,8 @@ public class ADTaskCacheManagerTests extends ESTestCase {
 
     public void testTaskNotExist() {
         IllegalArgumentException e = expectThrows(
-                IllegalArgumentException.class,
-                () -> adTaskCacheManager.getRcfModel(randomAlphaOfLength(5))
+            IllegalArgumentException.class,
+            () -> adTaskCacheManager.getRcfModel(randomAlphaOfLength(5))
         );
         assertEquals("AD task not in cache", e.getMessage());
     }
@@ -161,7 +162,7 @@ public class ADTaskCacheManagerTests extends ESTestCase {
     }
 
     public void testExceedRunningTaskLimit() throws IOException {
-        when(memoryTracker.canAllocate(anyLong())).thenReturn(true);
+        when(memoryTracker.canAllocateReserved(anyString(), anyLong())).thenReturn(true);
         adTaskCacheManager.put(TestHelpers.randomAdTask());
         adTaskCacheManager.put(TestHelpers.randomAdTask());
         assertEquals(2, adTaskCacheManager.size());

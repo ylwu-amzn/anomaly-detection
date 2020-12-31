@@ -29,8 +29,10 @@ import static org.powermock.api.mockito.PowerMockito.mock;
 import static org.powermock.api.mockito.PowerMockito.when;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -39,6 +41,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
+import java.util.stream.IntStream;
 
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
@@ -243,6 +246,26 @@ public class TestHelpers {
         DetectionDateRange dateRange,
         boolean withUser
     ) throws IOException {
+        return randomAnomalyDetector(
+            ImmutableList.of(randomAlphaOfLength(10).toLowerCase()),
+            features,
+            uiMetadata,
+            lastUpdateTime,
+            detectorType,
+            dateRange,
+            withUser
+        );
+    }
+
+    public static AnomalyDetector randomAnomalyDetector(
+        List<String> indices,
+        List<Feature> features,
+        Map<String, Object> uiMetadata,
+        Instant lastUpdateTime,
+        String detectorType,
+        DetectionDateRange dateRange,
+        boolean withUser
+    ) throws IOException {
         User user = withUser ? randomUser() : null;
         return new AnomalyDetector(
             randomAlphaOfLength(10),
@@ -250,7 +273,7 @@ public class TestHelpers {
             randomAlphaOfLength(20),
             randomAlphaOfLength(30),
             randomAlphaOfLength(5),
-            ImmutableList.of(randomAlphaOfLength(10).toLowerCase()),
+            indices,
             features,
             randomQuery(),
             randomIntervalTimeConfiguration(),
@@ -358,7 +381,7 @@ public class TestHelpers {
             null,
             randomInt(),
             Instant.now().truncatedTo(ChronoUnit.SECONDS),
-            null,
+            categoryField,
             randomUser()
         );
     }
@@ -380,6 +403,10 @@ public class TestHelpers {
         String query = "{\"bool\":{\"must\":{\"term\":{\"user\":\"kimchy\"}},\"filter\":{\"term\":{\"tag\":"
             + "\"tech\"}},\"must_not\":{\"range\":{\"age\":{\"gte\":10,\"lte\":20}}},\"should\":[{\"term\":"
             + "{\"tag\":\"wow\"}},{\"term\":{\"tag\":\"elasticsearch\"}}],\"minimum_should_match\":1,\"boost\":1}}";
+        return randomQuery(query);
+    }
+
+    public static QueryBuilder randomQuery(String query) throws IOException {
         XContentParser parser = TestHelpers.parser(query);
         return parseInnerQueryBuilder(parser);
     }
@@ -390,6 +417,22 @@ public class TestHelpers {
 
     public static AggregationBuilder randomAggregation(String aggregationName) throws IOException {
         XContentParser parser = parser("{\"" + aggregationName + "\":{\"value_count\":{\"field\":\"ok\"}}}");
+
+        AggregatorFactories.Builder parsed = AggregatorFactories.parseAggregators(parser);
+        return parsed.getAggregatorFactories().iterator().next();
+    }
+
+    /**
+     * Parse string aggregation query into {@link AggregationBuilder}
+     * Sample input:
+     * "{\"test\":{\"value_count\":{\"field\":\"ok\"}}}"
+     *
+     * @param aggregationQuery aggregation builder
+     * @return aggregation builder
+     * @throws IOException IO exception
+     */
+    public static AggregationBuilder parseAggregation(String aggregationQuery) throws IOException {
+        XContentParser parser = parser(aggregationQuery);
 
         AggregatorFactories.Builder parsed = AggregatorFactories.parseAggregators(parser);
         return parsed.getAggregatorFactories().iterator().next();
@@ -660,6 +703,24 @@ public class TestHelpers {
         );
     }
 
+    public static GetResponse createBrokenGetResponse(String id, String indexName) throws IOException {
+        ByteBuffer[] buffers = new ByteBuffer[0];
+        return new GetResponse(
+            new GetResult(
+                indexName,
+                MapperService.SINGLE_MAPPING_NAME,
+                id,
+                UNASSIGNED_SEQ_NO,
+                0,
+                -1,
+                true,
+                BytesReference.fromByteBuffers(buffers),
+                Collections.emptyMap(),
+                Collections.emptyMap()
+            )
+        );
+    }
+
     public static SearchResponse createSearchResponse(ToXContentObject o) throws IOException {
         XContentBuilder content = o.toXContent(XContentFactory.jsonBuilder(), ToXContent.EMPTY_PARAMS);
 
@@ -813,5 +874,12 @@ public class TestHelpers {
     public static String toJsonString(ToXContentObject object) throws IOException {
         XContentBuilder builder = XContentFactory.jsonBuilder();
         return TestHelpers.xContentBuilderToString(object.toXContent(builder, ToXContent.EMPTY_PARAMS));
+    }
+
+    public static SearchHits createSearchHits(int totalHits) {
+        List<SearchHit> hitList = new ArrayList<>();
+        IntStream.range(0, totalHits).forEach(i -> hitList.add(new SearchHit(i)));
+        SearchHit[] hitArray = new SearchHit[hitList.size()];
+        return new SearchHits(hitList.toArray(hitArray), new TotalHits(totalHits, TotalHits.Relation.EQUAL_TO), 1.0F);
     }
 }

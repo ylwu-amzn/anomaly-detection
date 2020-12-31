@@ -57,22 +57,22 @@ public class ADBatchTaskCache {
 
         AnomalyDetector detector = adTask.getDetector();
         rcfModel = RandomCutForest
-                .builder()
-                .dimensions(detector.getShingleSize() * detector.getEnabledFeatureIds().size())
-                .numberOfTrees(NUM_TREES)
-                .lambda(TIME_DECAY)
-                .sampleSize(NUM_SAMPLES_PER_TREE)
-                .outputAfter(NUM_MIN_SAMPLES)
-                .parallelExecutionEnabled(false)
-                .build();
+            .builder()
+            .dimensions(detector.getShingleSize() * detector.getEnabledFeatureIds().size())
+            .numberOfTrees(NUM_TREES)
+            .lambda(TIME_DECAY)
+            .sampleSize(NUM_SAMPLES_PER_TREE)
+            .outputAfter(NUM_MIN_SAMPLES)
+            .parallelExecutionEnabled(false)
+            .build();
 
         this.thresholdModel = new HybridThresholdingModel(
-                AnomalyDetectorSettings.THRESHOLD_MIN_PVALUE,
-                AnomalyDetectorSettings.THRESHOLD_MAX_RANK_ERROR,
-                AnomalyDetectorSettings.THRESHOLD_MAX_SCORE,
-                AnomalyDetectorSettings.THRESHOLD_NUM_LOGNORMAL_QUANTILES,
-                AnomalyDetectorSettings.THRESHOLD_DOWNSAMPLES,
-                AnomalyDetectorSettings.THRESHOLD_MAX_SAMPLES
+            AnomalyDetectorSettings.THRESHOLD_MIN_PVALUE,
+            AnomalyDetectorSettings.THRESHOLD_MAX_RANK_ERROR,
+            AnomalyDetectorSettings.THRESHOLD_MAX_SCORE,
+            AnomalyDetectorSettings.THRESHOLD_NUM_LOGNORMAL_QUANTILES,
+            AnomalyDetectorSettings.THRESHOLD_DOWNSAMPLES,
+            AnomalyDetectorSettings.THRESHOLD_MAX_SAMPLES
         );
         this.thresholdModelTrainingData = new double[THRESHOLD_MODEL_TRAINING_SIZE];
         this.thresholdModelTrained = false;
