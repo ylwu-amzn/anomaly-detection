@@ -504,7 +504,12 @@ public class IndexAnomalyDetectorActionHandler {
 
             @Override
             public void onFailure(Exception e) {
-                listener.onFailure(e);
+                logger.warn("Failed to update detector", e);
+                if (e.getMessage() != null && e.getMessage().contains("version conflict")) {
+                    listener.onFailure(new IllegalArgumentException("There was a problem updating the historical detector:[" + detectorId + "]"));
+                } else {
+                    listener.onFailure(e);
+                }
             }
         });
     }
