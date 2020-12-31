@@ -23,7 +23,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 
-import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.client.Client;
@@ -44,6 +43,7 @@ import org.junit.Test;
 
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.commons.ConfigConstants;
 
 public class AnomalyDetectorJobActionTests extends ESIntegTestCase {
@@ -79,7 +79,7 @@ public class AnomalyDetectorJobActionTests extends ESIntegTestCase {
             indexSettings(),
             mock(AnomalyDetectionIndices.class),
             xContentRegistry(),
-                mock(ADTaskManager.class)
+            mock(ADTaskManager.class)
         );
         task = mock(Task.class);
         request = new AnomalyDetectorJobRequest("1234", 4567, 7890, "_start");

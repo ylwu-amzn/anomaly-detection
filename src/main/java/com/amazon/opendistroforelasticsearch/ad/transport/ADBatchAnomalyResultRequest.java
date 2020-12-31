@@ -15,17 +15,18 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
-import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
-import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
+import static org.elasticsearch.action.ValidateActions.addValidationError;
+
+import java.io.IOException;
+
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 
-import java.io.IOException;
-
-import static org.elasticsearch.action.ValidateActions.addValidationError;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 
 public class ADBatchAnomalyResultRequest extends ActionRequest {
     private ADTask adTask;
@@ -60,7 +61,7 @@ public class ADBatchAnomalyResultRequest extends ActionRequest {
         if (detector == null) {
             validationException = addValidationError("Detector can't be null", validationException);
         } else if (detector.isRealTimeDetector()) {
-            //TODO: update this validation in next phase for universal flow
+            // TODO: update this validation in next phase for universal flow
             validationException = addValidationError("Can't run batch task for realtime detector", validationException);
         } else if (detector.getDetectionDateRange() == null) {
             validationException = addValidationError("Detection date range can't be null", validationException);

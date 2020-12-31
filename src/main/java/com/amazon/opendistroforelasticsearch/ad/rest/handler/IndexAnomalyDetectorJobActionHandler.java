@@ -123,10 +123,10 @@ public class IndexAnomalyDetectorJobActionHandler {
     public void startAnomalyDetectorJob(AnomalyDetector detector) {
         if (!anomalyDetectionIndices.doesAnomalyDetectorJobIndexExist()) {
             anomalyDetectionIndices
-                    .initAnomalyDetectorJobIndex(
-                            ActionListener
-                                    .wrap(response -> onCreateJobIndexResponse(detector, response), exception -> listener.onFailure(exception))
-                    );
+                .initAnomalyDetectorJobIndex(
+                    ActionListener
+                        .wrap(response -> onCreateJobIndexResponse(detector, response), exception -> listener.onFailure(exception))
+                );
         } else {
             createJob(detector);
         }
@@ -139,15 +139,14 @@ public class IndexAnomalyDetectorJobActionHandler {
         } else {
             logger.warn("Created {} with mappings call not acknowledged.", ANOMALY_DETECTORS_INDEX);
             listener
-                    .onFailure(
-                            new ElasticsearchStatusException(
-                                    "Created " + ANOMALY_DETECTORS_INDEX + " with mappings call not acknowledged.",
-                                    RestStatus.INTERNAL_SERVER_ERROR
-                            )
-                    );
+                .onFailure(
+                    new ElasticsearchStatusException(
+                        "Created " + ANOMALY_DETECTORS_INDEX + " with mappings call not acknowledged.",
+                        RestStatus.INTERNAL_SERVER_ERROR
+                    )
+                );
         }
     }
-
 
     private void onCreateMappingsResponse(CreateIndexResponse response) throws IOException {
         if (response.isAcknowledged()) {
@@ -178,9 +177,9 @@ public class IndexAnomalyDetectorJobActionHandler {
         try {
             if (detector.getFeatureAttributes().size() == 0) {
                 listener
-                        .onFailure(
-                                new ElasticsearchStatusException("Can't start detector job as no features configured", RestStatus.BAD_REQUEST)
-                        );
+                    .onFailure(
+                        new ElasticsearchStatusException("Can't start detector job as no features configured", RestStatus.BAD_REQUEST)
+                    );
                 return;
             }
 
@@ -189,15 +188,15 @@ public class IndexAnomalyDetectorJobActionHandler {
             Duration duration = Duration.of(interval.getInterval(), interval.getUnit());
 
             AnomalyDetectorJob job = new AnomalyDetectorJob(
-                    detector.getDetectorId(),
-                    schedule,
-                    detector.getWindowDelay(),
-                    true,
-                    Instant.now(),
-                    null,
-                    Instant.now(),
-                    duration.getSeconds(),
-                    detector.getUser()
+                detector.getDetectorId(),
+                schedule,
+                detector.getWindowDelay(),
+                true,
+                Instant.now(),
+                null,
+                Instant.now(),
+                duration.getSeconds(),
+                detector.getUser()
             );
 
             getAnomalyDetectorJobForWrite(job);

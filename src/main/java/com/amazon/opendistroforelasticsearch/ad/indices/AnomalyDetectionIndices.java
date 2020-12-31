@@ -166,8 +166,8 @@ public class AnomalyDetectionIndices implements LocalNodeMasterListener {
             rescheduleRollover();
         });
         this.clusterService
-                .getClusterSettings()
-                .addSettingsUpdateConsumer(AD_RESULT_HISTORY_RETENTION_PERIOD, it -> { historyRetentionPeriod = it; });
+            .getClusterSettings()
+            .addSettingsUpdateConsumer(AD_RESULT_HISTORY_RETENTION_PERIOD, it -> { historyRetentionPeriod = it; });
 
         this.clusterService.getClusterSettings().addSettingsUpdateConsumer(MAX_PRIMARY_SHARDS, it -> maxPrimaryShards = it);
     }
@@ -381,7 +381,7 @@ public class AnomalyDetectionIndices implements LocalNodeMasterListener {
         // TODO: specify replica setting
         try {
             CreateIndexRequest request = new CreateIndexRequest(AnomalyDetectorJob.ANOMALY_DETECTOR_JOB_INDEX)
-                    .mapping(AnomalyDetector.TYPE, getAnomalyDetectorJobMappings(), XContentType.JSON);
+                .mapping(AnomalyDetector.TYPE, getAnomalyDetectorJobMappings(), XContentType.JSON);
             choosePrimaryShards(request);
             adminClient.indices().create(request, markMappingUpToDate(ADIndex.JOB, actionListener));
         } catch (IOException e) {
@@ -398,7 +398,7 @@ public class AnomalyDetectionIndices implements LocalNodeMasterListener {
     public void initDetectionStateIndex(ActionListener<CreateIndexResponse> actionListener) {
         try {
             CreateIndexRequest request = new CreateIndexRequest(DetectorInternalState.DETECTOR_STATE_INDEX)
-                    .mapping(AnomalyDetector.TYPE, getDetectionStateMappings(), XContentType.JSON);
+                .mapping(AnomalyDetector.TYPE, getDetectionStateMappings(), XContentType.JSON);
             adminClient.indices().create(request, markMappingUpToDate(ADIndex.STATE, actionListener));
         } catch (IOException e) {
             logger.error("Fail to init AD detection state index", e);

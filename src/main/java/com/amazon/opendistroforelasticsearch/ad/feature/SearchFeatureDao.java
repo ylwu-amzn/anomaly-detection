@@ -302,24 +302,24 @@ public class SearchFeatureDao {
     }
 
     public void getFeaturesForPeriodByBatch(
-            AnomalyDetector detector,
-            long startTime,
-            long endTime,
-            ActionListener<Map<Long, Optional<double[]>>> listener
+        AnomalyDetector detector,
+        long startTime,
+        long endTime,
+        ActionListener<Map<Long, Optional<double[]>>> listener
     ) throws IOException {
         SearchSourceBuilder searchSourceBuilder = generateFeatureQuerySearchRequest(detector, startTime, endTime, xContent);
         logger.info("query AD data: " + searchSourceBuilder);
 
         SearchRequest searchRequest = new SearchRequest(detector.getIndices().toArray(new String[0])).source(searchSourceBuilder);
         client
-                .search(
-                        searchRequest,
-                        ActionListener
-                                .wrap(
-                                        response -> { listener.onResponse(parseBucketAggregationResponse(response, detector.getEnabledFeatureIds())); },
-                                        listener::onFailure
-                                )
-                );
+            .search(
+                searchRequest,
+                ActionListener
+                    .wrap(
+                        response -> { listener.onResponse(parseBucketAggregationResponse(response, detector.getEnabledFeatureIds())); },
+                        listener::onFailure
+                    )
+            );
     }
 
     private Map<Long, Optional<double[]>> parseBucketAggregationResponse(SearchResponse response, List<String> featureIds) {

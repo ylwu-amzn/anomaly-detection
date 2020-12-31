@@ -15,13 +15,13 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport.handler;
 
-import com.amazon.opendistroforelasticsearch.ad.common.exception.AnomalyDetectionException;
-import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
-import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
-import com.amazon.opendistroforelasticsearch.ad.model.AnomalyResult;
-import com.amazon.opendistroforelasticsearch.ad.util.ClientUtil;
-import com.amazon.opendistroforelasticsearch.ad.util.IndexUtils;
-import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
+import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ExceptionsHelper;
@@ -38,12 +38,13 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.threadpool.ThreadPool;
 
-import java.util.List;
-import java.util.Locale;
-import java.util.function.BooleanSupplier;
-import java.util.function.Consumer;
-
-import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
+import com.amazon.opendistroforelasticsearch.ad.common.exception.AnomalyDetectionException;
+import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
+import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyResult;
+import com.amazon.opendistroforelasticsearch.ad.util.ClientUtil;
+import com.amazon.opendistroforelasticsearch.ad.util.IndexUtils;
+import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 
 public class AnomalyResultBulkIndexHandler extends AnomalyIndexHandler<AnomalyResult> {
     private static final Logger LOG = LogManager.getLogger(AnomalyResultBulkIndexHandler.class);

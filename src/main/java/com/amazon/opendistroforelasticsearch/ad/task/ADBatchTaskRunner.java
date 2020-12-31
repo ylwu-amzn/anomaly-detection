@@ -15,6 +15,54 @@
 
 package com.amazon.opendistroforelasticsearch.ad.task;
 
+import static com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorPlugin.AD_BATCH_TASK_THREAD_POOL_NAME;
+import static com.amazon.opendistroforelasticsearch.ad.breaker.MemoryCircuitBreaker.DEFAULT_JVM_HEAP_USAGE_THRESHOLD;
+import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.CURRENT_PIECE_FIELD;
+import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.EXECUTION_END_TIME_FIELD;
+import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.INIT_PROGRESS_FIELD;
+import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.STATE_FIELD;
+import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.TASK_PROGRESS_FIELD;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.BATCH_TASK_PIECE_INTERVAL_SECONDS;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.BATCH_TASK_PIECE_SIZE;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_BATCH_TASK_PER_NODE;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_MIN_SAMPLES;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.THRESHOLD_MODEL_TRAINING_SIZE;
+import static com.amazon.opendistroforelasticsearch.ad.stats.InternalStatNames.JVM_HEAP_USAGE;
+import static com.amazon.opendistroforelasticsearch.ad.stats.StatNames.AD_EXECUTING_BATCH_TASK_COUNT;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.BiConsumer;
+import java.util.stream.Collectors;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.ActionListenerResponseHandler;
+import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.action.support.IndicesOptions;
+import org.elasticsearch.action.support.ThreadedActionListener;
+import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.block.ClusterBlockLevel;
+import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
+import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.search.aggregations.AggregationBuilders;
+import org.elasticsearch.search.aggregations.metrics.InternalMax;
+import org.elasticsearch.search.aggregations.metrics.InternalMin;
+import org.elasticsearch.search.builder.SearchSourceBuilder;
+import org.elasticsearch.tasks.Task;
+import org.elasticsearch.threadpool.ThreadPool;
+import org.elasticsearch.transport.TransportRequestOptions;
+import org.elasticsearch.transport.TransportService;
+
 import com.amazon.opendistroforelasticsearch.ad.breaker.ADCircuitBreakerService;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.ADTaskCancelledException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.AnomalyDetectionException;
@@ -52,53 +100,6 @@ import com.amazon.randomcutforest.RandomCutForest;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.RateLimiter;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.elasticsearch.action.ActionListener;
-import org.elasticsearch.action.ActionListenerResponseHandler;
-import org.elasticsearch.action.search.SearchRequest;
-import org.elasticsearch.action.support.IndicesOptions;
-import org.elasticsearch.action.support.ThreadedActionListener;
-import org.elasticsearch.client.Client;
-import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.block.ClusterBlockLevel;
-import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
-import org.elasticsearch.cluster.node.DiscoveryNode;
-import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.search.aggregations.AggregationBuilders;
-import org.elasticsearch.search.aggregations.metrics.InternalMax;
-import org.elasticsearch.search.aggregations.metrics.InternalMin;
-import org.elasticsearch.search.builder.SearchSourceBuilder;
-import org.elasticsearch.tasks.Task;
-import org.elasticsearch.threadpool.ThreadPool;
-import org.elasticsearch.transport.TransportRequestOptions;
-import org.elasticsearch.transport.TransportService;
-
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.function.BiConsumer;
-import java.util.stream.Collectors;
-
-import static com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorPlugin.AD_BATCH_TASK_THREAD_POOL_NAME;
-import static com.amazon.opendistroforelasticsearch.ad.breaker.MemoryCircuitBreaker.DEFAULT_JVM_HEAP_USAGE_THRESHOLD;
-import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.CURRENT_PIECE_FIELD;
-import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.EXECUTION_END_TIME_FIELD;
-import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.INIT_PROGRESS_FIELD;
-import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.STATE_FIELD;
-import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.TASK_PROGRESS_FIELD;
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.BATCH_TASK_PIECE_INTERVAL_SECONDS;
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.BATCH_TASK_PIECE_SIZE;
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_BATCH_TASK_PER_NODE;
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.NUM_MIN_SAMPLES;
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.THRESHOLD_MODEL_TRAINING_SIZE;
-import static com.amazon.opendistroforelasticsearch.ad.stats.InternalStatNames.JVM_HEAP_USAGE;
-import static com.amazon.opendistroforelasticsearch.ad.stats.StatNames.AD_EXECUTING_BATCH_TASK_COUNT;
 
 public class ADBatchTaskRunner {
     public static final String MIN_DATE = "min_date";
@@ -199,7 +200,8 @@ public class ADBatchTaskRunner {
                             node.getId(),
                             adTask.getDetectorId()
                         );
-                    transportService.sendRequest(
+                    transportService
+                        .sendRequest(
                             node,
                             ADBatchTaskRemoteExecutionAction.NAME,
                             new ADBatchAnomalyResultRequest(adTask),
@@ -221,27 +223,31 @@ public class ADBatchTaskRunner {
 
         client.execute(ADStatsNodesAction.INSTANCE, adStatsRequest, ActionListener.wrap(adStatsResponse -> {
             List<ADStatsNodeResponse> candidateNodeResponse = adStatsResponse
-                    .getNodes()
-                    .stream()
-                    .filter(stat -> (long) stat.getStatsMap().get(JVM_HEAP_USAGE.getName()) < DEFAULT_JVM_HEAP_USAGE_THRESHOLD)
-                    .collect(Collectors.toList());
+                .getNodes()
+                .stream()
+                .filter(stat -> (long) stat.getStatsMap().get(JVM_HEAP_USAGE.getName()) < DEFAULT_JVM_HEAP_USAGE_THRESHOLD)
+                .collect(Collectors.toList());
 
             if (candidateNodeResponse.size() == 0) {
-                String errorMessage = "All nodes' memory usage exceeds limitation. No eligible node to run detector " + adTask.getDetectorId();
+                String errorMessage = "All nodes' memory usage exceeds limitation. No eligible node to run detector "
+                    + adTask.getDetectorId();
                 logger.warn(errorMessage);
                 listener.onFailure(new LimitExceededException(adTask.getDetectorId(), errorMessage));
                 return;
             }
-            candidateNodeResponse = candidateNodeResponse.stream()
-                    .filter(stat -> (Long) stat.getStatsMap().get(AD_EXECUTING_BATCH_TASK_COUNT.getName()) < maxAdBatchTaskPerNode)
-                    .collect(Collectors.toList());
+            candidateNodeResponse = candidateNodeResponse
+                .stream()
+                .filter(stat -> (Long) stat.getStatsMap().get(AD_EXECUTING_BATCH_TASK_COUNT.getName()) < maxAdBatchTaskPerNode)
+                .collect(Collectors.toList());
             if (candidateNodeResponse.size() == 0) {
-                String errorMessage = "All nodes' executing historical detector count exceeds limitation. No eligible node to run detector " + adTask.getDetectorId();
+                String errorMessage = "All nodes' executing historical detector count exceeds limitation. No eligible node to run detector "
+                    + adTask.getDetectorId();
                 logger.warn(errorMessage);
                 listener.onFailure(new LimitExceededException(adTask.getDetectorId(), errorMessage));
                 return;
             }
-            candidateNodeResponse = candidateNodeResponse.stream()
+            candidateNodeResponse = candidateNodeResponse
+                .stream()
                 .sorted(
                     (ADStatsNodeResponse r1, ADStatsNodeResponse r2) -> ((Long) r1
                         .getStatsMap()
@@ -253,20 +259,15 @@ public class ADBatchTaskRunner {
             if (candidateNodeResponse.size() == 1) {
                 listener.onResponse(candidateNodeResponse.get(0).getNode());
             } else {
-                Long minTaskCount = (Long) candidateNodeResponse
-                        .get(0)
-                        .getStatsMap()
-                        .get(AD_EXECUTING_BATCH_TASK_COUNT.getName());
+                Long minTaskCount = (Long) candidateNodeResponse.get(0).getStatsMap().get(AD_EXECUTING_BATCH_TASK_COUNT.getName());
                 Optional<ADStatsNodeResponse> first = candidateNodeResponse
-                        .stream()
-                        .filter(c -> minTaskCount.equals(c.getStatsMap().get(AD_EXECUTING_BATCH_TASK_COUNT.getName())))
-                        .sorted(
-                                (ADStatsNodeResponse r1, ADStatsNodeResponse r2) -> ((Long) r1
-                                        .getStatsMap()
-                                        .get(JVM_HEAP_USAGE.getName()))
-                                        .compareTo((Long) r2.getStatsMap().get(JVM_HEAP_USAGE.getName()))
-                        )
-                        .findFirst();
+                    .stream()
+                    .filter(c -> minTaskCount.equals(c.getStatsMap().get(AD_EXECUTING_BATCH_TASK_COUNT.getName())))
+                    .sorted(
+                        (ADStatsNodeResponse r1, ADStatsNodeResponse r2) -> ((Long) r1.getStatsMap().get(JVM_HEAP_USAGE.getName()))
+                            .compareTo((Long) r2.getStatsMap().get(JVM_HEAP_USAGE.getName()))
+                    )
+                    .findFirst();
                 listener.onResponse(first.get().getNode());
             }
         }, exception -> {
@@ -338,7 +339,6 @@ public class ADBatchTaskRunner {
         return listener;
     }
 
-
     private void checkCircuitBreaker(ADTask adTask, ActionListener<String> listener) {
         String taskId = adTask.getTaskId();
         if (adCircuitBreakerService.isOpen()) {
@@ -406,8 +406,8 @@ public class ADBatchTaskRunner {
                                 long firstPieceEndTime = expectedPieceEndTime > dataEndTime ? dataEndTime : expectedPieceEndTime;
                                 logger
                                     .info(
-                                        "start first piece from {} to {}, interval {}, dataStartTime {}, dataEndTime {}," +
-                                                " detectorId {}, taskId {}",
+                                        "start first piece from {} to {}, interval {}, dataStartTime {}, dataEndTime {},"
+                                            + " detectorId {}, taskId {}",
                                         dataStartTime,
                                         firstPieceEndTime,
                                         interval,
@@ -571,7 +571,7 @@ public class ADBatchTaskRunner {
                     }
                 } else {
                     if (!thresholdTrained && thresholdTrainingScores.length >= THRESHOLD_MODEL_TRAINING_SIZE) {
-//                        double[] doubles = thresholdTrainingScores.stream().mapToDouble(d -> d).toArray();
+                        // double[] doubles = thresholdTrainingScores.stream().mapToDouble(d -> d).toArray();
                         logger.debug("training threshold model with {} data points", thresholdTrainingScores.length);
                         threshold.train(thresholdTrainingScores);
                         thresholdTrained = true;
@@ -638,7 +638,7 @@ public class ADBatchTaskRunner {
             checkCircuitBreaker(adTask, listener);
             // check running task exceeds limitation or not for every piece,
             // so we can end extra task in case any race condition
-//            adTaskCacheManager.checkLimitation();
+            // adTaskCacheManager.checkLimitation();
             long expectedPieceEndTime = pieceStartTime + pieceSize * interval;
             long pieceEndTime = expectedPieceEndTime > dataEndTime ? dataEndTime : expectedPieceEndTime;
             int i = 0;
@@ -697,9 +697,7 @@ public class ADBatchTaskRunner {
                             INIT_PROGRESS_FIELD,
                             initProgress
                         ),
-                    ActionListener.wrap(r -> {
-                        listener.onResponse("task execution done");
-                    }, e -> listener.onFailure(e))
+                    ActionListener.wrap(r -> { listener.onResponse("task execution done"); }, e -> listener.onFailure(e))
                 );
         }
     }

@@ -15,17 +15,17 @@
 
 package com.amazon.opendistroforelasticsearch.ad.util;
 
-import com.amazon.opendistroforelasticsearch.ad.common.exception.AnomalyDetectionException;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.common.io.stream.NotSerializableExceptionWrapper;
+import org.elasticsearch.transport.ReceiveTimeoutTransportException;
 
+import com.amazon.opendistroforelasticsearch.ad.common.exception.AnomalyDetectionException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.ResourceNotFoundException;
-import org.elasticsearch.transport.ReceiveTimeoutTransportException;
 
 public class ExceptionUtil {
     public static final String RESOURCE_NOT_FOUND_EXCEPTION_NAME_UNDERSCORE = ElasticsearchException
-            .getExceptionName(new ResourceNotFoundException("", ""));
+        .getExceptionName(new ResourceNotFoundException("", ""));
 
     /**
      * Elasticsearch restricts the kind of exceptions can be thrown over the wire
@@ -61,15 +61,18 @@ public class ExceptionUtil {
     }
 
     public static boolean isServerError(Exception e) {
-        if (e instanceof ResourceNotFoundException || e instanceof org.elasticsearch.ResourceNotFoundException
-                || e instanceof IllegalArgumentException || e instanceof LimitExceededException) {
+        if (e instanceof ResourceNotFoundException
+            || e instanceof org.elasticsearch.ResourceNotFoundException
+            || e instanceof IllegalArgumentException
+            || e instanceof LimitExceededException) {
             return false;
         }
         return true;
     }
 
     public static boolean readableException(Exception e) {
-        return e instanceof IllegalArgumentException || e instanceof AnomalyDetectionException ||
-                e instanceof ReceiveTimeoutTransportException;
+        return e instanceof IllegalArgumentException
+            || e instanceof AnomalyDetectionException
+            || e instanceof ReceiveTimeoutTransportException;
     }
 }

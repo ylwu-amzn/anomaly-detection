@@ -15,11 +15,6 @@
 
 package com.amazon.opendistroforelasticsearch.ad.common.exception;
 
-import org.elasticsearch.common.io.stream.StreamInput;
-import org.elasticsearch.tasks.TaskCancelledException;
-
-import java.io.IOException;
-
 public class ADTaskCancelledException extends AnomalyDetectionException {
     private String cancelledBy;
 

@@ -337,36 +337,36 @@ public final class AnomalyDetectorSettings {
     public static int THRESHOLD_MODEL_TRAINING_SIZE = 1000;
 
     public static final Setting<Integer> MAX_AD_TASK_DOCS_PER_DETECTOR = Setting
-            .intSetting(
-                    "opendistro.anomaly_detection.max_ad_task_docs_per_detector",
-                    // Total documents in primary replica.
-                    // One AD task is roughly 1.5KB for normal case. Suppose task's size
-                    // is 2KB conservatively. We allow 1000 anomaly detectors by default.
-                    // If we store 1000 AD tasks for one detector, that will be 2GB.
-                    100,
-                    2,
-                    1000,
-                    Setting.Property.NodeScope,
-                    Setting.Property.Dynamic
-            );
+        .intSetting(
+            "opendistro.anomaly_detection.max_ad_task_docs_per_detector",
+            // Total documents in primary replica.
+            // One AD task is roughly 1.5KB for normal case. Suppose task's size
+            // is 2KB conservatively. We allow 1000 anomaly detectors by default.
+            // If we store 1000 AD tasks for one detector, that will be 2GB.
+            100,
+            2,
+            1000,
+            Setting.Property.NodeScope,
+            Setting.Property.Dynamic
+        );
 
     public static final Setting<Integer> BATCH_TASK_PIECE_SIZE = Setting
-            .intSetting(
-                    "opendistro.anomaly_detection.batch_task_piece_size",
-                    1000,
-                    1,
-                    10_000,
-                    Setting.Property.NodeScope,
-                    Setting.Property.Dynamic
-            );
+        .intSetting(
+            "opendistro.anomaly_detection.batch_task_piece_size",
+            1000,
+            1,
+            10_000,
+            Setting.Property.NodeScope,
+            Setting.Property.Dynamic
+        );
 
     public static final Setting<Integer> BATCH_TASK_PIECE_INTERVAL_SECONDS = Setting
-            .intSetting(
-                    "opendistro.anomaly_detection.batch_task_piece_interval_seconds",
-                    5,
-                    1,
-                    600,
-                    Setting.Property.NodeScope,
-                    Setting.Property.Dynamic
-            );
+        .intSetting(
+            "opendistro.anomaly_detection.batch_task_piece_interval_seconds",
+            5,
+            1,
+            600,
+            Setting.Property.NodeScope,
+            Setting.Property.Dynamic
+        );
 }

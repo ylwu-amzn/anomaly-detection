@@ -19,7 +19,6 @@ import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorS
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.REQUEST_TIMEOUT;
 import static com.amazon.opendistroforelasticsearch.ad.util.ParseUtils.resolveUserAndExecute;
 
-import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
@@ -55,14 +54,14 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
 
     @Inject
     public AnomalyDetectorJobTransportAction(
-            TransportService transportService,
-            ActionFilters actionFilters,
-            Client client,
-            ClusterService clusterService,
-            Settings settings,
-            AnomalyDetectionIndices anomalyDetectionIndices,
-            NamedXContentRegistry xContentRegistry,
-            ADTaskManager adTaskManager
+        TransportService transportService,
+        ActionFilters actionFilters,
+        Client client,
+        ClusterService clusterService,
+        Settings settings,
+        AnomalyDetectionIndices anomalyDetectionIndices,
+        NamedXContentRegistry xContentRegistry,
+        ADTaskManager adTaskManager
     ) {
         super(AnomalyDetectorJobAction.NAME, transportService, actionFilters, AnomalyDetectorJobRequest::new);
         this.client = client;
@@ -87,14 +86,14 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
         User user = ParseUtils.getUserContext(client);
         try (ThreadContext.StoredContext context = client.threadPool().getThreadContext().stashContext()) {
             resolveUserAndExecute(
-                    user,
-                    detectorId,
-                    filterByEnabled,
-                    listener,
-                    () -> executeDetector(listener, detectorId, seqNo, primaryTerm, rawPath, requestTimeout, user),
-                    client,
-                    clusterService,
-                    xContentRegistry
+                user,
+                detectorId,
+                filterByEnabled,
+                listener,
+                () -> executeDetector(listener, detectorId, seqNo, primaryTerm, rawPath, requestTimeout, user),
+                client,
+                clusterService,
+                xContentRegistry
             );
         } catch (Exception e) {
             logger.error(e);
@@ -102,24 +101,31 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
         }
     }
 
-    private void executeDetector(ActionListener<AnomalyDetectorJobResponse> listener, String detectorId, long seqNo,
-                                 long primaryTerm, String rawPath, TimeValue requestTimeout, User user) {
+    private void executeDetector(
+        ActionListener<AnomalyDetectorJobResponse> listener,
+        String detectorId,
+        long seqNo,
+        long primaryTerm,
+        String rawPath,
+        TimeValue requestTimeout,
+        User user
+    ) {
         IndexAnomalyDetectorJobActionHandler handler = new IndexAnomalyDetectorJobActionHandler(
-                client,
-                listener,
-                anomalyDetectionIndices,
-                detectorId,
-                seqNo,
-                primaryTerm,
-                requestTimeout,
-                xContentRegistry
+            client,
+            listener,
+            anomalyDetectionIndices,
+            detectorId,
+            seqNo,
+            primaryTerm,
+            requestTimeout,
+            xContentRegistry
         );
         if (rawPath.endsWith(RestHandlerUtils.START_JOB)) {
             // handler.startAnomalyDetectorJob();
             adTaskManager.startDetector(detectorId, handler, user, listener);
         } else if (rawPath.endsWith(RestHandlerUtils.STOP_JOB)) {
-             handler.stopAnomalyDetectorJob(detectorId);
-//            adTaskManager.stopDetector(detectorId, handler, user, listener);
+            handler.stopAnomalyDetectorJob(detectorId);
+            // adTaskManager.stopDetector(detectorId, handler, user, listener);
         }
     }
 }
