@@ -17,7 +17,10 @@ package com.amazon.opendistroforelasticsearch.ad.util;
 
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.common.io.stream.NotSerializableExceptionWrapper;
+import org.elasticsearch.transport.ReceiveTimeoutTransportException;
 
+import com.amazon.opendistroforelasticsearch.ad.common.exception.AnomalyDetectionException;
+import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.ResourceNotFoundException;
 
 public class ExceptionUtil {
@@ -57,4 +60,19 @@ public class ExceptionUtil {
         return false;
     }
 
+    public static boolean isServerError(Exception e) {
+        if (e instanceof ResourceNotFoundException
+            || e instanceof org.elasticsearch.ResourceNotFoundException
+            || e instanceof IllegalArgumentException
+            || e instanceof LimitExceededException) {
+            return false;
+        }
+        return true;
+    }
+
+    public static boolean readableException(Exception e) {
+        return e instanceof IllegalArgumentException
+            || e instanceof AnomalyDetectionException
+            || e instanceof ReceiveTimeoutTransportException;
+    }
 }

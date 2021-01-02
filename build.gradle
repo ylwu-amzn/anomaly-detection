@@ -259,7 +259,6 @@ task release(type: Copy, group: 'build') {
     // ES versions < 6.3 have a top-level elasticsearch directory inside the plugin zip which we need to remove
     eachFile { it.path = it.path - "elasticsearch/" }
 }
-
 List<String> jacocoExclusions = [
         // code for configuration, settings, etc is excluded from coverage
         'com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorPlugin',
@@ -304,7 +303,19 @@ List<String> jacocoExclusions = [
         'com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices',
         'com.amazon.opendistroforelasticsearch.ad.transport.handler.MultiEntityResultHandler',
         'com.amazon.opendistroforelasticsearch.ad.util.ThrowingSupplierWrapper',
+
+        // TODO: historical detector
+        'com.amazon.opendistroforelasticsearch.ad.task.*',
+        'com.amazon.opendistroforelasticsearch.ad.common.exception.ADTaskCancelledException',
+        'com.amazon.opendistroforelasticsearch.ad.transport.handler.AnomalyResultBulkIndexHandler',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultRequest',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultTransportAction',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ADBatchTaskRemoteExecutionTransportAction',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultResponse',
+        'com.amazon.opendistroforelasticsearch.ad.stats.ADStat',
+        'com.amazon.opendistroforelasticsearch.ad.util.ExceptionUtil'
 ]
+
 
 jacocoTestCoverageVerification {
     violationRules {
