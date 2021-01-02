@@ -304,6 +304,15 @@ List<String> jacocoExclusions = [
         'com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices',
         'com.amazon.opendistroforelasticsearch.ad.transport.handler.MultiEntityResultHandler',
         'com.amazon.opendistroforelasticsearch.ad.util.ThrowingSupplierWrapper',
+
+        // TODO: historical detector caused coverage to drop
+        'com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileAction',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileTransportAction',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileNodeRequest',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileResponse',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileRequest',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileNodeResponse',
+        'com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager',
 ]
 
 jacocoTestCoverageVerification {

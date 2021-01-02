@@ -107,6 +107,8 @@ import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.CounterSupplier;
 import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.IndexStatusSupplier;
 import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.ModelsOnNodeSupplier;
 import com.amazon.opendistroforelasticsearch.ad.stats.suppliers.SettableSupplier;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskCacheManager;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADResultBulkAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADResultBulkTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADStatsNodesAction;
@@ -186,6 +188,8 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
     private DiscoveryNodeFilterer nodeFilter;
     private IndexUtils indexUtils;
     private DetectionStateHandler detectorStateHandler;
+    private ADTaskCacheManager adTaskCacheManager;
+    private ADTaskManager adTaskManager;
 
     static {
         SpecialPermission.check();
@@ -493,6 +497,9 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             stateManager
         );
 
+        adTaskCacheManager = new ADTaskCacheManager(settings, clusterService, memoryTracker);
+        adTaskManager = new ADTaskManager(settings, clusterService, client, xContentRegistry, nodeFilter, adTaskCacheManager);
+
         // return objects used by Guice to inject dependencies for e.g.,
         // transport action handler constructors
         return ImmutableList
@@ -517,7 +524,9 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 multiEntityResultHandler,
                 checkpoint,
                 modelPartitioner,
-                cacheProvider
+                cacheProvider,
+                adTaskCacheManager,
+                adTaskManager
             );
     }
 
@@ -571,7 +580,8 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 AnomalyDetectorSettings.MAX_PRIMARY_SHARDS,
                 AnomalyDetectorSettings.FILTER_BY_BACKEND_ROLES,
                 AnomalyDetectorSettings.MAX_CACHE_MISS_HANDLING_PER_SECOND,
-                AnomalyDetectorSettings.MAX_BATCH_TASK_PER_NODE
+                AnomalyDetectorSettings.MAX_BATCH_TASK_PER_NODE,
+                AnomalyDetectorSettings.BATCH_TASK_PIECE_INTERVAL_SECONDS
             );
         return unmodifiableList(Stream.concat(enabledSetting.stream(), systemSetting.stream()).collect(Collectors.toList()));
     }

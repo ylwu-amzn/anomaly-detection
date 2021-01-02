@@ -335,4 +335,14 @@ public final class AnomalyDetectorSettings {
         );
 
     public static int THRESHOLD_MODEL_TRAINING_SIZE = 1000;
+
+    public static final Setting<Integer> BATCH_TASK_PIECE_INTERVAL_SECONDS = Setting
+        .intSetting(
+            "opendistro.anomaly_detection.batch_task_piece_interval_seconds",
+            2,
+            1,
+            600,
+            Setting.Property.NodeScope,
+            Setting.Property.Dynamic
+        );
 }

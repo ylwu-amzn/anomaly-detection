@@ -46,6 +46,9 @@ public class RestGetAnomalyDetectorAction extends BaseRestHandler {
 
     private static final String GET_ANOMALY_DETECTOR_ACTION = "get_anomaly_detector";
     private static final Logger logger = LogManager.getLogger(RestGetAnomalyDetectorAction.class);
+    private static final String JOB = "job";
+    private static final String TASK = "task";
+    private static final String ALL = "_all";
 
     public RestGetAnomalyDetectorAction() {}
 
@@ -63,12 +66,14 @@ public class RestGetAnomalyDetectorAction extends BaseRestHandler {
         String typesStr = request.param(TYPE);
         String entityValue = request.param(ENTITY);
         String rawPath = request.rawPath();
-        boolean returnJob = request.paramAsBoolean("job", false);
-        boolean all = request.paramAsBoolean("_all", false);
+        boolean returnJob = request.paramAsBoolean(JOB, false);
+        boolean returnTask = request.paramAsBoolean(TASK, false);
+        boolean all = request.paramAsBoolean(ALL, false);
         GetAnomalyDetectorRequest getAnomalyDetectorRequest = new GetAnomalyDetectorRequest(
             detectorId,
             RestActions.parseVersion(request),
             returnJob,
+            returnTask,
             typesStr,
             rawPath,
             all,

@@ -44,7 +44,7 @@ public class GetAnomalyDetectorActionTests {
     @Test
     public void testGetRequest() throws IOException {
         BytesStreamOutput out = new BytesStreamOutput();
-        GetAnomalyDetectorRequest request = new GetAnomalyDetectorRequest("1234", 4321, false, "nonempty", "", false, null);
+        GetAnomalyDetectorRequest request = new GetAnomalyDetectorRequest("1234", 4321, false, false, "nonempty", "", false, null);
         request.writeTo(out);
         StreamInput input = out.bytes().streamInput();
         GetAnomalyDetectorRequest newRequest = new GetAnomalyDetectorRequest(input);
@@ -65,6 +65,8 @@ public class GetAnomalyDetectorActionTests {
             2345,
             detector,
             detectorJob,
+            false,
+            null,
             false,
             RestStatus.OK,
             Mockito.mock(DetectorProfile.class),
