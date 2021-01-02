@@ -170,6 +170,24 @@ public class ADTaskManager {
                 ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
                 AnomalyDetector detector = AnomalyDetector.parse(parser, response.getId(), response.getVersion());
 
+                if (detector.getFeatureAttributes().size() == 0) {
+                    listener
+                        .onFailure(
+                            new ElasticsearchStatusException("Can't start detector job as no features configured", RestStatus.BAD_REQUEST)
+                        );
+                    return;
+                }
+                if (detector.getEnabledFeatureIds().size() == 0) {
+                    listener
+                        .onFailure(
+                            new ElasticsearchStatusException(
+                                "Can't start detector job as no enabled features configured",
+                                RestStatus.BAD_REQUEST
+                            )
+                        );
+                    return;
+                }
+
                 if (detector.isRealTimeDetector()) {
                     // run realtime detector
                     realTimeDetectorConsumer.accept(detector);

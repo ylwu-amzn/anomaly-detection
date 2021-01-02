@@ -21,6 +21,7 @@ public class ADTaskCancelledException extends AnomalyDetectionException {
     public ADTaskCancelledException(String msg, String user) {
         super(msg);
         this.cancelledBy = user;
+        this.countedInStats(false);
     }
 
     public String getCancelledBy() {
