@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ import com.google.common.base.Objects;
  */
 public class ADTask implements ToXContentObject, Writeable {
 
-    public static final String DETECTOR_STATE_INDEX = ".opendistro-anomaly-detection-state";
+    public static final String DETECTION_STATE_INDEX = ".opendistro-anomaly-detection-state";
 
     public static final String TASK_ID_FIELD = "task_id";
     public static final String LAST_UPDATE_TIME_FIELD = "last_update_time";

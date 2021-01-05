@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -378,7 +378,6 @@ public class AnomalyDetectionIndices implements LocalNodeMasterListener {
      * @param actionListener action called after create index
      */
     public void initAnomalyDetectorJobIndex(ActionListener<CreateIndexResponse> actionListener) {
-        // TODO: specify replica setting
         try {
             CreateIndexRequest request = new CreateIndexRequest(AnomalyDetectorJob.ANOMALY_DETECTOR_JOB_INDEX)
                 .mapping(AnomalyDetector.TYPE, getAnomalyDetectorJobMappings(), XContentType.JSON);

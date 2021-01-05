@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -83,5 +83,11 @@ public class CommonName {
     // Query
     // ======================================
     // Used in finding the max timestamp
-    public static final String AGG_NAME_MAX = "max_timefield";
+    public static final String AGG_NAME_MAX_TIME = "max_timefield";
+    // Used in finding the min timestamp
+    public static final String AGG_NAME_MIN_TIME = "min_timefield";
+    // date histogram aggregation name
+    public static final String DATE_HISTOGRAM = "date_histogram";
+    // feature aggregation name
+    public static final String FEATURE_AGGS = "feature_aggs";
 }

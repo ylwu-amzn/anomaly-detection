@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -67,12 +67,8 @@ public class DetectionDateRange implements ToXContentObject, Writeable {
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         XContentBuilder xContentBuilder = builder.startObject();
-        if (startTime != null) {
-            xContentBuilder.field(START_TIME_FIELD, startTime.toEpochMilli());
-        }
-        if (endTime != null) {
-            xContentBuilder.field(END_TIME_FIELD, endTime.toEpochMilli());
-        }
+        xContentBuilder.field(START_TIME_FIELD, startTime.toEpochMilli());
+        xContentBuilder.field(END_TIME_FIELD, endTime.toEpochMilli());
         return xContentBuilder.endObject();
     }
 

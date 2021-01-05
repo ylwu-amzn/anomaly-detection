@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -44,6 +44,7 @@ public class LimitExceededException extends EndRunException {
      * Constructor with error message.
      *
      * @param message explanation for the limit
+     * @param endRun end detector run or not
      */
     public LimitExceededException(String message, boolean endRun) {
         super(null, message, endRun);

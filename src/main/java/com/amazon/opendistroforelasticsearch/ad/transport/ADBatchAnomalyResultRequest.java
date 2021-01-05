@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -61,10 +61,7 @@ public class ADBatchAnomalyResultRequest extends ActionRequest {
         if (detector == null) {
             validationException = addValidationError("Detector can't be null", validationException);
         } else if (detector.isRealTimeDetector()) {
-            // TODO: update this validation in next phase for universal flow
             validationException = addValidationError("Can't run batch task for realtime detector", validationException);
-        } else if (detector.getDetectionDateRange() == null) {
-            validationException = addValidationError("Detection date range can't be null", validationException);
         }
         return validationException;
     }

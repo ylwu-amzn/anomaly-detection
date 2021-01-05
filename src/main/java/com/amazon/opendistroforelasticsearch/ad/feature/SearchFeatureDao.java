@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -15,9 +15,10 @@
 
 package com.amazon.opendistroforelasticsearch.ad.feature;
 
+import static com.amazon.opendistroforelasticsearch.ad.constant.CommonName.DATE_HISTOGRAM;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_ENTITIES_FOR_PREVIEW;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_ENTITIES_PER_QUERY;
-import static com.amazon.opendistroforelasticsearch.ad.util.ParseUtils.generateFeatureQuerySearchRequest;
+import static com.amazon.opendistroforelasticsearch.ad.util.ParseUtils.batchFeatureQuery;
 import static org.apache.commons.math3.linear.MatrixUtils.createRealMatrix;
 
 import java.io.IOException;
@@ -140,14 +141,14 @@ public class SearchFeatureDao {
     @Deprecated
     public Optional<Long> getLatestDataTime(AnomalyDetector detector) {
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder()
-            .aggregation(AggregationBuilders.max(CommonName.AGG_NAME_MAX).field(detector.getTimeField()))
+            .aggregation(AggregationBuilders.max(CommonName.AGG_NAME_MAX_TIME).field(detector.getTimeField()))
             .size(0);
         SearchRequest searchRequest = new SearchRequest().indices(detector.getIndices().toArray(new String[0])).source(searchSourceBuilder);
         return clientUtil
             .<SearchRequest, SearchResponse>timedRequest(searchRequest, logger, client::search)
             .map(SearchResponse::getAggregations)
             .map(aggs -> aggs.asMap())
-            .map(map -> (Max) map.get(CommonName.AGG_NAME_MAX))
+            .map(map -> (Max) map.get(CommonName.AGG_NAME_MAX_TIME))
             .map(agg -> (long) agg.getValue());
     }
 
@@ -159,7 +160,7 @@ public class SearchFeatureDao {
      */
     public void getLatestDataTime(AnomalyDetector detector, ActionListener<Optional<Long>> listener) {
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder()
-            .aggregation(AggregationBuilders.max(CommonName.AGG_NAME_MAX).field(detector.getTimeField()))
+            .aggregation(AggregationBuilders.max(CommonName.AGG_NAME_MAX_TIME).field(detector.getTimeField()))
             .size(0);
         SearchRequest searchRequest = new SearchRequest().indices(detector.getIndices().toArray(new String[0])).source(searchSourceBuilder);
         client
@@ -233,7 +234,7 @@ public class SearchFeatureDao {
 
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder()
             .query(internalFilterQuery)
-            .aggregation(AggregationBuilders.max(CommonName.AGG_NAME_MAX).field(detector.getTimeField()))
+            .aggregation(AggregationBuilders.max(CommonName.AGG_NAME_MAX_TIME).field(detector.getTimeField()))
             .aggregation(AggregationBuilders.min(AGG_NAME_MIN).field(detector.getTimeField()))
             .trackTotalHits(false)
             .size(0);
@@ -251,7 +252,7 @@ public class SearchFeatureDao {
             .map(SearchResponse::getAggregations)
             .map(aggs -> aggs.asMap());
 
-        Optional<Long> latest = mapOptional.map(map -> (Max) map.get(CommonName.AGG_NAME_MAX)).map(agg -> (long) agg.getValue());
+        Optional<Long> latest = mapOptional.map(map -> (Max) map.get(CommonName.AGG_NAME_MAX_TIME)).map(agg -> (long) agg.getValue());
 
         Optional<Long> earliest = mapOptional.map(map -> (Min) map.get(AGG_NAME_MIN)).map(agg -> (long) agg.getValue());
 
@@ -307,8 +308,8 @@ public class SearchFeatureDao {
         long endTime,
         ActionListener<Map<Long, Optional<double[]>>> listener
     ) throws IOException {
-        SearchSourceBuilder searchSourceBuilder = generateFeatureQuerySearchRequest(detector, startTime, endTime, xContent);
-        logger.info("query AD data: " + searchSourceBuilder);
+        SearchSourceBuilder searchSourceBuilder = batchFeatureQuery(detector, startTime, endTime, xContent);
+        logger.debug("Batch query for detector {}: {} ", detector.getDetectorId(), searchSourceBuilder);
 
         SearchRequest searchRequest = new SearchRequest(detector.getIndices().toArray(new String[0])).source(searchSourceBuilder);
         client
@@ -325,12 +326,12 @@ public class SearchFeatureDao {
     private Map<Long, Optional<double[]>> parseBucketAggregationResponse(SearchResponse response, List<String> featureIds) {
         Map<Long, Optional<double[]>> dataPoints = new HashMap<>();
         List<Aggregation> aggregations = response.getAggregations().asList();
-        logger.info("Feature aggregation result size {}", aggregations.size());
+        logger.debug("Feature aggregation result size {}", aggregations.size());
         for (Aggregation agg : aggregations) {
             List<InternalComposite.InternalBucket> buckets = ((InternalComposite) agg).getBuckets();
             buckets.forEach(bucket -> {
                 Optional<double[]> featureData = parseAggregations(Optional.ofNullable(bucket.getAggregations()), featureIds);
-                dataPoints.put((Long) bucket.getKey().get("date_histogram"), featureData);
+                dataPoints.put((Long) bucket.getKey().get(DATE_HISTOGRAM), featureData);
             });
         }
         return dataPoints;

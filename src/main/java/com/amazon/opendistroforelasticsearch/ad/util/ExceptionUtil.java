@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -15,12 +15,13 @@
 
 package com.amazon.opendistroforelasticsearch.ad.util;
 
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.action.index.IndexResponse;
+import org.elasticsearch.action.support.replication.ReplicationResponse;
 import org.elasticsearch.common.io.stream.NotSerializableExceptionWrapper;
-import org.elasticsearch.transport.ReceiveTimeoutTransportException;
 
 import com.amazon.opendistroforelasticsearch.ad.common.exception.AnomalyDetectionException;
-import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.ResourceNotFoundException;
 
 public class ExceptionUtil {
@@ -60,19 +61,49 @@ public class ExceptionUtil {
         return false;
     }
 
-    public static boolean isServerError(Exception e) {
-        if (e instanceof ResourceNotFoundException
-            || e instanceof org.elasticsearch.ResourceNotFoundException
-            || e instanceof IllegalArgumentException
-            || e instanceof LimitExceededException) {
-            return false;
+    /**
+     * Get failure of all shards.
+     *
+     * @param response index response
+     * @return composite failures of all shards
+     */
+    public static String getShardsFailure(IndexResponse response) {
+        StringBuilder failureReasons = new StringBuilder();
+        if (response.getShardInfo() != null && response.getShardInfo().getFailed() > 0) {
+            for (ReplicationResponse.ShardInfo.Failure failure : response.getShardInfo().getFailures()) {
+                failureReasons.append(failure.reason());
+            }
+            return failureReasons.toString();
         }
-        return true;
+        return null;
     }
 
-    public static boolean readableException(Exception e) {
-        return e instanceof IllegalArgumentException
-            || e instanceof AnomalyDetectionException
-            || e instanceof ReceiveTimeoutTransportException;
+    /**
+     * Count exception in AD failure stats of not.
+     *
+     * @param e exception
+     * @return true if should count in AD failure stats; otherwise return false
+     */
+    public static boolean countInStats(Exception e) {
+        if (!(e instanceof AnomalyDetectionException) || ((AnomalyDetectionException) e).isCountedInStats()) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Get error message from exception.
+     *
+     * @param e exception
+     * @return readable error message or full stack trace
+     */
+    public static String getErrorMessage(Exception e) {
+        if (e instanceof IllegalArgumentException || e instanceof AnomalyDetectionException) {
+            return e.getMessage();
+        } else if (e instanceof ElasticsearchException) {
+            return ((ElasticsearchException) e).getDetailedMessage();
+        } else {
+            return ExceptionUtils.getFullStackTrace(e);
+        }
     }
 }

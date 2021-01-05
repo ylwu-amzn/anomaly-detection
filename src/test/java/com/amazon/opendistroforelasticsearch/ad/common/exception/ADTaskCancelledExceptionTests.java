@@ -13,18 +13,17 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.opendistroforelasticsearch.ad.transport;
+package com.amazon.opendistroforelasticsearch.ad.common.exception;
 
-import org.elasticsearch.action.ActionType;
+import org.elasticsearch.test.ESTestCase;
 
-import com.amazon.opendistroforelasticsearch.ad.constant.CommonValue;
+public class ADTaskCancelledExceptionTests extends ESTestCase {
 
-public class ADBatchAnomalyResultAction extends ActionType<ADBatchAnomalyResultResponse> {
-    public static final String NAME = CommonValue.EXTERNAL_ACTION_PREFIX + "detector/ad_task";
-    public static final ADBatchAnomalyResultAction INSTANCE = new ADBatchAnomalyResultAction();
-
-    private ADBatchAnomalyResultAction() {
-        super(NAME, ADBatchAnomalyResultResponse::new);
+    public void testConstructor() {
+        String message = randomAlphaOfLength(5);
+        String user = randomAlphaOfLength(5);
+        ADTaskCancelledException exception = new ADTaskCancelledException(message, user);
+        assertEquals(message, exception.getMessage());
+        assertEquals(user, exception.getCancelledBy());
     }
-
 }

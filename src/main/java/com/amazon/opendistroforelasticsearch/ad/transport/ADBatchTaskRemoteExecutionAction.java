@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import org.elasticsearch.action.ActionType;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonValue;
 
 public class ADBatchTaskRemoteExecutionAction extends ActionType<ADBatchAnomalyResultResponse> {
-    public static final String NAME = CommonValue.EXTERNAL_ACTION_PREFIX + "detector/remote_batch_task";
+    public static final String NAME = CommonValue.EXTERNAL_ACTION_PREFIX + "detector/ad_task_remote";
     public static final ADBatchTaskRemoteExecutionAction INSTANCE = new ADBatchTaskRemoteExecutionAction();
 
     private ADBatchTaskRemoteExecutionAction() {

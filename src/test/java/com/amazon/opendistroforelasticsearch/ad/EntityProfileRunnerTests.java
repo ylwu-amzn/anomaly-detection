@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -144,7 +144,7 @@ public class EntityProfileRunnerTests extends AbstractADTest {
             String indexName = request.indices()[0];
             ActionListener<SearchResponse> listener = (ActionListener<SearchResponse>) args[1];
             if (indexName.equals(CommonName.ANOMALY_RESULT_INDEX_ALIAS)) {
-                InternalMax maxAgg = new InternalMax(CommonName.AGG_NAME_MAX, latestSampleTimestamp, DocValueFormat.RAW, emptyMap());
+                InternalMax maxAgg = new InternalMax(CommonName.AGG_NAME_MAX_TIME, latestSampleTimestamp, DocValueFormat.RAW, emptyMap());
                 InternalAggregations internalAggregations = InternalAggregations.from(Collections.singletonList(maxAgg));
 
                 SearchHits hits = new SearchHits(new SearchHit[] {}, null, Float.NaN);

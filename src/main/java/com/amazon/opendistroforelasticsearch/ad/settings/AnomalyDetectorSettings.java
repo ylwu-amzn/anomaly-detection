@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -336,15 +336,14 @@ public final class AnomalyDetectorSettings {
 
     public static int THRESHOLD_MODEL_TRAINING_SIZE = 1000;
 
-    public static final Setting<Integer> MAX_AD_TASK_DOCS_PER_DETECTOR = Setting
+    public static final Setting<Integer> MAX_OLD_AD_TASK_DOCS_PER_DETECTOR = Setting
         .intSetting(
-            "opendistro.anomaly_detection.max_ad_task_docs_per_detector",
-            // Total documents in primary replica.
+            "opendistro.anomaly_detection.max_old_ad_task_docs_per_detector",
             // One AD task is roughly 1.5KB for normal case. Suppose task's size
-            // is 2KB conservatively. We allow 1000 anomaly detectors by default.
-            // If we store 1000 AD tasks for one detector, that will be 2GB.
-            100,
-            2,
+            // is 2KB conservatively. If we store 1000 AD tasks for one detector,
+            // that will be 2GB.
+            10,
+            1, // keep at least 1 old AD task per detector
             1000,
             Setting.Property.NodeScope,
             Setting.Property.Dynamic

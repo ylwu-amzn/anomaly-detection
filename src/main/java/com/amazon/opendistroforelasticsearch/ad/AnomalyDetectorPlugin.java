@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -507,22 +507,11 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
         );
 
         adTaskCacheManager = new ADTaskCacheManager(settings, clusterService, memoryTracker);
-        adTaskManager = new ADTaskManager(
-            settings,
-            threadPool,
-            clusterService,
-            client,
-            xContentRegistry,
-            nodeFilter,
-            anomalyDetectionIndices,
-            detectorStateHandler,
-            adTaskCacheManager
-        );
+        adTaskManager = new ADTaskManager(settings, clusterService, client, xContentRegistry, anomalyDetectionIndices);
         AnomalyResultBulkIndexHandler anomalyResultBulkIndexHandler = new AnomalyResultBulkIndexHandler(
             client,
             settings,
             threadPool,
-            CommonName.ANOMALY_RESULT_INDEX_ALIAS,
             ThrowingConsumerWrapper.throwingConsumerWrapper(anomalyDetectionIndices::initAnomalyResultIndexDirectly),
             anomalyDetectionIndices::doesAnomalyResultIndexExist,
             this.clientUtil,
@@ -535,7 +524,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
             threadPool,
             clusterService,
             client,
-            nodeFilter, // TODO: only filter hot nodes for UW domain
+            nodeFilter,
             indexNameExpressionResolver,
             adCircuitBreakerService,
             featureManager,
@@ -635,7 +624,7 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 AnomalyDetectorSettings.MAX_CACHE_MISS_HANDLING_PER_SECOND,
                 AnomalyDetectorSettings.MAX_BATCH_TASK_PER_NODE,
                 AnomalyDetectorSettings.BATCH_TASK_PIECE_INTERVAL_SECONDS,
-                AnomalyDetectorSettings.MAX_AD_TASK_DOCS_PER_DETECTOR,
+                AnomalyDetectorSettings.MAX_OLD_AD_TASK_DOCS_PER_DETECTOR,
                 AnomalyDetectorSettings.BATCH_TASK_PIECE_SIZE
             );
         return unmodifiableList(Stream.concat(enabledSetting.stream(), systemSetting.stream()).collect(Collectors.toList()));

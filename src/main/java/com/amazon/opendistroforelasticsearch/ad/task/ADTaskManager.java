@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -22,15 +22,12 @@ import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.EXECUTION_ST
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.IS_LATEST_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.LAST_UPDATE_TIME_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.STATE_FIELD;
-import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.STOPPED_BY_FIELD;
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.BATCH_TASK_PIECE_INTERVAL_SECONDS;
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_AD_TASK_DOCS_PER_DETECTOR;
-import static com.amazon.opendistroforelasticsearch.ad.util.ExceptionUtil.readableException;
-import static com.amazon.opendistroforelasticsearch.ad.util.ParseUtils.checkShardsFailure;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_OLD_AD_TASK_DOCS_PER_DETECTOR;
+import static com.amazon.opendistroforelasticsearch.ad.util.ExceptionUtil.getErrorMessage;
+import static com.amazon.opendistroforelasticsearch.ad.util.ExceptionUtil.getShardsFailure;
 import static org.elasticsearch.action.DocWriteResponse.Result.CREATED;
 import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
 
-import java.io.IOException;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -38,10 +35,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
-import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchStatusException;
+import org.elasticsearch.ExceptionsHelper;
+import org.elasticsearch.ResourceAlreadyExistsException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.get.GetRequest;
@@ -71,70 +69,56 @@ import org.elasticsearch.script.Script;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.sort.SortOrder;
-import org.elasticsearch.threadpool.ThreadPool;
-import org.elasticsearch.transport.ReceiveTimeoutTransportException;
 
-import com.amazon.opendistroforelasticsearch.ad.common.exception.ADTaskCancelledException;
-import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException;
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTaskState;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTaskType;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
-import com.amazon.opendistroforelasticsearch.ad.rest.handler.AnomalyDetectorFunction;
 import com.amazon.opendistroforelasticsearch.ad.rest.handler.IndexAnomalyDetectorJobActionHandler;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultRequest;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyDetectorJobResponse;
-import com.amazon.opendistroforelasticsearch.ad.transport.handler.DetectionStateHandler;
-import com.amazon.opendistroforelasticsearch.ad.util.DiscoveryNodeFilterer;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 import com.amazon.opendistroforelasticsearch.commons.authuser.User;
 
 /**
- * Manage AD task
+ * Manage AD task.
  */
 public class ADTaskManager {
     private final Logger logger = LogManager.getLogger(this.getClass());
 
-    private final ThreadPool threadPool;
     private final Client client;
     private final NamedXContentRegistry xContentRegistry;
-    private final DiscoveryNodeFilterer nodeFilter;
-    private final ClusterService clusterService;
-    private final DetectionStateHandler detectorStateHandler;
     private final AnomalyDetectionIndices detectionIndices;
-    private final ADTaskCacheManager adTaskCacheManager;
-    private volatile Integer pieceIntervalSeconds;
     private volatile Integer maxAdTaskDocsPerDetector;
 
     public ADTaskManager(
         Settings settings,
-        ThreadPool threadPool,
         ClusterService clusterService,
         Client client,
         NamedXContentRegistry xContentRegistry,
-        DiscoveryNodeFilterer nodeFilter,
-        AnomalyDetectionIndices detectionIndices,
-        DetectionStateHandler detectorStateHandler,
-        ADTaskCacheManager adTaskCacheManager
+        AnomalyDetectionIndices detectionIndices
     ) {
-        this.threadPool = threadPool;
-        this.clusterService = clusterService;
         this.client = client;
         this.xContentRegistry = xContentRegistry;
-        this.nodeFilter = nodeFilter;
         this.detectionIndices = detectionIndices;
-        this.detectorStateHandler = detectorStateHandler;
-        this.adTaskCacheManager = adTaskCacheManager;
 
-        this.pieceIntervalSeconds = BATCH_TASK_PIECE_INTERVAL_SECONDS.get(settings);
-        clusterService.getClusterSettings().addSettingsUpdateConsumer(BATCH_TASK_PIECE_INTERVAL_SECONDS, it -> pieceIntervalSeconds = it);
-
-        this.maxAdTaskDocsPerDetector = MAX_AD_TASK_DOCS_PER_DETECTOR.get(settings);
-        clusterService.getClusterSettings().addSettingsUpdateConsumer(MAX_AD_TASK_DOCS_PER_DETECTOR, it -> maxAdTaskDocsPerDetector = it);
+        this.maxAdTaskDocsPerDetector = MAX_OLD_AD_TASK_DOCS_PER_DETECTOR.get(settings);
+        clusterService
+            .getClusterSettings()
+            .addSettingsUpdateConsumer(MAX_OLD_AD_TASK_DOCS_PER_DETECTOR, it -> maxAdTaskDocsPerDetector = it);
     }
 
+    /**
+     * Start detector. Will create schedule job for realtime detector,
+     * and start AD task for historical detector.
+     *
+     * @param detectorId detector id
+     * @param handler anomaly detector job action handler
+     * @param user user
+     * @param listener action listener
+     */
     public void startDetector(
         String detectorId,
         IndexAnomalyDetectorJobActionHandler handler,
@@ -149,7 +133,7 @@ public class ADTaskManager {
         );
     }
 
-    public void getDetector(
+    private void getDetector(
         String detectorId,
         Consumer<AnomalyDetector> realTimeDetectorConsumer,
         Consumer<AnomalyDetector> historicalDetectorConsumer,
@@ -170,21 +154,9 @@ public class ADTaskManager {
                 ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
                 AnomalyDetector detector = AnomalyDetector.parse(parser, response.getId(), response.getVersion());
 
-                if (detector.getFeatureAttributes().size() == 0) {
-                    listener
-                        .onFailure(
-                            new ElasticsearchStatusException("Can't start detector job as no features configured", RestStatus.BAD_REQUEST)
-                        );
-                    return;
-                }
-                if (detector.getEnabledFeatureIds().size() == 0) {
-                    listener
-                        .onFailure(
-                            new ElasticsearchStatusException(
-                                "Can't start detector job as no enabled features configured",
-                                RestStatus.BAD_REQUEST
-                            )
-                        );
+                String error = validateDetector(detector);
+                if (error != null) {
+                    listener.onFailure(new ElasticsearchStatusException(error, RestStatus.BAD_REQUEST));
                     return;
                 }
 
@@ -195,46 +167,44 @@ public class ADTaskManager {
                     // run historical detector
                     historicalDetectorConsumer.accept(detector);
                 }
-            } catch (IOException e) {
-                String message = "Failed to parse anomaly detector job";
-                logger.error(message, e);
-                listener.onFailure(new ElasticsearchStatusException(message, RestStatus.INTERNAL_SERVER_ERROR));
-            } catch (LimitExceededException e) {
-                logger.error(e.getMessage(), e);
-                listener.onFailure(new ElasticsearchStatusException(e.getMessage(), RestStatus.TOO_MANY_REQUESTS));
             } catch (Exception e) {
-                String message = "Failed to start anomaly detector job";
+                String message = "Failed to start anomaly detector";
                 logger.error(message, e);
                 listener.onFailure(new ElasticsearchStatusException(message, RestStatus.INTERNAL_SERVER_ERROR));
             }
         }, exception -> listener.onFailure(exception)));
     }
 
-    private void createADTaskIndex(AnomalyDetector detector, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
-        if (adTaskCacheManager.containsTaskOfDetector(detector.getDetectorId())) {
-            listener.onFailure(new ElasticsearchStatusException("Detector is already running", RestStatus.BAD_REQUEST));
-            return;
+    private String validateDetector(AnomalyDetector detector) {
+        if (detector.getFeatureAttributes().size() == 0) {
+            return "Can't start detector job as no features configured";
         }
+        if (detector.getEnabledFeatureIds().size() == 0) {
+            return "Can't start detector job as no enabled features configured";
+        }
+        return null;
+    }
+
+    protected void createADTaskIndex(AnomalyDetector detector, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
         if (detectionIndices.doesDetectorStateIndexExist()) {
             checkCurrentTaskState(detector, user, listener);
         } else {
             detectionIndices.initDetectionStateIndex(ActionListener.wrap(r -> {
                 if (r.isAcknowledged()) {
-                    logger.info("Created {} with mappings.", ADTask.DETECTOR_STATE_INDEX);
+                    logger.info("Created {} with mappings.", ADTask.DETECTION_STATE_INDEX);
                     executeHistoricalDetector(detector, user, listener);
                 } else {
-                    logger.warn("Created {} with mappings call not acknowledged.", ADTask.DETECTOR_STATE_INDEX);
-                    listener
-                        .onFailure(
-                            new ElasticsearchStatusException(
-                                "Created " + ADTask.DETECTOR_STATE_INDEX + "with mappings call not acknowledged.",
-                                RestStatus.INTERNAL_SERVER_ERROR
-                            )
-                        );
+                    String error = "Create index " + ADTask.DETECTION_STATE_INDEX + " with mappings not acknowledged";
+                    logger.warn(error);
+                    listener.onFailure(new ElasticsearchStatusException(error, RestStatus.INTERNAL_SERVER_ERROR));
                 }
             }, e -> {
-                logger.error("Failed to init anomaly detection state index", e);
-                listener.onFailure(e);
+                if (ExceptionsHelper.unwrapCause(e) instanceof ResourceAlreadyExistsException) {
+                    executeHistoricalDetector(detector, user, listener);
+                } else {
+                    logger.error("Failed to init anomaly detection state index", e);
+                    listener.onFailure(e);
+                }
             }));
         }
     }
@@ -247,8 +217,8 @@ public class ADTaskManager {
         searchSourceBuilder.query(query);
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.source(searchSourceBuilder);
-        searchRequest.indices(ADTask.DETECTOR_STATE_INDEX);
-        // TODO: send out task profile request to check if task is running, if not, reset task status as stopped
+        searchRequest.indices(ADTask.DETECTION_STATE_INDEX);
+
         client.search(searchRequest, ActionListener.wrap(r -> {
             if (r.getHits().getTotalHits().value > 0) {
                 listener.onFailure(new ElasticsearchStatusException("Detector is already running", RestStatus.BAD_REQUEST));
@@ -261,9 +231,9 @@ public class ADTaskManager {
         }));
     }
 
-    public void executeHistoricalDetector(AnomalyDetector detector, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
+    private void executeHistoricalDetector(AnomalyDetector detector, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
         UpdateByQueryRequest updateByQueryRequest = new UpdateByQueryRequest();
-        updateByQueryRequest.indices(ADTask.DETECTOR_STATE_INDEX);
+        updateByQueryRequest.indices(ADTask.DETECTION_STATE_INDEX);
         BoolQueryBuilder query = new BoolQueryBuilder();
         query.filter(new TermQueryBuilder(DETECTOR_ID_FIELD, detector.getDetectorId()));
         query.filter(new TermQueryBuilder(IS_LATEST_FIELD, true));
@@ -276,9 +246,8 @@ public class ADTaskManager {
             if (bulkFailures.isEmpty()) {
                 createNewADTask(detector, user, listener);
             } else {
-                Exception e = bulkFailures.get(0).getCause();
-                logger.error("Failed to update old task's state for detector " + detector.getDetectorId(), e);
-                listener.onFailure(e);
+                logger.error("Failed to update old task's state for detector: {}, response: {} ", detector.getDetectorId(), r.toString());
+                listener.onFailure(bulkFailures.get(0).getCause());
             }
         }, e -> {
             logger.error("Failed to reset old tasks as not latest for detector " + detector.getDetectorId(), e);
@@ -302,7 +271,7 @@ public class ADTaskManager {
             .startedBy(userName)
             .build();
 
-        IndexRequest request = new IndexRequest(ADTask.DETECTOR_STATE_INDEX);
+        IndexRequest request = new IndexRequest(ADTask.DETECTION_STATE_INDEX);
         try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
             request
                 .source(adTask.toXContent(builder, RestHandlerUtils.XCONTENT_WITH_TYPE))
@@ -311,13 +280,16 @@ public class ADTaskManager {
                 .index(
                     request,
                     ActionListener
-                        .wrap(r -> onIndexADTaskResponse(r, adTask, () -> cleanOldAdTaskDocs(detector.getDetectorId()), listener), e -> {
-                            logger.error("Failed to create AD task for detector " + detector.getDetectorId(), e);
-                            listener.onFailure(e);
-                        })
+                        .wrap(
+                            r -> onIndexADTaskResponse(r, adTask, (response) -> cleanOldAdTaskDocs(response, adTask, listener), listener),
+                            e -> {
+                                logger.error("Failed to create AD task for detector " + detector.getDetectorId(), e);
+                                listener.onFailure(e);
+                            }
+                        )
                 );
         } catch (Exception e) {
-            logger.error("Failed to parse AD task for detector " + detector.getDetectorId(), e);
+            logger.error("Failed to create AD task for detector " + detector.getDetectorId(), e);
             listener.onFailure(e);
         }
     }
@@ -325,49 +297,41 @@ public class ADTaskManager {
     private void onIndexADTaskResponse(
         IndexResponse response,
         ADTask adTask,
-        AnomalyDetectorFunction function,
+        Consumer<IndexResponse> function,
         ActionListener<AnomalyDetectorJobResponse> listener
     ) {
         if (response == null || response.getResult() != CREATED) {
-            String errorMsg = checkShardsFailure(response);
+            String errorMsg = getShardsFailure(response);
             listener.onFailure(new ElasticsearchStatusException(errorMsg, response.status()));
             return;
         }
         adTask.setTaskId(response.getId());
-        client.execute(ADBatchAnomalyResultAction.INSTANCE, new ADBatchAnomalyResultRequest(adTask), ActionListener.wrap(r -> {
-            logger.info("AD task dispatched to node {}, which is a remote node: {}", r.getNodeId(), r.isRunTaskRemotely());
-            AnomalyDetectorJobResponse anomalyDetectorJobResponse = new AnomalyDetectorJobResponse(
-                response.getId(),
-                response.getVersion(),
-                response.getSeqNo(),
-                response.getPrimaryTerm(),
-                RestStatus.OK
-            );
-            listener.onResponse(anomalyDetectorJobResponse);
-        }, exception -> { handleADTaskException(adTask, exception); }));
         if (function != null) {
-            function.execute();
+            function.accept(response);
         }
     }
 
-    private void cleanOldAdTaskDocs(String detectorId) {
+    private void cleanOldAdTaskDocs(IndexResponse response, ADTask adTask, ActionListener<AnomalyDetectorJobResponse> listener) {
         BoolQueryBuilder query = new BoolQueryBuilder();
-        query.filter(new TermQueryBuilder(DETECTOR_ID_FIELD, detectorId));
+        query.filter(new TermQueryBuilder(DETECTOR_ID_FIELD, adTask.getDetectorId()));
         query.filter(new TermQueryBuilder(IS_LATEST_FIELD, false));
         SearchRequest searchRequest = new SearchRequest();
         SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
         sourceBuilder
             .query(query)
             .sort(EXECUTION_START_TIME_FIELD, SortOrder.DESC)
+            // Search query "from" starts from 0.
             .from(maxAdTaskDocsPerDetector - 1)
             .trackTotalHits(true)
             .size(1);
-        searchRequest.source(sourceBuilder).indices(ADTask.DETECTOR_STATE_INDEX);
+        String s = sourceBuilder.toString();
+        searchRequest.source(sourceBuilder).indices(ADTask.DETECTION_STATE_INDEX);
+        String detectorId = adTask.getDetectorId();
         client.search(searchRequest, ActionListener.wrap(r -> {
             Iterator<SearchHit> iterator = r.getHits().iterator();
             if (iterator.hasNext()) {
                 logger
-                    .info(
+                    .debug(
                         "AD tasks count for detector {} is {}, exceeds limit of {}",
                         detectorId,
                         r.getHits().getTotalHits().value,
@@ -378,48 +342,70 @@ public class ADTaskManager {
                     XContentParser parser = RestHandlerUtils.createXContentParserFromRegistry(xContentRegistry, searchHit.getSourceRef())
                 ) {
                     ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-                    ADTask adTask = ADTask.parse(parser, searchHit.getId());
+                    ADTask task = ADTask.parse(parser, searchHit.getId());
 
-                    DeleteByQueryRequest request = new DeleteByQueryRequest(ADTask.DETECTOR_STATE_INDEX);
+                    DeleteByQueryRequest request = new DeleteByQueryRequest(ADTask.DETECTION_STATE_INDEX);
                     RangeQueryBuilder rangeQueryBuilder = new RangeQueryBuilder(EXECUTION_START_TIME_FIELD);
-                    rangeQueryBuilder.lte(adTask.getExecutionStartTime().toEpochMilli()).format("epoch_millis");
+                    rangeQueryBuilder.lt(task.getExecutionStartTime().toEpochMilli()).format("epoch_millis");
                     request.setQuery(rangeQueryBuilder);
                     client.execute(DeleteByQueryAction.INSTANCE, request, ActionListener.wrap(res -> {
                         logger
-                            .info(
+                            .debug(
                                 "Deleted {} old AD tasks started equals or before {} for detector {}",
                                 res.getDeleted(),
                                 adTask.getExecutionStartTime().toEpochMilli(),
                                 detectorId
                             );
-                    }, e -> { logger.warn("Failed to clean AD tasks for detector " + detectorId, e); }));
-
+                        runBatchResultAction(response, adTask, listener);
+                    }, e -> {
+                        logger.warn("Failed to clean AD tasks for detector " + detectorId, e);
+                        listener.onFailure(e);
+                    }));
                 } catch (Exception e) {
                     logger.warn("Failed to parse AD tasks for detector " + detectorId, e);
+                    listener.onFailure(e);
                 }
+            } else {
+                runBatchResultAction(response, adTask, listener);
             }
-        }, e -> { logger.warn("Failed to search AD tasks for detector " + detectorId, e); }));
+        }, e -> logger.warn("Failed to search AD tasks for detector " + detectorId, e)));
     }
 
+    private void runBatchResultAction(IndexResponse response, ADTask adTask, ActionListener<AnomalyDetectorJobResponse> listener) {
+        client.execute(ADBatchAnomalyResultAction.INSTANCE, new ADBatchAnomalyResultRequest(adTask), ActionListener.wrap(r -> {
+            String remoteOrLocal = r.isRunTaskRemotely() ? "remote" : "local";
+            logger
+                .info(
+                    "AD task {} of detector {} dispatched to {} node {}",
+                    adTask.getTaskId(),
+                    adTask.getDetectorId(),
+                    remoteOrLocal,
+                    r.getNodeId()
+                );
+            AnomalyDetectorJobResponse anomalyDetectorJobResponse = new AnomalyDetectorJobResponse(
+                response.getId(),
+                response.getVersion(),
+                response.getSeqNo(),
+                response.getPrimaryTerm(),
+                RestStatus.OK
+            );
+            listener.onResponse(anomalyDetectorJobResponse);
+        }, exception -> handleADTaskException(adTask, exception)));
+    }
+
+    /**
+     * Handle exceptions for AD task. Update task state and record error message.
+     *
+     * @param adTask AD task
+     * @param e exception
+     */
     public void handleADTaskException(ADTask adTask, Exception e) {
+        // TODO: handle timeout exception
+        // TODO: handle TaskCancelledException
         Map<String, Object> updatedFields = new HashMap<>();
-        String state = ADTaskState.FAILED.name();
-        if (e instanceof ReceiveTimeoutTransportException) {
-            // TODO: handle timeout exception
-            logger.error("Timeout to execute AD task", e);
-        } else if (e instanceof ADTaskCancelledException) {
-            logger.warn("AD task cancelled: " + adTask.getTaskId());
-            state = ADTaskState.STOPPED.name();
-            String stoppedBy = ((ADTaskCancelledException) e).getCancelledBy();
-            if (stoppedBy != null) {
-                updatedFields.put(STOPPED_BY_FIELD, stoppedBy);
-            }
-        } else {
-            logger.error("Failed to execute AD batch task, task id: " + adTask.getTaskId() + ", detector id: " + adTask.getDetectorId(), e);
-        }
-        updatedFields.put(STATE_FIELD, state);
-        String error = readableException(e) ? e.getMessage() : ExceptionUtils.getFullStackTrace(e);
-        updatedFields.put(ERROR_FIELD, error);
+        logger.error("Failed to execute AD batch task, task id: " + adTask.getTaskId() + ", detector id: " + adTask.getDetectorId(), e);
+        updatedFields.put(STATE_FIELD, ADTaskState.FAILED.name());
+        updatedFields.put(ERROR_FIELD, getErrorMessage(e));
         updatedFields.put(EXECUTION_END_TIME_FIELD, Instant.now().toEpochMilli());
         updateADTask(adTask.getTaskId(), updatedFields);
     }
@@ -431,11 +417,18 @@ public class ADTaskManager {
             } else {
                 logger.error("Failed to update AD task {}, status: {}", taskId, response.status());
             }
-        }, e -> { logger.error("Failed to update task execution" + taskId, e); }));
+        }, e -> logger.error("Failed to update task: " + taskId, e)));
     }
 
+    /**
+     * Update AD task for specific fields.
+     *
+     * @param taskId task id
+     * @param updatedFields updated fields, key: filed name, value: new value
+     * @param listener action listener
+     */
     public void updateADTask(String taskId, Map<String, Object> updatedFields, ActionListener<UpdateResponse> listener) {
-        UpdateRequest updateRequest = new UpdateRequest(ADTask.DETECTOR_STATE_INDEX, taskId);
+        UpdateRequest updateRequest = new UpdateRequest(ADTask.DETECTION_STATE_INDEX, taskId);
         Map<String, Object> updatedContent = new HashMap<>();
         updatedContent.putAll(updatedFields);
         updatedContent.put(LAST_UPDATE_TIME_FIELD, Instant.now().toEpochMilli());

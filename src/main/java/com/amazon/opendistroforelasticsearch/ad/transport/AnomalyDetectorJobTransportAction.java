@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package com.amazon.opendistroforelasticsearch.ad.transport;
 
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.FILTER_BY_BACKEND_ROLES;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.REQUEST_TIMEOUT;
+import static com.amazon.opendistroforelasticsearch.ad.util.ParseUtils.getUserContext;
 import static com.amazon.opendistroforelasticsearch.ad.util.ParseUtils.resolveUserAndExecute;
 
 import org.apache.logging.log4j.LogManager;
@@ -37,7 +38,6 @@ import org.elasticsearch.transport.TransportService;
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.rest.handler.IndexAnomalyDetectorJobActionHandler;
 import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
-import com.amazon.opendistroforelasticsearch.ad.util.ParseUtils;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 import com.amazon.opendistroforelasticsearch.commons.authuser.User;
 
@@ -83,7 +83,7 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
         TimeValue requestTimeout = REQUEST_TIMEOUT.get(settings);
 
         // By the time request reaches here, the user permissions are validated by Security plugin.
-        User user = ParseUtils.getUserContext(client);
+        User user = getUserContext(client);
         try (ThreadContext.StoredContext context = client.threadPool().getThreadContext().stashContext()) {
             resolveUserAndExecute(
                 user,
@@ -121,11 +121,10 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
             xContentRegistry
         );
         if (rawPath.endsWith(RestHandlerUtils.START_JOB)) {
-            // handler.startAnomalyDetectorJob();
             adTaskManager.startDetector(detectorId, handler, user, listener);
         } else if (rawPath.endsWith(RestHandlerUtils.STOP_JOB)) {
+            // TODO: change to adTaskManager.stopDetector
             handler.stopAnomalyDetectorJob(detectorId);
-            // adTaskManager.stopDetector(detectorId, handler, user, listener);
         }
     }
 }

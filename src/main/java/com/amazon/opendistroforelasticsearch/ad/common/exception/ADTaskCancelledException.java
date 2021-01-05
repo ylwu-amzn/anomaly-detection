@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -26,9 +26,5 @@ public class ADTaskCancelledException extends AnomalyDetectionException {
 
     public String getCancelledBy() {
         return cancelledBy;
-    }
-
-    public void setCancelledBy(String cancelledBy) {
-        this.cancelledBy = cancelledBy;
     }
 }

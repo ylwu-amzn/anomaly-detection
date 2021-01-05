@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@ package com.amazon.opendistroforelasticsearch.ad.task;
 
 import static com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorPlugin.AD_BATCH_TASK_THREAD_POOL_NAME;
 import static com.amazon.opendistroforelasticsearch.ad.breaker.MemoryCircuitBreaker.DEFAULT_JVM_HEAP_USAGE_THRESHOLD;
+import static com.amazon.opendistroforelasticsearch.ad.constant.CommonName.AGG_NAME_MAX_TIME;
+import static com.amazon.opendistroforelasticsearch.ad.constant.CommonName.AGG_NAME_MIN_TIME;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.CURRENT_PIECE_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.EXECUTION_END_TIME_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.INIT_PROGRESS_FIELD;
@@ -45,11 +47,8 @@ import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionListenerResponseHandler;
 import org.elasticsearch.action.search.SearchRequest;
-import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.action.support.ThreadedActionListener;
 import org.elasticsearch.client.Client;
-import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
@@ -58,7 +57,6 @@ import org.elasticsearch.search.aggregations.AggregationBuilders;
 import org.elasticsearch.search.aggregations.metrics.InternalMax;
 import org.elasticsearch.search.aggregations.metrics.InternalMin;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
-import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportRequestOptions;
 import org.elasticsearch.transport.TransportService;
@@ -67,7 +65,6 @@ import com.amazon.opendistroforelasticsearch.ad.breaker.ADCircuitBreakerService;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.ADTaskCancelledException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.AnomalyDetectionException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.EndRunException;
-import com.amazon.opendistroforelasticsearch.ad.common.exception.InternalFailure;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.ResourceNotFoundException;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
@@ -102,13 +99,8 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.RateLimiter;
 
 public class ADBatchTaskRunner {
-    public static final String MIN_DATE = "min_date";
-    public static final String MAX_DATE = "max_date";
     private final Logger logger = LogManager.getLogger(ADBatchTaskRunner.class);
-    // TODO: tune threshold model training size
-    // private final Integer THRESHOLD_MODEL_TRAINING_SIZE = 1000;
 
-    // TODO: test performance
     private final RateLimiter rateLimiter = RateLimiter.create(1);
 
     private final ThreadPool threadPool;
@@ -124,7 +116,7 @@ public class ADBatchTaskRunner {
     private AnomalyDetectionIndices anomalyDetectionIndices;
 
     private final ADTaskCacheManager adTaskCacheManager;
-    private final TransportRequestOptions option; // TODO, test this config
+    private final TransportRequestOptions option;
 
     private volatile Integer maxAdBatchTaskPerNode;
     private volatile Integer pieceSize;
@@ -175,17 +167,26 @@ public class ADBatchTaskRunner {
         clusterService.getClusterSettings().addSettingsUpdateConsumer(BATCH_TASK_PIECE_INTERVAL_SECONDS, it -> pieceIntervalSeconds = it);
     }
 
-    public void run(ADTask adTask, Task task, TransportService transportService, ActionListener<ADBatchAnomalyResultResponse> listener) {
+    /**
+     * Run AD task.
+     * 1. Set AD task state as {@link ADTaskState#INIT}
+     * 2. Gather node stats and find node with least load to run AD task.
+     *
+     * @param adTask AD task
+     * @param transportService transport service
+     * @param listener action listener
+     */
+    public void run(ADTask adTask, TransportService transportService, ActionListener<ADBatchAnomalyResultResponse> listener) {
         Map<String, Object> updatedFields = new HashMap<>();
         updatedFields.put(STATE_FIELD, ADTaskState.INIT.name());
         updatedFields.put(INIT_PROGRESS_FIELD, 0.0f);
-        adTaskManager.updateADTask(adTask.getTaskId(), updatedFields, ActionListener.wrap(r -> {
-            getNodeStats(adTask, ActionListener.wrap(node -> {
+        adTaskManager
+            .updateADTask(adTask.getTaskId(), updatedFields, ActionListener.wrap(r -> getNodeStats(adTask, ActionListener.wrap(node -> {
                 if (clusterService.localNode().getId().equals(node.getId())) {
                     // Execute batch task locally
                     logger
                         .info(
-                            "execute task {} locally on node {} for detector {}",
+                            "execute AD task {} locally on node {} for detector {}",
                             adTask.getTaskId(),
                             node.getId(),
                             adTask.getDetectorId()
@@ -195,7 +196,7 @@ public class ADBatchTaskRunner {
                     // Execute batch task remotely
                     logger
                         .info(
-                            "execute task {} remotely on node {} for detector {}",
+                            "execute AD task {} remotely on node {} for detector {}",
                             adTask.getTaskId(),
                             node.getId(),
                             adTask.getDetectorId()
@@ -209,11 +210,10 @@ public class ADBatchTaskRunner {
                             new ActionListenerResponseHandler<>(listener, ADBatchAnomalyResultResponse::new)
                         );
                 }
-            }, e -> listener.onFailure(e)));
-        }, e -> {
-            logger.warn("Failed to move task to INIT state, task id " + adTask.getTaskId());
-            listener.onFailure(e);
-        }));
+            }, e -> listener.onFailure(e))), e -> {
+                logger.warn("Failed to move task to INIT state, task id " + adTask.getTaskId());
+                listener.onFailure(e);
+            }));
     }
 
     private void getNodeStats(ADTask adTask, ActionListener<DiscoveryNode> listener) {
@@ -259,6 +259,7 @@ public class ADBatchTaskRunner {
             if (candidateNodeResponse.size() == 1) {
                 listener.onResponse(candidateNodeResponse.get(0).getNode());
             } else {
+                // if multiple nodes have same running task count, choose the one with least JVM heap usage.
                 Long minTaskCount = (Long) candidateNodeResponse.get(0).getStatsMap().get(AD_EXECUTING_BATCH_TASK_COUNT.getName());
                 Optional<ADStatsNodeResponse> first = candidateNodeResponse
                     .stream()
@@ -276,6 +277,13 @@ public class ADBatchTaskRunner {
         }));
     }
 
+    /**
+     * Start AD task in dedicated batch task thread pool.
+     *
+     * @param adTask ad task
+     * @param runTaskRemotely run task remotely or not
+     * @param listener action listener
+     */
     public void startADBatchTask(ADTask adTask, boolean runTaskRemotely, ActionListener<ADBatchAnomalyResultResponse> listener) {
         try {
             if (!EnabledSetting.isADPluginEnabled()) {
@@ -283,7 +291,6 @@ public class ADBatchTaskRunner {
             }
             threadPool.executor(AD_BATCH_TASK_THREAD_POOL_NAME).execute(() -> {
                 try {
-                    // executeADBatchTask(adTask, task, listener);
                     executeADBatchTask(adTask);
                 } catch (Exception e) {
                     listener.onFailure(e);
@@ -308,7 +315,7 @@ public class ADBatchTaskRunner {
         adTaskCacheManager.put(adTask);
 
         // check if circuit breaker is open
-        checkCircuitBreaker(adTask, listener);
+        checkCircuitBreaker(adTask);
 
         // start to run first piece
         Instant executeStartTime = Instant.now();
@@ -330,7 +337,7 @@ public class ADBatchTaskRunner {
             // If it's cancelled, then increase cancelled task count by 1, otherwise increase failure count by 1.
             if (e instanceof ADTaskCancelledException) {
                 adStats.getStat(StatNames.AD_CANCELED_BATCH_TASK_COUNT.getName()).increment();
-            } else if (ExceptionUtil.isServerError(e)) {
+            } else if (ExceptionUtil.countInStats(e)) {
                 adStats.getStat(StatNames.AD_BATCH_TASK_FAILURE_COUNT.getName()).increment();
             }
             // Handle AD task exception
@@ -339,7 +346,7 @@ public class ADBatchTaskRunner {
         return listener;
     }
 
-    private void checkCircuitBreaker(ADTask adTask, ActionListener<String> listener) {
+    private void checkCircuitBreaker(ADTask adTask) {
         String taskId = adTask.getTaskId();
         if (adCircuitBreakerService.isOpen()) {
             String error = "Circuit breaker is open";
@@ -367,22 +374,16 @@ public class ADBatchTaskRunner {
                     ActionListener.wrap(r -> {
                         try {
                             checkIfADTaskCancelled(adTask.getTaskId());
-                            if (!shouldStart(listener, adTask)) {
-                                return;
-                            }
                             getDateRangeOfSourceData(adTask, (minDate, maxDate) -> {
                                 long interval = ((IntervalTimeConfiguration) adTask.getDetector().getDetectionInterval())
                                     .toDuration()
                                     .toMillis();
-                                if (maxDate - minDate < NUM_MIN_SAMPLES * interval) {
-                                    listener.onFailure(new IllegalArgumentException("There is no enough data to train model"));
-                                    return;
-                                }
+
                                 DetectionDateRange detectionDateRange = adTask.getDetector().getDetectionDateRange();
                                 long dataStartTime = detectionDateRange.getStartTime().toEpochMilli();
                                 long dataEndTime = detectionDateRange.getEndTime().toEpochMilli();
 
-                                if (minDate >= dataEndTime) {
+                                if (minDate >= dataEndTime || maxDate <= dataStartTime) {
                                     listener
                                         .onFailure(
                                             new ResourceNotFoundException(
@@ -402,10 +403,17 @@ public class ADBatchTaskRunner {
                                 // normalize start/end time to make it consistent with feature data agg result
                                 dataStartTime = dataStartTime - dataStartTime % interval;
                                 dataEndTime = dataEndTime - dataEndTime % interval;
+                                if ((dataEndTime - dataStartTime) < THRESHOLD_MODEL_TRAINING_SIZE * interval) {
+                                    listener
+                                        .onFailure(
+                                            new AnomalyDetectionException("There is no enough data to train model").countedInStats(false)
+                                        );
+                                    return;
+                                }
                                 long expectedPieceEndTime = dataStartTime + pieceSize * interval;
                                 long firstPieceEndTime = expectedPieceEndTime > dataEndTime ? dataEndTime : expectedPieceEndTime;
                                 logger
-                                    .info(
+                                    .debug(
                                         "start first piece from {} to {}, interval {}, dataStartTime {}, dataEndTime {},"
                                             + " detectorId {}, taskId {}",
                                         dataStartTime,
@@ -439,16 +447,16 @@ public class ADBatchTaskRunner {
 
     private void getDateRangeOfSourceData(ADTask adTask, BiConsumer<Long, Long> consumer, ActionListener listener) {
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder()
-            .aggregation(AggregationBuilders.min(MIN_DATE).field(adTask.getDetector().getTimeField()))
-            .aggregation(AggregationBuilders.max(MAX_DATE).field(adTask.getDetector().getTimeField()))
+            .aggregation(AggregationBuilders.min(AGG_NAME_MIN_TIME).field(adTask.getDetector().getTimeField()))
+            .aggregation(AggregationBuilders.max(AGG_NAME_MAX_TIME).field(adTask.getDetector().getTimeField()))
             .size(0);
         SearchRequest request = new SearchRequest()
             .indices(adTask.getDetector().getIndices().toArray(new String[0]))
             .source(searchSourceBuilder);
 
         client.search(request, ActionListener.wrap(r -> {
-            InternalMin minAgg = r.getAggregations().get(MIN_DATE);
-            InternalMax maxAgg = r.getAggregations().get(MAX_DATE);
+            InternalMin minAgg = r.getAggregations().get(AGG_NAME_MIN_TIME);
+            InternalMax maxAgg = r.getAggregations().get(AGG_NAME_MAX_TIME);
             double minValue = minAgg.getValue();
             double maxValue = maxAgg.getValue();
             // If time field not exist or there is no value, will return infinity value
@@ -457,7 +465,7 @@ public class ADBatchTaskRunner {
                 return;
             }
             consumer.accept((long) minValue, (long) maxValue);
-        }, e -> listener.onFailure(e)));
+        }, e -> { listener.onFailure(e); }));
     }
 
     private void getFeatureData(
@@ -473,12 +481,11 @@ public class ADBatchTaskRunner {
         ActionListener<Map<Long, Optional<double[]>>> actionListener = ActionListener.wrap(dataPoints -> {
             try {
                 if (dataPoints.size() == 0) {
-                    logger.info("No data in current piece with end time: " + pieceEndTime);
+                    logger.debug("No data in current piece with end time: " + pieceEndTime);
                     runNextPiece(adTask, pieceEndTime, dataStartTime, dataEndTime, interval, listener);
                 } else {
                     detectAnomaly(
                         adTask,
-                        adTask.getDetector().getEnabledFeatureIds().size(),
                         dataPoints,
                         pieceStartTime,
                         pieceEndTime,
@@ -509,7 +516,6 @@ public class ADBatchTaskRunner {
 
     private void detectAnomaly(
         ADTask adTask,
-        int enabledFeatureSize,
         Map<Long, Optional<double[]>> dataPoints,
         long pieceStartTime,
         long pieceEndTime,
@@ -520,16 +526,12 @@ public class ADBatchTaskRunner {
         ActionListener<String> listener
     ) {
         String taskId = adTask.getTaskId();
-        int shingleSize = adTask.getDetector().getShingleSize();
         RandomCutForest rcf = adTaskCacheManager.getRcfModel(taskId);
         ThresholdingModel threshold = adTaskCacheManager.getThresholdModel(taskId);
-        double[] thresholdTrainingScores = adTaskCacheManager.getThresholdModelTrainingData(taskId);
+        Deque<Map.Entry<Long, Optional<double[]>>> shingle = adTaskCacheManager.getShingle(taskId);
 
         List<AnomalyResult> anomalyResults = new ArrayList<>();
 
-        Deque<Map.Entry<Long, Optional<double[]>>> shingle = adTaskCacheManager.getShingle(taskId);
-
-        boolean thresholdTrained = adTaskCacheManager.isThresholdModelTrained(taskId);
         long intervalEndTime = pieceStartTime;
         for (int i = 0; i < pieceSize && intervalEndTime < dataEndTime; i++) {
             intervalEndTime = intervalEndTime + interval;
@@ -565,18 +567,17 @@ public class ADBatchTaskRunner {
                 rcf.update(point);
                 double grade = 0d;
                 double confidence = 0d;
-                if (!thresholdTrained && thresholdTrainingScores.length < THRESHOLD_MODEL_TRAINING_SIZE) {
-                    if (score > 0) {
-                        thresholdTrainingScores[thresholdTrainingScores.length] = score;
+                if (!adTaskCacheManager.isThresholdModelTrained(taskId)) {
+                    if (adTaskCacheManager.getThresholdModelTrainingDataSize(taskId) < THRESHOLD_MODEL_TRAINING_SIZE) {
+                        if (score > 0) {
+                            adTaskCacheManager.addThresholdModelTrainingData(taskId, score);
+                        }
+                    } else {
+                        logger.debug("training threshold model");
+                        threshold.train(adTaskCacheManager.getThresholdModelTrainingData(taskId));
+                        adTaskCacheManager.setThresholdModelTrained(taskId, true);
                     }
                 } else {
-                    if (!thresholdTrained && thresholdTrainingScores.length >= THRESHOLD_MODEL_TRAINING_SIZE) {
-                        // double[] doubles = thresholdTrainingScores.stream().mapToDouble(d -> d).toArray();
-                        logger.debug("training threshold model with {} data points", thresholdTrainingScores.length);
-                        threshold.train(thresholdTrainingScores);
-                        thresholdTrained = true;
-                        adTaskCacheManager.setThresholdModelTrained(taskId, thresholdTrained);
-                    }
                     grade = threshold.grade(score);
                     confidence = threshold.confidence();
                     if (score > 0) {
@@ -607,18 +608,16 @@ public class ADBatchTaskRunner {
         anomalyResultBulkIndexHandler
             .bulkIndexAnomalyResult(
                 anomalyResults,
-                new ThreadedActionListener<>(logger, threadPool, AD_BATCH_TASK_THREAD_POOL_NAME, ActionListener.wrap(response -> {
+                new ThreadedActionListener<>(logger, threadPool, AD_BATCH_TASK_THREAD_POOL_NAME, ActionListener.wrap(r -> {
                     try {
                         runNextPiece(adTask, pieceEndTime, dataStartTime, dataEndTime, interval, listener);
                     } catch (Exception e) {
                         listener.onFailure(e);
                     }
-                }, exception -> {
-                    // log error message and state
-                    logger.error("Fail to bulk index anomaly result", exception);
-                    throw new AnomalyDetectionException("Fail to bulk index anomaly result", exception);
+                }, e -> {
+                    logger.error("Fail to bulk index anomaly result", e);
+                    listener.onFailure(e);
                 }), false)
-
             );
     }
 
@@ -635,19 +634,18 @@ public class ADBatchTaskRunner {
         String taskState = initProgress >= 1.0f ? ADTaskState.RUNNING.name() : ADTaskState.INIT.name();
 
         if (pieceStartTime < dataEndTime) {
-            checkCircuitBreaker(adTask, listener);
-            // check running task exceeds limitation or not for every piece,
-            // so we can end extra task in case any race condition
-            // adTaskCacheManager.checkLimitation();
+            checkCircuitBreaker(adTask);
             long expectedPieceEndTime = pieceStartTime + pieceSize * interval;
             long pieceEndTime = expectedPieceEndTime > dataEndTime ? dataEndTime : expectedPieceEndTime;
             int i = 0;
             while (i < pieceIntervalSeconds) {
+                // check if task cancelled every second, so frontend can get STOPPED state
+                // in 1 second once task cancelled.
                 checkIfADTaskCancelled(taskId);
                 rateLimiter.acquire(1);
                 i++;
             }
-            logger.info("start next piece start from {} to {}, interval {}", pieceStartTime, pieceEndTime, interval);
+            logger.debug("start next piece start from {} to {}, interval {}", pieceStartTime, pieceEndTime, interval);
             float taskProgress = (float) (pieceStartTime - dataStartTime) / (dataEndTime - dataStartTime);
             adTaskManager
                 .updateADTask(
@@ -679,7 +677,7 @@ public class ADBatchTaskRunner {
                         )
                 );
         } else {
-            logger.info("all pieces finished for task {}, detector {}", taskId, adTask.getDetectorId());
+            logger.info("AD task finished for detector {}, task id: {}", adTask.getDetectorId(), taskId);
             adTaskCacheManager.remove(taskId);
             adTaskManager
                 .updateADTask(
@@ -697,7 +695,7 @@ public class ADBatchTaskRunner {
                             INIT_PROGRESS_FIELD,
                             initProgress
                         ),
-                    ActionListener.wrap(r -> { listener.onResponse("task execution done"); }, e -> listener.onFailure(e))
+                    ActionListener.wrap(r -> listener.onResponse("task execution done"), e -> listener.onFailure(e))
                 );
         }
     }
@@ -708,59 +706,7 @@ public class ADBatchTaskRunner {
             return 0.0f;
         }
         float initProgress = (float) rcf.getTotalUpdates() / NUM_MIN_SAMPLES;
-        logger.info("RCF total updates: {}, init progress: {}", rcf.getTotalUpdates(), initProgress);
         return initProgress > 1.0f ? 1.0f : initProgress;
-    }
-
-    /**
-     * Since we need to read from customer index and write to anomaly result index,
-     * we need to make sure we can read and write.
-     *
-     * @param state Cluster state
-     * @return whether we have global block or not
-     */
-    private boolean checkGlobalBlock(ClusterState state) {
-        return state.blocks().globalBlockedException(ClusterBlockLevel.READ) != null
-            || state.blocks().globalBlockedException(ClusterBlockLevel.WRITE) != null;
-    }
-
-    /**
-     * Similar to checkGlobalBlock, we check block on the indices level.
-     *
-     * @param state   Cluster state
-     * @param level   block level
-     * @param indices the indices on which to check block
-     * @return whether any of the index has block on the level.
-     */
-    private boolean checkIndicesBlocked(ClusterState state, ClusterBlockLevel level, String... indices) {
-        // the original index might be an index expression with wildcards like "log*",
-        // so we need to expand the expression to concrete index name
-        String[] concreteIndices = indexNameExpressionResolver.concreteIndexNames(state, IndicesOptions.lenientExpandOpen(), indices);
-
-        return state.blocks().indicesBlockedException(level, concreteIndices) != null;
-    }
-
-    /**
-     * Check if we should start anomaly prediction.
-     *
-     * @param listener listener to respond back to AnomalyResultRequest.
-     * @param adTask anomaly detection task
-     * @return if we can start anomaly prediction.
-     */
-    private boolean shouldStart(ActionListener<String> listener, ADTask adTask) {
-        ClusterState state = clusterService.state();
-        String detectorId = adTask.getDetectorId();
-        if (checkGlobalBlock(state)) {
-            listener.onFailure(new InternalFailure(detectorId, "Cannot read/write due to global block."));
-            return false;
-        }
-
-        if (checkIndicesBlocked(state, ClusterBlockLevel.READ, adTask.getDetector().getIndices().toArray(new String[0]))) {
-            listener.onFailure(new InternalFailure(detectorId, "Cannot read user index due to read block."));
-            return false;
-        }
-
-        return true;
     }
 
     private void checkIfADTaskCancelled(String taskId) {

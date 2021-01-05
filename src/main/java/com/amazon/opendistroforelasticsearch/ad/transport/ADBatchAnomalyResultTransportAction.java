@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -31,8 +31,8 @@ public class ADBatchAnomalyResultTransportAction extends HandledTransportAction<
 
     @Inject
     public ADBatchAnomalyResultTransportAction(
-        ActionFilters actionFilters,
         TransportService transportService,
+        ActionFilters actionFilters,
         ADBatchTaskRunner adBatchTaskRunner
     ) {
         super(ADBatchAnomalyResultAction.NAME, transportService, actionFilters, ADBatchAnomalyResultRequest::new);
@@ -42,6 +42,6 @@ public class ADBatchAnomalyResultTransportAction extends HandledTransportAction<
 
     @Override
     protected void doExecute(Task task, ADBatchAnomalyResultRequest request, ActionListener<ADBatchAnomalyResultResponse> actionListener) {
-        adBatchTaskRunner.run(request.getAdTask(), task, transportService, actionListener);
+        adBatchTaskRunner.run(request.getAdTask(), transportService, actionListener);
     }
 }

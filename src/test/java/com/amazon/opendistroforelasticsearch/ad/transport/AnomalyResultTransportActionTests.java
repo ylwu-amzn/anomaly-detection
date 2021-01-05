@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -43,8 +43,6 @@ public class AnomalyResultTransportActionTests extends ADIntegTestCase {
     private Instant testDataTimeStamp;
     private long start;
     private long end;
-    private String timeField = "timestamp";
-    private String categoryField = "type";
 
     @Override
     @Before
@@ -58,14 +56,7 @@ public class AnomalyResultTransportActionTests extends ADIntegTestCase {
     }
 
     private void ingestTestData() throws IOException {
-        String mappings = "{\"properties\":{\""
-            + timeField
-            + "\":{\"type\":\"date\",\"format\":\"strict_date_time||epoch_millis\"},"
-            + "\"value\":{\"type\":\"double\"}, \""
-            + categoryField
-            + "\":{\"type\":\"keyword\"},"
-            + "\"is_error\":{\"type\":\"boolean\"}, \"message\":{\"type\":\"text\"}}}";
-        createIndex(testIndex, mappings);
+        createTestDataIndex(testIndex);
         double value = randomDouble();
         String type = randomAlphaOfLength(5);
         boolean isError = randomBoolean();
@@ -205,7 +196,7 @@ public class AnomalyResultTransportActionTests extends ADIntegTestCase {
         AnomalyDetector detector = hcDetector
             ? randomHCDetector(ImmutableList.of(testIndex), ImmutableList.of(feature))
             : randomDetector(ImmutableList.of(testIndex), ImmutableList.of(feature));
-        String adId = createDetectors(detector);
+        String adId = createDetector(detector);
         return adId;
     }
 
