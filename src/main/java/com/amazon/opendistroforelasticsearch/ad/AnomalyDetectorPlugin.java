@@ -114,10 +114,14 @@ import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultAc
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchTaskRemoteExecutionAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchTaskRemoteExecutionTransportAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADCancelTaskAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADCancelTaskTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADResultBulkAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADResultBulkTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADStatsNodesAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADStatsNodesTransportAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyDetectorJobAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyDetectorJobTransportAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyResultAction;
@@ -507,7 +511,15 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
         );
 
         adTaskCacheManager = new ADTaskCacheManager(settings, clusterService, memoryTracker);
-        adTaskManager = new ADTaskManager(settings, clusterService, client, xContentRegistry, anomalyDetectionIndices);
+        adTaskManager = new ADTaskManager(
+            settings,
+            clusterService,
+            client,
+            xContentRegistry,
+            anomalyDetectionIndices,
+            nodeFilter,
+            adTaskCacheManager
+        );
         AnomalyResultBulkIndexHandler anomalyResultBulkIndexHandler = new AnomalyResultBulkIndexHandler(
             client,
             settings,
@@ -669,7 +681,9 @@ public class AnomalyDetectorPlugin extends Plugin implements ActionPlugin, Scrip
                 new ActionHandler<>(EntityProfileAction.INSTANCE, EntityProfileTransportAction.class),
                 new ActionHandler<>(SearchAnomalyDetectorInfoAction.INSTANCE, SearchAnomalyDetectorInfoTransportAction.class),
                 new ActionHandler<>(ADBatchAnomalyResultAction.INSTANCE, ADBatchAnomalyResultTransportAction.class),
-                new ActionHandler<>(ADBatchTaskRemoteExecutionAction.INSTANCE, ADBatchTaskRemoteExecutionTransportAction.class)
+                new ActionHandler<>(ADBatchTaskRemoteExecutionAction.INSTANCE, ADBatchTaskRemoteExecutionTransportAction.class),
+                new ActionHandler<>(ADTaskProfileAction.INSTANCE, ADTaskProfileTransportAction.class),
+                new ActionHandler<>(ADCancelTaskAction.INSTANCE, ADCancelTaskTransportAction.class)
             );
     }
 

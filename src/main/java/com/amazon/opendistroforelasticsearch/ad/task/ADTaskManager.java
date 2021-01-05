@@ -22,6 +22,8 @@ import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.EXECUTION_ST
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.IS_LATEST_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.LAST_UPDATE_TIME_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.STATE_FIELD;
+import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.STOPPED_BY_FIELD;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.BATCH_TASK_PIECE_INTERVAL_SECONDS;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_OLD_AD_TASK_DOCS_PER_DETECTOR;
 import static com.amazon.opendistroforelasticsearch.ad.util.ExceptionUtil.getErrorMessage;
 import static com.amazon.opendistroforelasticsearch.ad.util.ExceptionUtil.getShardsFailure;
@@ -29,11 +31,15 @@ import static org.elasticsearch.action.DocWriteResponse.Result.CREATED;
 import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,12 +56,14 @@ import org.elasticsearch.action.support.WriteRequest;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.action.update.UpdateResponse;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentParser;
+import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.RangeQueryBuilder;
 import org.elasticsearch.index.query.TermQueryBuilder;
@@ -70,17 +78,30 @@ import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.sort.SortOrder;
 
+import com.amazon.opendistroforelasticsearch.ad.common.exception.ADTaskCancelledException;
+import com.amazon.opendistroforelasticsearch.ad.common.exception.InternalFailure;
+import com.amazon.opendistroforelasticsearch.ad.common.exception.ResourceNotFoundException;
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTaskProfile;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTaskState;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTaskType;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
+import com.amazon.opendistroforelasticsearch.ad.model.DetectorProfile;
 import com.amazon.opendistroforelasticsearch.ad.rest.handler.IndexAnomalyDetectorJobActionHandler;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultRequest;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADCancelTaskAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADCancelTaskNodeResponse;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADCancelTaskRequest;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileNodeResponse;
+import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileRequest;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyDetectorJobResponse;
+import com.amazon.opendistroforelasticsearch.ad.util.DiscoveryNodeFilterer;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 import com.amazon.opendistroforelasticsearch.commons.authuser.User;
+import com.google.common.collect.ImmutableMap;
 
 /**
  * Manage AD task.
@@ -89,25 +110,38 @@ public class ADTaskManager {
     private final Logger logger = LogManager.getLogger(this.getClass());
 
     private final Client client;
+    private final ClusterService clusterService;
     private final NamedXContentRegistry xContentRegistry;
     private final AnomalyDetectionIndices detectionIndices;
+    private final DiscoveryNodeFilterer nodeFilter;
+    private final ADTaskCacheManager adTaskCacheManager;
+
     private volatile Integer maxAdTaskDocsPerDetector;
+    private volatile Integer pieceIntervalSeconds;
 
     public ADTaskManager(
         Settings settings,
         ClusterService clusterService,
         Client client,
         NamedXContentRegistry xContentRegistry,
-        AnomalyDetectionIndices detectionIndices
+        AnomalyDetectionIndices detectionIndices,
+        DiscoveryNodeFilterer nodeFilter,
+        ADTaskCacheManager adTaskCacheManager
     ) {
         this.client = client;
         this.xContentRegistry = xContentRegistry;
         this.detectionIndices = detectionIndices;
+        this.nodeFilter = nodeFilter;
+        this.clusterService = clusterService;
+        this.adTaskCacheManager = adTaskCacheManager;
 
         this.maxAdTaskDocsPerDetector = MAX_OLD_AD_TASK_DOCS_PER_DETECTOR.get(settings);
         clusterService
             .getClusterSettings()
             .addSettingsUpdateConsumer(MAX_OLD_AD_TASK_DOCS_PER_DETECTOR, it -> maxAdTaskDocsPerDetector = it);
+
+        this.pieceIntervalSeconds = BATCH_TASK_PIECE_INTERVAL_SECONDS.get(settings);
+        clusterService.getClusterSettings().addSettingsUpdateConsumer(BATCH_TASK_PIECE_INTERVAL_SECONDS, it -> pieceIntervalSeconds = it);
     }
 
     /**
@@ -129,6 +163,22 @@ public class ADTaskManager {
             detectorId,
             (detector) -> handler.startAnomalyDetectorJob(detector), // run realtime detector
             (detector) -> createADTaskIndex(detector, user, listener), // run historical detector
+            listener
+        );
+    }
+
+    public void stopDetector(
+        String detectorId,
+        IndexAnomalyDetectorJobActionHandler handler,
+        User user,
+        ActionListener<AnomalyDetectorJobResponse> listener
+    ) {
+        getDetector(
+            detectorId,
+            // stop realtime detector job
+            (detector) -> handler.stopAnomalyDetectorJob(detectorId),
+            // stop historical detector AD task
+            (detector) -> getLatestADTask(detectorId, (task) -> stopTask(detectorId, task, user, listener), listener),
             listener
         );
     }
@@ -173,6 +223,203 @@ public class ADTaskManager {
                 listener.onFailure(new ElasticsearchStatusException(message, RestStatus.INTERNAL_SERVER_ERROR));
             }
         }, exception -> listener.onFailure(exception)));
+    }
+
+    private void stopTask(String detectorId, Optional<ADTask> adTask, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
+        if (!adTask.isPresent()) {
+            listener.onFailure(new ResourceNotFoundException(detectorId, "Detector not started"));
+            return;
+        }
+
+        // no need to stop task if its state is one of end states
+        if (isADTaskEnded(adTask.get())) {
+            // TODO: tune error messages when intgrate with frontend
+            listener.onFailure(new ResourceNotFoundException(detectorId, "No running task found"));
+            return;
+        }
+        String taskId = adTask.get().getTaskId();
+
+        DiscoveryNode[] dataNodes = nodeFilter.getEligibleDataNodes();
+        String userName = user == null ? null : user.getName();
+        ADCancelTaskRequest cancelTaskRequest = new ADCancelTaskRequest(taskId, userName, dataNodes);
+        client.execute(ADCancelTaskAction.INSTANCE, cancelTaskRequest, ActionListener.wrap(response -> {
+            Set<ADTaskCancellationState> states = response
+                .getNodes()
+                .stream()
+                .filter(r -> r.getState() != null)
+                .map(ADCancelTaskNodeResponse::getState)
+                .collect(Collectors.toSet());
+            if (states.contains(ADTaskCancellationState.CANCELLED) || states.contains(ADTaskCancellationState.CANCELLED)) {
+                listener.onResponse(new AnomalyDetectorJobResponse(taskId, 0, 0, 0, RestStatus.OK));
+            } else if (states.contains(ADTaskCancellationState.NOT_FOUND)) {
+                // If ES process stopped, the running task may still stay on RUNNING state after restart, for this case
+                // the cancel result will return not found, and we should reset task state as STOPPED.
+                updateADTask(
+                    taskId,
+                    ImmutableMap.of(STATE_FIELD, ADTaskState.STOPPED),
+                    ActionListener
+                        .wrap(
+                            r -> { listener.onResponse(new AnomalyDetectorJobResponse(taskId, 0, 0, 0, RestStatus.NOT_FOUND)); },
+                            e -> listener.onFailure(e)
+                        )
+                );
+            }
+        }, e -> { listener.onFailure(e); }));
+    }
+
+    public void getLatestADTask(String detectorId, Consumer<Optional<ADTask>> function, ActionListener listener) {
+        BoolQueryBuilder query = new BoolQueryBuilder();
+        query.filter(new TermQueryBuilder(DETECTOR_ID_FIELD, detectorId));
+        query.filter(new TermQueryBuilder(IS_LATEST_FIELD, true));
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+        sourceBuilder.query(query);
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.source(sourceBuilder);
+        searchRequest.indices(ADTask.DETECTION_STATE_INDEX);
+
+        client.search(searchRequest, ActionListener.wrap(r -> {
+            long totalTasks = r.getHits().getTotalHits().value;
+            if (totalTasks == 1) {
+                SearchHit searchHit = r.getHits().getAt(0);
+                try (
+                    XContentParser parser = RestHandlerUtils.createXContentParserFromRegistry(xContentRegistry, searchHit.getSourceRef())
+                ) {
+                    ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+                    ADTask adTask = ADTask.parse(parser, searchHit.getId());
+
+                    if (!isADTaskEnded(adTask) && lastUpdateTimeExpired(adTask)) {
+                        getADTaskProfile(adTask, ActionListener.wrap(taskProfile -> {
+                            if (taskProfile.getNodeId() == null) {
+                                resetTaskStateAsStopped(adTask);
+                                adTask.setState(ADTaskState.STOPPED.name());
+                            }
+                            function.accept(Optional.of(adTask));
+                        }, e -> listener.onFailure(e)));
+                    } else {
+                        function.accept(Optional.of(adTask));
+                    }
+                    // getRunningAdTask(adTask, taskInfos -> {
+                    // if (taskInfos.size() > 0) {
+                    // adTask.setState(ADTaskState.RUNNING.name());
+                    // function.accept(Optional.of(adTask));
+                    // } else {
+                    // if (isADTaskRunning(adTask)) {
+                    // resetTaskStateAsStopped(adTask);
+                    // adTask.setState(ADTaskState.STOPPED.name());
+                    // }
+                    // function.accept(Optional.of(adTask));
+                    // }
+                    // }, listener);
+
+                } catch (Exception e) {
+                    String message = "Failed to parse AD task " + detectorId;
+                    logger.error(message, e);
+                    listener.onFailure(new ElasticsearchStatusException(message, RestStatus.INTERNAL_SERVER_ERROR));
+                }
+            } else if (totalTasks < 1) {
+                function.accept(Optional.empty());
+                // listener.onFailure(new ResourceNotFoundException(detectorId, "No latest AD task found"));
+            } else {
+                // TODO: handle multiple running lastest task. Iterate and cancel all of them
+                listener.onFailure(new ElasticsearchStatusException("Multiple", RestStatus.INTERNAL_SERVER_ERROR));
+            }
+        }, e -> {
+            if (e instanceof IndexNotFoundException) {
+                function.accept(Optional.empty());
+            } else {
+                listener.onFailure(e);
+            }
+        }));
+    }
+
+    private boolean lastUpdateTimeExpired(ADTask adTask) {
+        return adTask.getLastUpdateTime().plus(2 * pieceIntervalSeconds, ChronoUnit.SECONDS).isBefore(Instant.now());
+    }
+
+    private boolean isADTaskEnded(ADTask adTask) {
+        return ADTaskState.STOPPED.name().equals(adTask.getState())
+            || ADTaskState.FINISHED.name().equals(adTask.getState())
+            || ADTaskState.FAILED.name().equals(adTask.getState());
+    }
+
+    private void resetTaskStateAsStopped(ADTask adTask) {
+        if (!isADTaskEnded(adTask)) {
+            Map<String, Object> updatedFields = new HashMap<>();
+            updatedFields.put(STATE_FIELD, ADTaskState.STOPPED.name());
+            updateADTask(adTask.getTaskId(), updatedFields);
+        }
+    }
+
+    public void getADTaskProfile(String detectorId, ActionListener<DetectorProfile> listener) {
+        getLatestADTask(detectorId, adTask -> {
+            if (adTask.isPresent()) {
+                getADTaskProfile(adTask.get(), ActionListener.wrap(adTaskProfile -> {
+                    DetectorProfile.Builder profileBuilder = new DetectorProfile.Builder();
+                    profileBuilder.adTaskProfile(adTaskProfile);
+                    listener.onResponse(profileBuilder.build());
+                }, e -> listener.onFailure(e)));
+            } else {
+                listener.onFailure(new ResourceNotFoundException(detectorId, "Can't find task for detector"));
+            }
+        }, listener);
+    }
+
+    private void getADTaskProfile(ADTask adTask, ActionListener<ADTaskProfile> listener) {
+        String taskId = adTask.getTaskId();
+
+        if (adTaskCacheManager.contains(taskId)) {
+            ADTaskProfile adTaskProfile = getLocalADTaskProfile(taskId, adTask);
+            listener.onResponse(adTaskProfile);
+        } else {
+            DiscoveryNode[] dataNodes = nodeFilter.getEligibleDataNodes();
+            ADTaskProfileRequest adTaskProfileRequest = new ADTaskProfileRequest(taskId, dataNodes);
+            client.execute(ADTaskProfileAction.INSTANCE, adTaskProfileRequest, ActionListener.wrap(response -> {
+                List<ADTaskProfile> nodeResponses = response
+                    .getNodes()
+                    .stream()
+                    .filter(r -> r.getAdTaskProfile() != null)
+                    .map(ADTaskProfileNodeResponse::getAdTaskProfile)
+                    .collect(Collectors.toList());
+                if (nodeResponses.size() > 1) {
+                    listener.onFailure(new InternalFailure(adTask.getDetectorId(), "Multiple tasks running"));
+                } else if (nodeResponses.size() > 0) {
+                    ADTaskProfile nodeResponse = nodeResponses.get(0);
+                    ADTaskProfile adTaskProfile = new ADTaskProfile(
+                        adTask,
+                        nodeResponse.getShingleSize(),
+                        nodeResponse.getRcfTotalUpdates(),
+                        nodeResponse.getThresholdModelTrained(),
+                        nodeResponse.getThresholdNodelTrainingDataSize(),
+                        nodeResponse.getNodeId()
+                    );
+                    listener.onResponse(adTaskProfile);
+                } else {
+                    ADTaskProfile adTaskProfile = new ADTaskProfile(adTask, null, null, null, null, null);
+                    listener.onResponse(adTaskProfile);
+                }
+            }, e -> { listener.onFailure(e); }));
+        }
+    }
+
+    public ADTaskProfile getLocalADTaskProfile(String taskId) {
+        return getLocalADTaskProfile(taskId, (ADTask) null);
+    }
+
+    private ADTaskProfile getLocalADTaskProfile(String taskId, ADTask adTask) {
+        ADTaskProfile adTaskProfile = null;
+        if (adTaskCacheManager.contains(taskId)) {
+            adTaskProfile = new ADTaskProfile(
+                adTask,
+                adTaskCacheManager.getShingle(taskId) == null ? 0 : adTaskCacheManager.getShingle(taskId).size(),
+                adTaskCacheManager.getRcfModel(taskId) == null ? 0 : adTaskCacheManager.getRcfModel(taskId).getTotalUpdates(),
+                adTaskCacheManager.isThresholdModelTrained(taskId),
+                adTaskCacheManager.getThresholdModelTrainingData(taskId) == null
+                    ? 0
+                    : adTaskCacheManager.getThresholdModelTrainingData(taskId).length,
+                clusterService.localNode().getId()
+            );
+        }
+        return adTaskProfile;
     }
 
     private String validateDetector(AnomalyDetector detector) {
@@ -400,12 +647,22 @@ public class ADTaskManager {
      * @param e exception
      */
     public void handleADTaskException(ADTask adTask, Exception e) {
+        // TODO: remove task execution from map if execution fails
         // TODO: handle timeout exception
-        // TODO: handle TaskCancelledException
+        String state = ADTaskState.FAILED.name();
         Map<String, Object> updatedFields = new HashMap<>();
-        logger.error("Failed to execute AD batch task, task id: " + adTask.getTaskId() + ", detector id: " + adTask.getDetectorId(), e);
-        updatedFields.put(STATE_FIELD, ADTaskState.FAILED.name());
+        if (e instanceof ADTaskCancelledException) {
+            logger.warn("AD task cancelled: " + adTask.getTaskId());
+            state = ADTaskState.STOPPED.name();
+            String stoppedBy = ((ADTaskCancelledException) e).getCancelledBy();
+            if (stoppedBy != null) {
+                updatedFields.put(STOPPED_BY_FIELD, stoppedBy);
+            }
+        } else {
+            logger.error("Failed to execute AD batch task, task id: " + adTask.getTaskId() + ", detector id: " + adTask.getDetectorId(), e);
+        }
         updatedFields.put(ERROR_FIELD, getErrorMessage(e));
+        updatedFields.put(STATE_FIELD, state);
         updatedFields.put(EXECUTION_END_TIME_FIELD, Instant.now().toEpochMilli());
         updateADTask(adTask.getTaskId(), updatedFields);
     }
@@ -439,6 +696,17 @@ public class ADTaskManager {
                 updateRequest,
                 ActionListener.wrap(response -> listener.onResponse(response), exception -> listener.onFailure(exception))
             );
+    }
+
+    public ADTaskCancellationState cancelTask(String taskId, String reason, String userName) {
+        if (!adTaskCacheManager.contains(taskId)) {
+            return ADTaskCancellationState.NOT_FOUND;
+        }
+        if (adTaskCacheManager.isCancelled(taskId)) {
+            return ADTaskCancellationState.ALREADY_CANCELLED;
+        }
+        adTaskCacheManager.cancel(taskId, reason, userName);
+        return ADTaskCancellationState.CANCELLED;
     }
 
 }

@@ -479,6 +479,10 @@ public class ADTask implements ToXContentObject, Writeable {
         return state;
     }
 
+    public void setState(String state) {
+        this.state = state;
+    }
+
     public String getDetectorId() {
         return detectorId;
     }

@@ -123,8 +123,7 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
         if (rawPath.endsWith(RestHandlerUtils.START_JOB)) {
             adTaskManager.startDetector(detectorId, handler, user, listener);
         } else if (rawPath.endsWith(RestHandlerUtils.STOP_JOB)) {
-            // TODO: change to adTaskManager.stopDetector
-            handler.stopAnomalyDetectorJob(detectorId);
+            adTaskManager.stopDetector(detectorId, handler, user, listener);
         }
     }
 }

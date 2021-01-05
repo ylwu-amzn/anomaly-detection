@@ -39,6 +39,7 @@ public class DetectorProfile implements Writeable, ToXContentObject, Mergeable {
     private InitProgressProfile initProgress;
     private Long totalEntities;
     private Long activeEntities;
+    private ADTaskProfile adTaskProfile;
 
     public XContentBuilder toXContent(XContentBuilder builder) throws IOException {
         return toXContent(builder, ToXContent.EMPTY_PARAMS);
@@ -52,6 +53,7 @@ public class DetectorProfile implements Writeable, ToXContentObject, Mergeable {
         this.coordinatingNode = in.readString();
         this.totalSizeInBytes = in.readLong();
         this.initProgress = new InitProgressProfile(in);
+        this.adTaskProfile = new ADTaskProfile(in);
     }
 
     private DetectorProfile() {}
@@ -66,6 +68,7 @@ public class DetectorProfile implements Writeable, ToXContentObject, Mergeable {
         private InitProgressProfile initProgress = null;
         private Long totalEntities;
         private Long activeEntities;
+        private ADTaskProfile adTaskProfile;
 
         public Builder() {}
 
@@ -114,6 +117,11 @@ public class DetectorProfile implements Writeable, ToXContentObject, Mergeable {
             return this;
         }
 
+        public Builder adTaskProfile(ADTaskProfile adTaskProfile) {
+            this.adTaskProfile = adTaskProfile;
+            return this;
+        }
+
         public DetectorProfile build() {
             DetectorProfile profile = new DetectorProfile();
             profile.state = this.state;
@@ -125,6 +133,7 @@ public class DetectorProfile implements Writeable, ToXContentObject, Mergeable {
             profile.initProgress = initProgress;
             profile.totalEntities = totalEntities;
             profile.activeEntities = activeEntities;
+            profile.adTaskProfile = adTaskProfile;
 
             return profile;
         }
@@ -139,6 +148,7 @@ public class DetectorProfile implements Writeable, ToXContentObject, Mergeable {
         out.writeString(coordinatingNode);
         out.writeLong(totalSizeInBytes);
         initProgress.writeTo(out);
+        adTaskProfile.writeTo(out);
     }
 
     @Override
@@ -175,6 +185,9 @@ public class DetectorProfile implements Writeable, ToXContentObject, Mergeable {
         }
         if (activeEntities != null) {
             xContentBuilder.field(CommonName.ACTIVE_ENTITIES, activeEntities);
+        }
+        if (adTaskProfile != null) {
+            xContentBuilder.field(CommonName.AD_TASK, adTaskProfile);
         }
         return xContentBuilder.endObject();
     }
@@ -251,6 +264,14 @@ public class DetectorProfile implements Writeable, ToXContentObject, Mergeable {
         this.activeEntities = activeEntities;
     }
 
+    public ADTaskProfile getAdTaskProfile() {
+        return adTaskProfile;
+    }
+
+    public void setAdTaskProfile(ADTaskProfile adTaskProfile) {
+        this.adTaskProfile = adTaskProfile;
+    }
+
     @Override
     public void merge(Mergeable other) {
         if (this == other || other == null || getClass() != other.getClass()) {
@@ -283,6 +304,9 @@ public class DetectorProfile implements Writeable, ToXContentObject, Mergeable {
         }
         if (otherProfile.getActiveEntities() != null) {
             this.activeEntities = otherProfile.getActiveEntities();
+        }
+        if (otherProfile.getAdTaskProfile() != null) {
+            this.adTaskProfile = otherProfile.getAdTaskProfile();
         }
     }
 
@@ -325,6 +349,9 @@ public class DetectorProfile implements Writeable, ToXContentObject, Mergeable {
             if (activeEntities != null) {
                 equalsBuilder.append(activeEntities, other.activeEntities);
             }
+            if (adTaskProfile != null) {
+                equalsBuilder.append(adTaskProfile, other.adTaskProfile);
+            }
             return equalsBuilder.isEquals();
         }
         return false;
@@ -342,6 +369,7 @@ public class DetectorProfile implements Writeable, ToXContentObject, Mergeable {
             .append(initProgress)
             .append(totalEntities)
             .append(activeEntities)
+            .append(adTaskProfile)
             .toHashCode();
     }
 
@@ -375,6 +403,9 @@ public class DetectorProfile implements Writeable, ToXContentObject, Mergeable {
         }
         if (activeEntities != null) {
             toStringBuilder.append(CommonName.ACTIVE_ENTITIES, activeEntities);
+        }
+        if (adTaskProfile != null) {
+            toStringBuilder.append(CommonName.AD_TASK, adTaskProfile);
         }
         return toStringBuilder.toString();
     }

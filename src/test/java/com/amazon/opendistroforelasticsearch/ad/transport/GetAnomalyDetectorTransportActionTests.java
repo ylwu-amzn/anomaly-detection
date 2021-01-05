@@ -50,6 +50,7 @@ import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
 import com.amazon.opendistroforelasticsearch.ad.model.EntityProfile;
 import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.util.DiscoveryNodeFilterer;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 import com.google.common.collect.ImmutableMap;
@@ -58,6 +59,7 @@ public class GetAnomalyDetectorTransportActionTests extends ESSingleNodeTestCase
     private GetAnomalyDetectorTransportAction action;
     private Task task;
     private ActionListener<GetAnomalyDetectorResponse> response;
+    private ADTaskManager adTaskManager;
 
     @Override
     @Before
@@ -69,6 +71,7 @@ public class GetAnomalyDetectorTransportActionTests extends ESSingleNodeTestCase
             Collections.unmodifiableSet(new HashSet<>(Arrays.asList(AnomalyDetectorSettings.FILTER_BY_BACKEND_ROLES)))
         );
         when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
+        adTaskManager = mock(ADTaskManager.class);
         action = new GetAnomalyDetectorTransportAction(
             Mockito.mock(TransportService.class),
             Mockito.mock(DiscoveryNodeFilterer.class),
@@ -76,7 +79,8 @@ public class GetAnomalyDetectorTransportActionTests extends ESSingleNodeTestCase
             clusterService,
             client(),
             Settings.EMPTY,
-            xContentRegistry()
+            xContentRegistry(),
+            adTaskManager
         );
         task = Mockito.mock(Task.class);
         response = new ActionListener<GetAnomalyDetectorResponse>() {

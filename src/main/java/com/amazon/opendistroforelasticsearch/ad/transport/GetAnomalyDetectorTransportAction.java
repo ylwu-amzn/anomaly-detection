@@ -61,6 +61,7 @@ import com.amazon.opendistroforelasticsearch.ad.model.DetectorProfile;
 import com.amazon.opendistroforelasticsearch.ad.model.DetectorProfileName;
 import com.amazon.opendistroforelasticsearch.ad.model.EntityProfileName;
 import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.util.DiscoveryNodeFilterer;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 import com.amazon.opendistroforelasticsearch.commons.authuser.User;
@@ -82,6 +83,7 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
     private final NamedXContentRegistry xContentRegistry;
     private final DiscoveryNodeFilterer nodeFilter;
     private volatile Boolean filterByEnabled;
+    private final ADTaskManager adTaskManager;
 
     @Inject
     public GetAnomalyDetectorTransportAction(
@@ -91,7 +93,8 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
         ClusterService clusterService,
         Client client,
         Settings settings,
-        NamedXContentRegistry xContentRegistry
+        NamedXContentRegistry xContentRegistry,
+        ADTaskManager adTaskManager
     ) {
         super(GetAnomalyDetectorAction.NAME, transportService, actionFilters, GetAnomalyDetectorRequest::new);
         this.clusterService = clusterService;
@@ -113,6 +116,7 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
         this.nodeFilter = nodeFilter;
         filterByEnabled = AnomalyDetectorSettings.FILTER_BY_BACKEND_ROLES.get(settings);
         clusterService.getClusterSettings().addSettingsUpdateConsumer(FILTER_BY_BACKEND_ROLES, it -> filterByEnabled = it);
+        this.adTaskManager = adTaskManager;
     }
 
     @Override
@@ -176,7 +180,8 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
                         client,
                         xContentRegistry,
                         nodeFilter,
-                        AnomalyDetectorSettings.NUM_MIN_SAMPLES
+                        AnomalyDetectorSettings.NUM_MIN_SAMPLES,
+                        adTaskManager
                     );
                     profileRunner.profile(detectorID, getProfileActionListener(listener, detectorID), profilesToCollect);
                 }
