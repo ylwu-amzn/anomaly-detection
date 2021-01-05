@@ -166,13 +166,11 @@ public class AnomalyDetectorJobTransportActionTests extends HistoricalDetectorIn
         createDetectionStateIndex();
         List<ADTaskState> states = ImmutableList.of(ADTaskState.FAILED, ADTaskState.FINISHED, ADTaskState.STOPPED);
         for (ADTaskState state : states) {
-            for (int i = 0; i < maxOldAdTaskDocsPerDetector; i++) {
-                ADTask task = randomADTask(randomAlphaOfLength(5), detector, detectorId, state);
-                createADTask(task);
-            }
+            ADTask task = randomADTask(randomAlphaOfLength(5), detector, detectorId, state);
+            createADTask(task);
         }
         long count = countDocs(ADTask.DETECTION_STATE_INDEX);
-        assertEquals(states.size() * maxOldAdTaskDocsPerDetector, count);
+        assertEquals(states.size(), count);
 
         AnomalyDetectorJobRequest request = new AnomalyDetectorJobRequest(detectorId, randomLong(), randomLong(), START_JOB);
         AtomicReference<AnomalyDetectorJobResponse> response = new AtomicReference<>();

@@ -19,14 +19,15 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.delete.DeleteRequest;
+import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
@@ -105,58 +106,77 @@ public class MockReindexPlugin extends Plugin implements ActionPlugin {
             this.client = client;
         }
 
+        private class MultiResponsesActionListener implements ActionListener<DeleteResponse> {
+            private final ActionListener<BulkByScrollResponse> delegate;
+            private final AtomicInteger collectedResponseCount;
+            private final AtomicLong maxResponseCount;
+            private final AtomicBoolean hasFailure;
+
+            MultiResponsesActionListener(ActionListener<BulkByScrollResponse> delegate, long maxResponseCount) {
+                this.delegate = delegate;
+                this.collectedResponseCount = new AtomicInteger(0);
+                this.maxResponseCount = new AtomicLong(maxResponseCount);
+                this.hasFailure = new AtomicBoolean(false);
+            }
+
+            @Override
+            public void onResponse(DeleteResponse deleteResponse) {
+                if (collectedResponseCount.incrementAndGet() >= maxResponseCount.get()) {
+                    finish();
+                }
+            }
+
+            @Override
+            public void onFailure(Exception e) {
+                this.hasFailure.set(true);
+                if (collectedResponseCount.incrementAndGet() >= maxResponseCount.get()) {
+                    finish();
+                }
+            }
+
+            private void finish() {
+                if (this.hasFailure.get()) {
+                    this.delegate.onFailure(new RuntimeException("failed to delete old AD tasks"));
+                } else {
+                    try {
+                        XContentParser parser = TestHelpers
+                            .parser(
+                                "{\"slice_id\":1,\"total\":2,\"updated\":0,\"created\":0,\"deleted\":"
+                                    + maxResponseCount
+                                    + ",\"batches\":6,\"version_conflicts\":0,\"noops\":0,\"retries\":{\"bulk\":0,"
+                                    + "\"search\":10},\"throttled_millis\":0,\"requests_per_second\":13.0,\"canceled\":"
+                                    + "\"reasonCancelled\",\"throttled_until_millis\":14}"
+                            );
+                        parser.nextToken();
+                        BulkByScrollResponse response = new BulkByScrollResponse(
+                            TimeValue.timeValueMillis(10),
+                            BulkByScrollTask.Status.innerFromXContent(parser),
+                            ImmutableList.of(),
+                            ImmutableList.of(),
+                            false
+                        );
+                        this.delegate.onResponse(response);
+                    } catch (IOException exception) {
+                        this.delegate.onFailure(new RuntimeException("failed to parse BulkByScrollResponse"));
+                    }
+                }
+            }
+        }
+
         @Override
         protected void doExecute(Task task, DeleteByQueryRequest request, ActionListener<BulkByScrollResponse> listener) {
             SearchRequest searchRequest = request.getSearchRequest();
             client.search(searchRequest, ActionListener.wrap(r -> {
-                try {
-                    long totalHits = r.getHits().getTotalHits().value;
-                    Iterator<SearchHit> iterator = r.getHits().iterator();
-                    CountDownLatch latch = new CountDownLatch((int) totalHits);
-                    AtomicBoolean hasFailure = new AtomicBoolean(false);
-                    AtomicReference<Exception> deleteException = new AtomicReference<>();
-                    while (iterator.hasNext()) {
-                        CountDownLatch tmpLatch = new CountDownLatch(1);
-                        String id = iterator.next().getId();
-                        DeleteRequest deleteRequest = new DeleteRequest(ADTask.DETECTION_STATE_INDEX, id)
-                            .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
-                        client.delete(deleteRequest, ActionListener.wrap(res -> {
-                            latch.countDown();
-                            tmpLatch.countDown();
-                        }, e -> {
-                            hasFailure.set(true);
-                            deleteException.set(e);
-                            latch.countDown();
-                            tmpLatch.countDown();
-                        }));
-                        tmpLatch.await();
-                    }
-                    latch.await();
-                    if (hasFailure.get()) {
-                        listener.onFailure(deleteException.get());
-                        return;
-                    }
-                    XContentParser parser = TestHelpers
-                        .parser(
-                            "{\"slice_id\":1,\"total\":2,\"updated\":0,\"created\":0,\"deleted\":"
-                                + totalHits
-                                + ",\"batches\":6,\"version_conflicts\":0,\"noops\":0,\"retries\":{\"bulk\":0,"
-                                + "\"search\":10},\"throttled_millis\":0,\"requests_per_second\":13.0,\"canceled\":"
-                                + "\"reasonCancelled\",\"throttled_until_millis\":14}"
-                        );
-                    parser.nextToken();
-                    BulkByScrollResponse response = new BulkByScrollResponse(
-                        TimeValue.timeValueMillis(10),
-                        BulkByScrollTask.Status.innerFromXContent(parser),
-                        ImmutableList.of(),
-                        ImmutableList.of(),
-                        false
-                    );
-                    listener.onResponse(response);
-                } catch (IOException e) {
-                    listener.onFailure(e);
+                long totalHits = r.getHits().getTotalHits().value;
+                MultiResponsesActionListener delegateListener = new MultiResponsesActionListener(listener, totalHits);
+                Iterator<SearchHit> iterator = r.getHits().iterator();
+                while (iterator.hasNext()) {
+                    String id = iterator.next().getId();
+                    DeleteRequest deleteRequest = new DeleteRequest(ADTask.DETECTION_STATE_INDEX, id)
+                        .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
+                    client.delete(deleteRequest, delegateListener);
                 }
-            }, e -> { listener.onFailure(e); }));
+            }, e -> listener.onFailure(e)));
         }
     }
 }
