@@ -41,7 +41,6 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchStatusException;
@@ -82,6 +81,7 @@ import org.elasticsearch.search.sort.SortOrder;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.ADTaskCancelledException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.InternalFailure;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.ResourceNotFoundException;
+import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTaskProfile;
@@ -663,7 +663,7 @@ public class ADTaskManager {
             } else {
                 logger.error("Failed to update AD task {}, status: {}", taskId, response.status());
             }
-        }, e -> logger.error("Failed to update task: " + taskId, e)));
+        }, e -> { logger.error("Failed to update task: " + taskId, e); }));
     }
 
     /**

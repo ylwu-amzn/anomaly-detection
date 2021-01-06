@@ -892,6 +892,7 @@ public class AnomalyDetectorRestApiIT extends AnomalyDetectorRestTestCase {
     }
 
     public void testStopNonExistingAdJobIndex() throws Exception {
+        AnomalyDetector detector = createRandomAnomalyDetector(true, true, client());
         TestHelpers
             .assertFailWith(
                 ResponseException.class,
@@ -900,7 +901,7 @@ public class AnomalyDetectorRestApiIT extends AnomalyDetectorRestTestCase {
                     .makeRequest(
                         client(),
                         "POST",
-                        TestHelpers.AD_BASE_DETECTORS_URI + "/" + randomAlphaOfLength(10) + "/_stop",
+                        TestHelpers.AD_BASE_DETECTORS_URI + "/" + detector.getDetectorId() + "/_stop",
                         ImmutableMap.of(),
                         "",
                         null
@@ -924,12 +925,27 @@ public class AnomalyDetectorRestApiIT extends AnomalyDetectorRestTestCase {
         TestHelpers
             .assertFailWith(
                 ResponseException.class,
-                "Anomaly detector job not exist",
+                "AnomalyDetector is not found",
                 () -> TestHelpers
                     .makeRequest(
                         client(),
                         "POST",
                         TestHelpers.AD_BASE_DETECTORS_URI + "/" + randomAlphaOfLength(10) + "/_stop",
+                        ImmutableMap.of(),
+                        "",
+                        null
+                    )
+            );
+        AnomalyDetector detector2 = createRandomAnomalyDetector(true, false, client());
+        TestHelpers
+            .assertFailWith(
+                ResponseException.class,
+                "Anomaly detector job not exist",
+                () -> TestHelpers
+                    .makeRequest(
+                        client(),
+                        "POST",
+                        TestHelpers.AD_BASE_DETECTORS_URI + "/" + detector2.getDetectorId() + "/_stop",
                         ImmutableMap.of(),
                         "",
                         null

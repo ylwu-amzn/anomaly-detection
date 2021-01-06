@@ -19,6 +19,7 @@ import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorS
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_BATCH_TASK_PER_NODE;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_OLD_AD_TASK_DOCS_PER_DETECTOR;
 import static com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils.START_JOB;
+import static com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils.STOP_JOB;
 import static org.elasticsearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
 import static org.elasticsearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
 
@@ -92,12 +93,7 @@ public class AnomalyDetectorJobTransportActionTests extends HistoricalDetectorIn
     public void testDetectorIndexNotFound() {
         deleteDetectorIndex();
         String detectorId = randomAlphaOfLength(5);
-        AnomalyDetectorJobRequest request = new AnomalyDetectorJobRequest(
-            detectorId,
-            UNASSIGNED_SEQ_NO,
-            UNASSIGNED_PRIMARY_TERM,
-            START_JOB
-        );
+        AnomalyDetectorJobRequest request = startDetectorJobRequest(detectorId);
         IndexNotFoundException exception = expectThrows(
             IndexNotFoundException.class,
             () -> client().execute(AnomalyDetectorJobAction.INSTANCE, request).actionGet(3000)
@@ -107,12 +103,7 @@ public class AnomalyDetectorJobTransportActionTests extends HistoricalDetectorIn
 
     public void testDetectorNotFound() {
         String detectorId = randomAlphaOfLength(5);
-        AnomalyDetectorJobRequest request = new AnomalyDetectorJobRequest(
-            detectorId,
-            UNASSIGNED_SEQ_NO,
-            UNASSIGNED_PRIMARY_TERM,
-            START_JOB
-        );
+        AnomalyDetectorJobRequest request = startDetectorJobRequest(detectorId);
         ElasticsearchStatusException exception = expectThrows(
             ElasticsearchStatusException.class,
             () -> client().execute(AnomalyDetectorJobAction.INSTANCE, request).actionGet(3000)
@@ -121,6 +112,13 @@ public class AnomalyDetectorJobTransportActionTests extends HistoricalDetectorIn
     }
 
     public void testValidHistoricalDetector() throws IOException, InterruptedException {
+        ADTask adTask = startHistoricalDetector();
+        Thread.sleep(10000);
+        ADTask finishedTask = getADTask(adTask.getTaskId());
+        assertEquals(ADTaskState.FINISHED.name(), finishedTask.getState());
+    }
+
+    private ADTask startHistoricalDetector() throws IOException {
         DetectionDateRange dateRange = new DetectionDateRange(startTime, endTime);
         AnomalyDetector detector = TestHelpers
             .randomDetector(dateRange, ImmutableList.of(maxValueFeature()), testIndex, detectionIntervalInMinutes, timeField);
@@ -132,9 +130,7 @@ public class AnomalyDetectorJobTransportActionTests extends HistoricalDetectorIn
             START_JOB
         );
         AnomalyDetectorJobResponse response = client().execute(AnomalyDetectorJobAction.INSTANCE, request).actionGet(10000);
-        Thread.sleep(10000);
-        GetResponse doc = getDoc(CommonName.DETECTION_STATE_INDEX, response.getId());
-        assertEquals(ADTaskState.FINISHED.name(), doc.getSourceAsMap().get(ADTask.STATE_FIELD));
+        return getADTask(response.getId());
     }
 
     public void testRunMultipleTasksForHistoricalDetector() throws IOException, InterruptedException {
@@ -142,12 +138,7 @@ public class AnomalyDetectorJobTransportActionTests extends HistoricalDetectorIn
         AnomalyDetector detector = TestHelpers
             .randomDetector(dateRange, ImmutableList.of(maxValueFeature()), testIndex, detectionIntervalInMinutes, timeField);
         String detectorId = createDetector(detector);
-        AnomalyDetectorJobRequest request = new AnomalyDetectorJobRequest(
-            detectorId,
-            UNASSIGNED_SEQ_NO,
-            UNASSIGNED_PRIMARY_TERM,
-            START_JOB
-        );
+        AnomalyDetectorJobRequest request = startDetectorJobRequest(detectorId);
         AnomalyDetectorJobResponse response = client().execute(AnomalyDetectorJobAction.INSTANCE, request).actionGet(10000);
         assertNotNull(response.getId());
         ElasticsearchStatusException exception = expectThrows(
@@ -188,21 +179,21 @@ public class AnomalyDetectorJobTransportActionTests extends HistoricalDetectorIn
     }
 
     public void testStartRealtimeDetector() throws IOException {
-        AnomalyDetector detector = TestHelpers
-            .randomDetector(null, ImmutableList.of(maxValueFeature()), testIndex, detectionIntervalInMinutes, timeField);
-        String detectorId = createDetector(detector);
-        AnomalyDetectorJobRequest request = new AnomalyDetectorJobRequest(
-            detectorId,
-            UNASSIGNED_SEQ_NO,
-            UNASSIGNED_PRIMARY_TERM,
-            START_JOB
-        );
-        AnomalyDetectorJobResponse response = client().execute(AnomalyDetectorJobAction.INSTANCE, request).actionGet(10000);
-        assertEquals(detectorId, response.getId());
+        String detectorId = startRealtimeDetector();
         GetResponse doc = getDoc(AnomalyDetectorJob.ANOMALY_DETECTOR_JOB_INDEX, detectorId);
         AnomalyDetectorJob job = toADJob(doc);
         assertTrue(job.isEnabled());
         assertEquals(detectorId, job.getName());
+    }
+
+    private String startRealtimeDetector() throws IOException {
+        AnomalyDetector detector = TestHelpers
+            .randomDetector(null, ImmutableList.of(maxValueFeature()), testIndex, detectionIntervalInMinutes, timeField);
+        String detectorId = createDetector(detector);
+        AnomalyDetectorJobRequest request = startDetectorJobRequest(detectorId);
+        AnomalyDetectorJobResponse response = client().execute(AnomalyDetectorJobAction.INSTANCE, request).actionGet(10000);
+        assertEquals(detectorId, response.getId());
+        return response.getId();
     }
 
     public void testRealtimeDetectorWithoutFeature() throws IOException {
@@ -242,16 +233,39 @@ public class AnomalyDetectorJobTransportActionTests extends HistoricalDetectorIn
 
     private void testInvalidDetector(AnomalyDetector detector, String error) throws IOException {
         String detectorId = createDetector(detector);
-        AnomalyDetectorJobRequest request = new AnomalyDetectorJobRequest(
-            detectorId,
-            UNASSIGNED_SEQ_NO,
-            UNASSIGNED_PRIMARY_TERM,
-            START_JOB
-        );
+        AnomalyDetectorJobRequest request = startDetectorJobRequest(detectorId);
         ElasticsearchStatusException exception = expectThrows(
             ElasticsearchStatusException.class,
             () -> client().execute(AnomalyDetectorJobAction.INSTANCE, request).actionGet(10000)
         );
         assertEquals(error, exception.getMessage());
+    }
+
+    private AnomalyDetectorJobRequest startDetectorJobRequest(String detectorId) {
+        return new AnomalyDetectorJobRequest(detectorId, UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM, START_JOB);
+    }
+
+    private AnomalyDetectorJobRequest stopDetectorJobRequest(String detectorId) {
+        return new AnomalyDetectorJobRequest(detectorId, UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM, STOP_JOB);
+    }
+
+    public void testStopRealtimeDetector() throws IOException {
+        String detectorId = startRealtimeDetector();
+        AnomalyDetectorJobRequest request = stopDetectorJobRequest(detectorId);
+        client().execute(AnomalyDetectorJobAction.INSTANCE, request).actionGet(10000);
+        GetResponse doc = getDoc(AnomalyDetectorJob.ANOMALY_DETECTOR_JOB_INDEX, detectorId);
+        AnomalyDetectorJob job = toADJob(doc);
+        assertFalse(job.isEnabled());
+        assertEquals(detectorId, job.getName());
+    }
+
+    public void testStopHistoricalDetector() throws IOException, InterruptedException {
+        ADTask adTask = startHistoricalDetector();
+        assertEquals(ADTaskState.INIT.name(), adTask.getState());
+        AnomalyDetectorJobRequest request = stopDetectorJobRequest(adTask.getDetectorId());
+        client().execute(AnomalyDetectorJobAction.INSTANCE, request).actionGet(10000);
+        Thread.sleep(2000);
+        ADTask stoppedTask = getADTask(adTask.getTaskId());
+        assertEquals(ADTaskState.STOPPED.name(), stoppedTask.getState());
     }
 }
