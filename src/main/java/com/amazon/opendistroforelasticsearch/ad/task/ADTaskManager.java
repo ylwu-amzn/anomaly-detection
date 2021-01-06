@@ -41,6 +41,7 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchStatusException;
@@ -275,7 +276,7 @@ public class ADTaskManager {
         sourceBuilder.query(query);
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.source(sourceBuilder);
-        searchRequest.indices(ADTask.DETECTION_STATE_INDEX);
+        searchRequest.indices(CommonName.DETECTION_STATE_INDEX);
 
         client.search(searchRequest, ActionListener.wrap(r -> {
             long totalTasks = r.getHits().getTotalHits().value;
@@ -298,18 +299,6 @@ public class ADTaskManager {
                     } else {
                         function.accept(Optional.of(adTask));
                     }
-                    // getRunningAdTask(adTask, taskInfos -> {
-                    // if (taskInfos.size() > 0) {
-                    // adTask.setState(ADTaskState.RUNNING.name());
-                    // function.accept(Optional.of(adTask));
-                    // } else {
-                    // if (isADTaskRunning(adTask)) {
-                    // resetTaskStateAsStopped(adTask);
-                    // adTask.setState(ADTaskState.STOPPED.name());
-                    // }
-                    // function.accept(Optional.of(adTask));
-                    // }
-                    // }, listener);
 
                 } catch (Exception e) {
                     String message = "Failed to parse AD task " + detectorId;
@@ -438,10 +427,10 @@ public class ADTaskManager {
         } else {
             detectionIndices.initDetectionStateIndex(ActionListener.wrap(r -> {
                 if (r.isAcknowledged()) {
-                    logger.info("Created {} with mappings.", ADTask.DETECTION_STATE_INDEX);
+                    logger.info("Created {} with mappings.", CommonName.DETECTION_STATE_INDEX);
                     executeHistoricalDetector(detector, user, listener);
                 } else {
-                    String error = "Create index " + ADTask.DETECTION_STATE_INDEX + " with mappings not acknowledged";
+                    String error = "Create index " + CommonName.DETECTION_STATE_INDEX + " with mappings not acknowledged";
                     logger.warn(error);
                     listener.onFailure(new ElasticsearchStatusException(error, RestStatus.INTERNAL_SERVER_ERROR));
                 }
@@ -464,7 +453,7 @@ public class ADTaskManager {
         searchSourceBuilder.query(query);
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.source(searchSourceBuilder);
-        searchRequest.indices(ADTask.DETECTION_STATE_INDEX);
+        searchRequest.indices(CommonName.DETECTION_STATE_INDEX);
 
         client.search(searchRequest, ActionListener.wrap(r -> {
             if (r.getHits().getTotalHits().value > 0) {
@@ -480,7 +469,7 @@ public class ADTaskManager {
 
     private void executeHistoricalDetector(AnomalyDetector detector, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
         UpdateByQueryRequest updateByQueryRequest = new UpdateByQueryRequest();
-        updateByQueryRequest.indices(ADTask.DETECTION_STATE_INDEX);
+        updateByQueryRequest.indices(CommonName.DETECTION_STATE_INDEX);
         BoolQueryBuilder query = new BoolQueryBuilder();
         query.filter(new TermQueryBuilder(DETECTOR_ID_FIELD, detector.getDetectorId()));
         query.filter(new TermQueryBuilder(IS_LATEST_FIELD, true));
@@ -518,7 +507,7 @@ public class ADTaskManager {
             .startedBy(userName)
             .build();
 
-        IndexRequest request = new IndexRequest(ADTask.DETECTION_STATE_INDEX);
+        IndexRequest request = new IndexRequest(CommonName.DETECTION_STATE_INDEX);
         try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
             request
                 .source(adTask.toXContent(builder, RestHandlerUtils.XCONTENT_WITH_TYPE))
@@ -572,7 +561,7 @@ public class ADTaskManager {
             .trackTotalHits(true)
             .size(1);
         String s = sourceBuilder.toString();
-        searchRequest.source(sourceBuilder).indices(ADTask.DETECTION_STATE_INDEX);
+        searchRequest.source(sourceBuilder).indices(CommonName.DETECTION_STATE_INDEX);
         String detectorId = adTask.getDetectorId();
         client.search(searchRequest, ActionListener.wrap(r -> {
             Iterator<SearchHit> iterator = r.getHits().iterator();
@@ -591,7 +580,7 @@ public class ADTaskManager {
                     ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
                     ADTask task = ADTask.parse(parser, searchHit.getId());
 
-                    DeleteByQueryRequest request = new DeleteByQueryRequest(ADTask.DETECTION_STATE_INDEX);
+                    DeleteByQueryRequest request = new DeleteByQueryRequest(CommonName.DETECTION_STATE_INDEX);
                     RangeQueryBuilder rangeQueryBuilder = new RangeQueryBuilder(EXECUTION_START_TIME_FIELD);
                     rangeQueryBuilder.lt(task.getExecutionStartTime().toEpochMilli()).format("epoch_millis");
                     request.setQuery(rangeQueryBuilder);
@@ -685,7 +674,7 @@ public class ADTaskManager {
      * @param listener action listener
      */
     public void updateADTask(String taskId, Map<String, Object> updatedFields, ActionListener<UpdateResponse> listener) {
-        UpdateRequest updateRequest = new UpdateRequest(ADTask.DETECTION_STATE_INDEX, taskId);
+        UpdateRequest updateRequest = new UpdateRequest(CommonName.DETECTION_STATE_INDEX, taskId);
         Map<String, Object> updatedContent = new HashMap<>();
         updatedContent.putAll(updatedFields);
         updatedContent.put(LAST_UPDATE_TIME_FIELD, Instant.now().toEpochMilli());

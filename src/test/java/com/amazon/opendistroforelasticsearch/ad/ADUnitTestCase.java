@@ -55,15 +55,4 @@ public class ADUnitTestCase extends ESTestCase {
         return clusterSettings;
     }
 
-    // public <T extends ActionResponse> ActionListener<T> actionListener() {
-    // return new ActionListener<T>() {
-    // @Override
-    // public void onResponse(T o) {
-    // }
-    //
-    // @Override
-    // public void onFailure(Exception e) {
-    // }
-    // };
-    // }
 }
