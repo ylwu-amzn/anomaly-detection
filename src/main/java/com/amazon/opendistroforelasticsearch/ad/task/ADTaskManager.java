@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -517,7 +518,12 @@ public class ADTaskManager {
                     request,
                     ActionListener
                         .wrap(
-                            r -> onIndexADTaskResponse(r, adTask, (response) -> cleanOldAdTaskDocs(response, adTask, listener), listener),
+                            r -> onIndexADTaskResponse(
+                                r,
+                                adTask,
+                                (response, delegatedListener) -> cleanOldAdTaskDocs(response, adTask, delegatedListener),
+                                listener
+                            ),
                             e -> {
                                 logger.error("Failed to create AD task for detector " + detector.getDetectorId(), e);
                                 listener.onFailure(e);
@@ -533,7 +539,7 @@ public class ADTaskManager {
     private void onIndexADTaskResponse(
         IndexResponse response,
         ADTask adTask,
-        Consumer<IndexResponse> function,
+        BiConsumer<IndexResponse, ActionListener<AnomalyDetectorJobResponse>> function,
         ActionListener<AnomalyDetectorJobResponse> listener
     ) {
         if (response == null || response.getResult() != CREATED) {
@@ -542,8 +548,12 @@ public class ADTaskManager {
             return;
         }
         adTask.setTaskId(response.getId());
+        ActionListener<AnomalyDetectorJobResponse> delegatedListener = ActionListener.wrap(r -> { listener.onResponse(r); }, e -> {
+            listener.onFailure(e);
+            handleADTaskException(adTask, e);
+        });
         if (function != null) {
-            function.accept(response);
+            function.accept(response, delegatedListener);
         }
     }
 
@@ -563,6 +573,7 @@ public class ADTaskManager {
         String s = sourceBuilder.toString();
         searchRequest.source(sourceBuilder).indices(CommonName.DETECTION_STATE_INDEX);
         String detectorId = adTask.getDetectorId();
+
         client.search(searchRequest, ActionListener.wrap(r -> {
             Iterator<SearchHit> iterator = r.getHits().iterator();
             if (iterator.hasNext()) {
@@ -604,7 +615,10 @@ public class ADTaskManager {
             } else {
                 runBatchResultAction(response, adTask, listener);
             }
-        }, e -> logger.warn("Failed to search AD tasks for detector " + detectorId, e)));
+        }, e -> {
+            logger.warn("Failed to search AD tasks for detector " + detectorId, e);
+            listener.onFailure(e);
+        }));
     }
 
     private void runBatchResultAction(IndexResponse response, ADTask adTask, ActionListener<AnomalyDetectorJobResponse> listener) {
@@ -626,7 +640,7 @@ public class ADTaskManager {
                 RestStatus.OK
             );
             listener.onResponse(anomalyDetectorJobResponse);
-        }, exception -> handleADTaskException(adTask, exception)));
+        }, e -> listener.onFailure(e)));
     }
 
     /**

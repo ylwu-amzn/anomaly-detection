@@ -180,6 +180,12 @@ public class ADBatchTaskRunner {
         Map<String, Object> updatedFields = new HashMap<>();
         updatedFields.put(STATE_FIELD, ADTaskState.INIT.name());
         updatedFields.put(INIT_PROGRESS_FIELD, 0.0f);
+
+        ActionListener<ADBatchAnomalyResultResponse> delegatedListener = ActionListener.wrap(r -> { listener.onResponse(r); }, e -> {
+            listener.onFailure(e);
+            handleException(adTask, e);
+        });
+
         adTaskManager
             .updateADTask(adTask.getTaskId(), updatedFields, ActionListener.wrap(r -> getNodeStats(adTask, ActionListener.wrap(node -> {
                 if (clusterService.localNode().getId().equals(node.getId())) {
@@ -191,7 +197,7 @@ public class ADBatchTaskRunner {
                             node.getId(),
                             adTask.getDetectorId()
                         );
-                    startADBatchTask(adTask, false, listener);
+                    startADBatchTask(adTask, false, delegatedListener);
                 } else {
                     // Execute batch task remotely
                     logger
@@ -207,13 +213,10 @@ public class ADBatchTaskRunner {
                             ADBatchTaskRemoteExecutionAction.NAME,
                             new ADBatchAnomalyResultRequest(adTask),
                             option,
-                            new ActionListenerResponseHandler<>(listener, ADBatchAnomalyResultResponse::new)
+                            new ActionListenerResponseHandler<>(delegatedListener, ADBatchAnomalyResultResponse::new)
                         );
                 }
-            }, e -> listener.onFailure(e))), e -> {
-                logger.warn("Failed to move task to INIT state, task id " + adTask.getTaskId());
-                listener.onFailure(e);
-            }));
+            }, e -> delegatedListener.onFailure(e))), e -> delegatedListener.onFailure(e)));
     }
 
     private void getNodeStats(ADTask adTask, ActionListener<DiscoveryNode> listener) {
@@ -288,17 +291,15 @@ public class ADBatchTaskRunner {
      */
     public void startADBatchTask(ADTask adTask, boolean runTaskRemotely, ActionListener<ADBatchAnomalyResultResponse> listener) {
         try {
-            if (!EnabledSetting.isADPluginEnabled()) {
-                throw new EndRunException(adTask.getDetectorId(), CommonErrorMessages.DISABLED_ERR_MSG, true);
-            }
-            ActionListener<String> internalListener = internalBatchTaskListener(adTask);
+            // check if cluster is eligible to run AD currently, if not eligible like
+            // circuit breaker open, will throw exception.
+            checkClusterState(adTask);
             threadPool.executor(AD_BATCH_TASK_THREAD_POOL_NAME).execute(() -> {
+                ActionListener<String> internalListener = internalBatchTaskListener(adTask);
                 try {
                     executeADBatchTask(adTask, internalListener);
                 } catch (Exception e) {
-                    listener.onFailure(e);
                     internalListener.onFailure(e);
-                    adTaskManager.handleADTaskException(adTask, e);
                 }
             });
             listener.onResponse(new ADBatchAnomalyResultResponse(clusterService.localNode().getId(), runTaskRemotely));
@@ -315,22 +316,25 @@ public class ADBatchTaskRunner {
             adTaskCacheManager.remove(taskId);
             adStats.getStat(AD_EXECUTING_BATCH_TASK_COUNT.getName()).decrement();
         }, e -> {
-            logger.debug("Failed to run task " + adTask.getTaskId() + " for detector " + adTask.getDetectorId(), e);
             // If batch task failed, remove task from cache and decrease executing task count by 1.
             adTaskCacheManager.remove(taskId);
             adStats.getStat(AD_EXECUTING_BATCH_TASK_COUNT.getName()).decrement();
-
-            // Check if batch task was cancelled or not by exception type.
-            // If it's cancelled, then increase cancelled task count by 1, otherwise increase failure count by 1.
-            if (e instanceof ADTaskCancelledException) {
-                adStats.getStat(StatNames.AD_CANCELED_BATCH_TASK_COUNT.getName()).increment();
-            } else if (ExceptionUtil.countInStats(e)) {
-                adStats.getStat(StatNames.AD_BATCH_TASK_FAILURE_COUNT.getName()).increment();
-            }
-            // Handle AD task exception
-            adTaskManager.handleADTaskException(adTask, e);
+            handleException(adTask, e);
         });
         return listener;
+    }
+
+    private void handleException(ADTask adTask, Exception e) {
+        logger.debug("Failed to run task " + adTask.getTaskId() + " for detector " + adTask.getDetectorId(), e);
+        // Check if batch task was cancelled or not by exception type.
+        // If it's cancelled, then increase cancelled task count by 1, otherwise increase failure count by 1.
+        if (e instanceof ADTaskCancelledException) {
+            adStats.getStat(StatNames.AD_CANCELED_BATCH_TASK_COUNT.getName()).increment();
+        } else if (ExceptionUtil.countInStats(e)) {
+            adStats.getStat(StatNames.AD_BATCH_TASK_FAILURE_COUNT.getName()).increment();
+        }
+        // Handle AD task exception
+        adTaskManager.handleADTaskException(adTask, e);
     }
 
     private void executeADBatchTask(ADTask adTask, ActionListener<String> internalListener) {
@@ -338,15 +342,26 @@ public class ADBatchTaskRunner {
         adStats.getStat(AD_EXECUTING_BATCH_TASK_COUNT.getName()).increment();
         adStats.getStat(StatNames.AD_TOTAL_BATCH_TASK_EXECUTION_COUNT.getName()).increment();
 
-        // check if circuit breaker is open
-        checkCircuitBreaker(adTask);
-
         // put AD task into cache
         adTaskCacheManager.put(adTask);
 
         // start to run first piece
         Instant executeStartTime = Instant.now();
         runFirstPiece(adTask, executeStartTime, internalListener);
+    }
+
+    private void checkClusterState(ADTask adTask) {
+        // check if AD plugin is enabled
+        checkADPluginEnabled(adTask.getDetectorId());
+
+        // check if circuit breaker is open
+        checkCircuitBreaker(adTask);
+    }
+
+    private void checkADPluginEnabled(String detectorId) {
+        if (!EnabledSetting.isADPluginEnabled()) {
+            throw new EndRunException(detectorId, CommonErrorMessages.DISABLED_ERR_MSG, true).countedInStats(false);
+        }
     }
 
     private void checkCircuitBreaker(ADTask adTask) {
@@ -637,7 +652,7 @@ public class ADBatchTaskRunner {
         String taskState = initProgress >= 1.0f ? ADTaskState.RUNNING.name() : ADTaskState.INIT.name();
 
         if (pieceStartTime < dataEndTime) {
-            checkCircuitBreaker(adTask);
+            checkClusterState(adTask);
             long expectedPieceEndTime = pieceStartTime + pieceSize * interval;
             long pieceEndTime = expectedPieceEndTime > dataEndTime ? dataEndTime : expectedPieceEndTime;
             int i = 0;
