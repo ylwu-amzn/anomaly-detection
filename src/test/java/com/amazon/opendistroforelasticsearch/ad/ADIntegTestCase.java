@@ -20,8 +20,10 @@ import static com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils.XCO
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -57,6 +59,7 @@ import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
+import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 
 public abstract class ADIntegTestCase extends ESIntegTestCase {
 
@@ -191,6 +194,16 @@ public abstract class ADIntegTestCase extends ESIntegTestCase {
     public ImmutableOpenMap<String, DiscoveryNode> getDataNodes() {
         DiscoveryNodes nodes = clusterService().state().getNodes();
         return nodes.getDataNodes();
+    }
+
+    public DiscoveryNode[] getDataNodesArray() {
+        DiscoveryNodes nodes = clusterService().state().getNodes();
+        Iterator<ObjectObjectCursor<String, DiscoveryNode>> iterator = nodes.getDataNodes().iterator();
+        List<DiscoveryNode> dataNodes = new ArrayList<>();
+        while (iterator.hasNext()) {
+            dataNodes.add(iterator.next().value);
+        }
+        return dataNodes.toArray(new DiscoveryNode[0]);
     }
 
 }

@@ -153,4 +153,8 @@ public class GetAnomalyDetectorResponse extends ActionResponse implements ToXCon
         }
         return builder;
     }
+
+    public DetectorProfile getDetectorProfile() {
+        return detectorProfile;
+    }
 }

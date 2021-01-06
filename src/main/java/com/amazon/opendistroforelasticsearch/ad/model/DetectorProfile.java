@@ -46,14 +46,21 @@ public class DetectorProfile implements Writeable, ToXContentObject, Mergeable {
     }
 
     public DetectorProfile(StreamInput in) throws IOException {
-        this.state = in.readEnum(DetectorState.class);
-        this.error = in.readString();
-        this.modelProfile = in.readArray(ModelProfile::new, ModelProfile[]::new);
-        this.shingleSize = in.readInt();
-        this.coordinatingNode = in.readString();
-        this.totalSizeInBytes = in.readLong();
-        this.initProgress = new InitProgressProfile(in);
-        this.adTaskProfile = new ADTaskProfile(in);
+        if (in.readBoolean()) {
+            this.state = in.readEnum(DetectorState.class);
+        }
+
+        this.error = in.readOptionalString();
+        this.modelProfile = in.readOptionalArray(ModelProfile::new, ModelProfile[]::new);
+        this.shingleSize = in.readOptionalInt();
+        this.coordinatingNode = in.readOptionalString();
+        this.totalSizeInBytes = in.readOptionalLong();
+        if (in.readBoolean()) {
+            this.initProgress = new InitProgressProfile(in);
+        }
+        if (in.readBoolean()) {
+            this.adTaskProfile = new ADTaskProfile(in);
+        }
     }
 
     private DetectorProfile() {}
@@ -141,14 +148,30 @@ public class DetectorProfile implements Writeable, ToXContentObject, Mergeable {
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        out.writeEnum(state);
-        out.writeString(error);
-        out.writeArray(modelProfile);
-        out.writeInt(shingleSize);
-        out.writeString(coordinatingNode);
-        out.writeLong(totalSizeInBytes);
-        initProgress.writeTo(out);
-        adTaskProfile.writeTo(out);
+        if (state == null) {
+            out.writeBoolean(false);
+        } else {
+            out.writeBoolean(true);
+            out.writeEnum(state);
+        }
+
+        out.writeOptionalString(error);
+        out.writeOptionalArray(modelProfile);
+        out.writeOptionalInt(shingleSize);
+        out.writeOptionalString(coordinatingNode);
+        out.writeOptionalLong(totalSizeInBytes);
+        if (initProgress == null) {
+            out.writeBoolean(false);
+        } else {
+            out.writeBoolean(true);
+            initProgress.writeTo(out);
+        }
+        if (adTaskProfile == null) {
+            out.writeBoolean(false);
+        } else {
+            out.writeBoolean(true);
+            adTaskProfile.writeTo(out);
+        }
     }
 
     @Override
