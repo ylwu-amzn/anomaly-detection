@@ -33,15 +33,21 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
+import com.amazon.opendistroforelasticsearch.ad.cluster.HashRing;
+import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
+import com.amazon.opendistroforelasticsearch.ad.transport.ForwardADTaskAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ForwardADTaskRequest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.ResourceAlreadyExistsException;
 import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.ActionListenerResponseHandler;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.get.GetRequest;
 import org.elasticsearch.action.index.IndexRequest;
@@ -51,6 +57,7 @@ import org.elasticsearch.action.support.WriteRequest;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.action.update.UpdateResponse;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
@@ -83,6 +90,8 @@ import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultRe
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyDetectorJobResponse;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 import com.amazon.opendistroforelasticsearch.commons.authuser.User;
+import org.elasticsearch.transport.TransportRequestOptions;
+import org.elasticsearch.transport.TransportService;
 
 /**
  * Manage AD task.
@@ -93,6 +102,8 @@ public class ADTaskManager {
     private final Client client;
     private final NamedXContentRegistry xContentRegistry;
     private final AnomalyDetectionIndices detectionIndices;
+    private final HashRing hashRing;
+    private final TransportRequestOptions option;
     private volatile Integer maxAdTaskDocsPerDetector;
 
     public ADTaskManager(
@@ -100,11 +111,19 @@ public class ADTaskManager {
         ClusterService clusterService,
         Client client,
         NamedXContentRegistry xContentRegistry,
-        AnomalyDetectionIndices detectionIndices
+        AnomalyDetectionIndices detectionIndices,
+        HashRing hashRing
     ) {
         this.client = client;
         this.xContentRegistry = xContentRegistry;
         this.detectionIndices = detectionIndices;
+        this.hashRing = hashRing;
+
+        this.option = TransportRequestOptions
+                .builder()
+                .withType(TransportRequestOptions.Type.REG)
+                .withTimeout(AnomalyDetectorSettings.REQUEST_TIMEOUT.get(settings))
+                .build();
 
         this.maxAdTaskDocsPerDetector = MAX_OLD_AD_TASK_DOCS_PER_DETECTOR.get(settings);
         clusterService
@@ -121,7 +140,7 @@ public class ADTaskManager {
      * @param user user
      * @param listener action listener
      */
-    public void startDetector(
+    public void startDetector1(
         String detectorId,
         IndexAnomalyDetectorJobActionHandler handler,
         User user,
@@ -130,9 +149,34 @@ public class ADTaskManager {
         getDetector(
             detectorId,
             (detector) -> handler.startAnomalyDetectorJob(detector), // run realtime detector
-            (detector) -> createADTaskIndex(detector, user, listener), // run historical detector
+            (detector) -> startHistoricalDetector(detector, user, listener), // run historical detector
             listener
         );
+    }
+
+    public void startDetector(
+            String detectorId,
+            IndexAnomalyDetectorJobActionHandler handler,
+            User user,
+            TransportService transportService,
+            ActionListener<AnomalyDetectorJobResponse> listener
+    ) {
+        getDetector(
+                detectorId,
+                (detector) -> handler.startAnomalyDetectorJob(detector), // run realtime detector
+                (detector) -> forwardToOwningNode(detector, user, transportService, listener), // run historical detector
+                listener
+        );
+    }
+
+    private void forwardToOwningNode(AnomalyDetector detector, User user, TransportService transportService, ActionListener<AnomalyDetectorJobResponse> listener) {
+        Optional<DiscoveryNode> owningNode = hashRing.getOwningNode(detector.getDetectorId());
+        if(!owningNode.isPresent()) {
+            listener.onFailure(new ElasticsearchStatusException("No eligible node to run detector", RestStatus.INTERNAL_SERVER_ERROR));
+            return;
+        }
+        transportService.sendRequest(owningNode.get(), ForwardADTaskAction.NAME, new ForwardADTaskRequest(detector, user),
+                this.option, new ActionListenerResponseHandler<>(listener, AnomalyDetectorJobResponse::new));
     }
 
     private void getDetector(
@@ -187,7 +231,7 @@ public class ADTaskManager {
         return null;
     }
 
-    protected void createADTaskIndex(AnomalyDetector detector, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
+    public void startHistoricalDetector(AnomalyDetector detector, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
         if (detectionIndices.doesDetectorStateIndexExist()) {
             checkCurrentTaskState(detector, user, listener);
         } else {

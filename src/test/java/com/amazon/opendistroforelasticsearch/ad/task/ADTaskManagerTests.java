@@ -100,7 +100,7 @@ public class ADTaskManagerTests extends ADUnitTestCase {
             randomAlphaOfLength(5)
         );
 
-        adTaskManager.createADTaskIndex(detector, randomUser(), listener);
+        adTaskManager.startHistoricalDetector(detector, randomUser(), listener);
         verify(listener, times(1)).onFailure(exceptionCaptor.capture());
         assertEquals(
             "Create index .opendistro-anomaly-detection-state with mappings not acknowledged",
@@ -122,7 +122,7 @@ public class ADTaskManagerTests extends ADUnitTestCase {
             randomAlphaOfLength(5)
         );
 
-        adTaskManager.createADTaskIndex(detector, randomUser(), listener);
+        adTaskManager.startHistoricalDetector(detector, randomUser(), listener);
         verify(listener, never()).onFailure(any());
     }
 
@@ -141,7 +141,7 @@ public class ADTaskManagerTests extends ADUnitTestCase {
             randomAlphaOfLength(5)
         );
 
-        adTaskManager.createADTaskIndex(detector, randomUser(), listener);
+        adTaskManager.startHistoricalDetector(detector, randomUser(), listener);
         verify(listener, times(1)).onFailure(exceptionCaptor.capture());
         assertEquals(error, exceptionCaptor.getValue().getMessage());
     }
