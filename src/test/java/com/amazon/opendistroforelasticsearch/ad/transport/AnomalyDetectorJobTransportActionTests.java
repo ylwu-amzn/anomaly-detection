@@ -30,10 +30,16 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
+import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
+import com.google.common.collect.ImmutableMap;
 import org.elasticsearch.ElasticsearchStatusException;
+import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.common.lucene.uid.Versions;
 import org.elasticsearch.common.settings.Settings;
@@ -148,7 +154,7 @@ public class AnomalyDetectorJobTransportActionTests extends HistoricalDetectorIn
         assertTrue(exception.getMessage().contains("Detector is already running"));
     }
 
-    /*public void testCleanOldTaskDocs() throws IOException, InterruptedException {
+    public void testCleanOldTaskDocs() throws IOException, InterruptedException {
         updateTransientSettings(ImmutableMap.of(BATCH_TASK_PIECE_INTERVAL_SECONDS.getKey(), 1));
         DetectionDateRange dateRange = new DetectionDateRange(startTime, endTime);
         AnomalyDetector detector = TestHelpers
@@ -165,19 +171,18 @@ public class AnomalyDetectorJobTransportActionTests extends HistoricalDetectorIn
         assertEquals(states.size(), count);
     
         AnomalyDetectorJobRequest request = new AnomalyDetectorJobRequest(detectorId, randomLong(), randomLong(), START_JOB);
-    //        AtomicReference<AnomalyDetectorJobResponse> response = new AtomicReference<>();
-        // CountDownLatch latch = new CountDownLatch(1);
-        // client().execute(AnomalyDetectorJobAction.INSTANCE, request, ActionListener.wrap(r -> {
-        // latch.countDown();
-        // response.set(r);
-        // }, e -> { latch.countDown(); }));
-        // latch.await();
-        client().execute(AnomalyDetectorJobAction.INSTANCE, request).actionGet();
-    
+        AtomicReference<AnomalyDetectorJobResponse> response = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+        client().execute(AnomalyDetectorJobAction.INSTANCE, request, ActionListener.wrap(r -> {
+            latch.countDown();
+            response.set(r);
+        }, e -> { latch.countDown(); }));
+        latch.await();
+        Thread.sleep(10000);
         count = countDocs(CommonName.DETECTION_STATE_INDEX);
         // we have one latest task, so total count should add 1
         assertEquals(maxOldAdTaskDocsPerDetector + 1, count);
-    }*/
+    }
 
     public void testStartRealtimeDetector() throws IOException {
         String detectorId = startRealtimeDetector();

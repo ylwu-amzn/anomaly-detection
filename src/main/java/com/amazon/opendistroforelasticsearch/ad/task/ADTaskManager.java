@@ -170,7 +170,7 @@ public class ADTaskManager {
         );
     }
 
-    //TODO: if AD task doc removed from index, but task still in cache, we need to remove the cache.
+    // TODO: if AD task doc removed from index, but task still in cache, we need to remove the cache.
     public void stopDetector(
         String detectorId,
         IndexAnomalyDetectorJobActionHandler handler,
@@ -261,7 +261,7 @@ public class ADTaskManager {
     private void stopTask(String detectorId, Optional<ADTask> adTask, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
         if (!adTask.isPresent()) {
             listener.onFailure(new ResourceNotFoundException(detectorId, "Detector not started"));
-            //TODO: clear cache in case someone delete AD task doc, to avoid memory leak
+            // TODO: clear cache in case someone delete AD task doc, to avoid memory leak
             return;
         }
 
@@ -269,7 +269,7 @@ public class ADTaskManager {
         if (isADTaskEnded(adTask.get())) {
             // TODO: tune error messages when intgrate with frontend
             listener.onFailure(new ResourceNotFoundException(detectorId, "No running task found"));
-            //TODO: clear cache in case someone delete AD task doc, to avoid memory leak
+            // TODO: clear cache in case someone delete AD task doc, to avoid memory leak
             return;
         }
         String taskId = adTask.get().getTaskId();
@@ -353,13 +353,13 @@ public class ADTaskManager {
                 }
             }
 
-//            else  if (totalTasks < 1) {
-//                // we need to get task profile data in cache even AD task not found in index.
-//                function.accept(Optional.empty());
-//            } else {
-//                // TODO: handle multiple running lastest task. Iterate and cancel all of them
-//                listener.onFailure(new ElasticsearchStatusException("Multiple", RestStatus.INTERNAL_SERVER_ERROR));
-//            }
+            // else if (totalTasks < 1) {
+            // // we need to get task profile data in cache even AD task not found in index.
+            // function.accept(Optional.empty());
+            // } else {
+            // // TODO: handle multiple running lastest task. Iterate and cancel all of them
+            // listener.onFailure(new ElasticsearchStatusException("Multiple", RestStatus.INTERNAL_SERVER_ERROR));
+            // }
         }, e -> {
             if (e instanceof IndexNotFoundException) {
                 function.accept(Optional.empty());
@@ -617,7 +617,6 @@ public class ADTaskManager {
             .from(maxAdTaskDocsPerDetector - 1)
             .trackTotalHits(true)
             .size(1);
-        String s = sourceBuilder.toString();//TODO remove this line
         searchRequest.source(sourceBuilder).indices(CommonName.DETECTION_STATE_INDEX);
         String detectorId = adTask.getDetectorId();
 
@@ -757,25 +756,25 @@ public class ADTaskManager {
         updateRequest.doc(updatedContent);
         updateRequest.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
         client
-                .update(
-                        updateRequest,
-                        ActionListener.wrap(response -> listener.onResponse(response), exception -> listener.onFailure(exception))
-                );
+            .update(
+                updateRequest,
+                ActionListener.wrap(response -> listener.onResponse(response), exception -> listener.onFailure(exception))
+            );
     }
 
     public ADTaskCancellationState cancelTaskByDetectorId(String detectorId, String reason, String userName) {
         return adTaskCacheManager.cancelByDetectorId(detectorId, reason, userName);
     }
 
-//    public ADTaskCancellationState cancelTask(String taskId, String reason, String userName) {
-//        if (!adTaskCacheManager.contains(taskId)) {
-//            return ADTaskCancellationState.NOT_FOUND;
-//        }
-//        if (adTaskCacheManager.isCancelled(taskId)) {
-//            return ADTaskCancellationState.ALREADY_CANCELLED;
-//        }
-//        adTaskCacheManager.cancel(taskId, reason, userName);
-//        return ADTaskCancellationState.CANCELLED;
-//    }
+    // public ADTaskCancellationState cancelTask(String taskId, String reason, String userName) {
+    // if (!adTaskCacheManager.contains(taskId)) {
+    // return ADTaskCancellationState.NOT_FOUND;
+    // }
+    // if (adTaskCacheManager.isCancelled(taskId)) {
+    // return ADTaskCancellationState.ALREADY_CANCELLED;
+    // }
+    // adTaskCacheManager.cancel(taskId, reason, userName);
+    // return ADTaskCancellationState.CANCELLED;
+    // }
 
 }
