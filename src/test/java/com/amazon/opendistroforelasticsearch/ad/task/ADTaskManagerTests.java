@@ -43,6 +43,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 
 import com.amazon.opendistroforelasticsearch.ad.ADUnitTestCase;
+import com.amazon.opendistroforelasticsearch.ad.cluster.HashRing;
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.DetectionDateRange;
@@ -58,6 +59,7 @@ public class ADTaskManagerTests extends ADUnitTestCase {
     private DiscoveryNodeFilterer nodeFilter;
     private AnomalyDetectionIndices anomalyDetectionIndices;
     private ADTaskCacheManager adTaskCacheManager;
+    private HashRing hashRing;
     private ADTaskManager adTaskManager;
 
     private Instant startTime;
@@ -85,6 +87,8 @@ public class ADTaskManagerTests extends ADUnitTestCase {
         nodeFilter = mock(DiscoveryNodeFilterer.class);
         anomalyDetectionIndices = mock(AnomalyDetectionIndices.class);
         adTaskCacheManager = mock(ADTaskCacheManager.class);
+        hashRing = mock(HashRing.class);
+
         adTaskManager = new ADTaskManager(
             settings,
             clusterService,
@@ -92,6 +96,7 @@ public class ADTaskManagerTests extends ADUnitTestCase {
             NamedXContentRegistry.EMPTY,
             anomalyDetectionIndices,
             nodeFilter,
+            hashRing,
             adTaskCacheManager
         );
 

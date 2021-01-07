@@ -15,6 +15,7 @@
 
 package com.amazon.opendistroforelasticsearch.ad.task;
 
+import static com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages.DETECTOR_ALREADY_RUNNING;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.DETECTOR_ID_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.ERROR_FIELD;
 import static com.amazon.opendistroforelasticsearch.ad.model.ADTask.EXECUTION_END_TIME_FIELD;
@@ -41,11 +42,6 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import com.amazon.opendistroforelasticsearch.ad.common.exception.DuplicateTaskException;
-import com.amazon.opendistroforelasticsearch.ad.cluster.HashRing;
-import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
-import com.amazon.opendistroforelasticsearch.ad.transport.ForwardADTaskAction;
-import com.amazon.opendistroforelasticsearch.ad.transport.ForwardADTaskRequest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchStatusException;
@@ -83,9 +79,14 @@ import org.elasticsearch.script.Script;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.sort.SortOrder;
+import org.elasticsearch.transport.TransportRequestOptions;
+import org.elasticsearch.transport.TransportService;
 
+import com.amazon.opendistroforelasticsearch.ad.cluster.HashRing;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.ADTaskCancelledException;
+import com.amazon.opendistroforelasticsearch.ad.common.exception.DuplicateTaskException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.InternalFailure;
+import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.ResourceNotFoundException;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
@@ -96,6 +97,7 @@ import com.amazon.opendistroforelasticsearch.ad.model.ADTaskType;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.DetectorProfile;
 import com.amazon.opendistroforelasticsearch.ad.rest.handler.IndexAnomalyDetectorJobActionHandler;
+import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADBatchAnomalyResultRequest;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADCancelTaskAction;
@@ -104,11 +106,11 @@ import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileNodeResponse;
 import com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileRequest;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyDetectorJobResponse;
+import com.amazon.opendistroforelasticsearch.ad.transport.ForwardADTaskAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.ForwardADTaskRequest;
 import com.amazon.opendistroforelasticsearch.ad.util.DiscoveryNodeFilterer;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 import com.amazon.opendistroforelasticsearch.commons.authuser.User;
-import org.elasticsearch.transport.TransportRequestOptions;
-import org.elasticsearch.transport.TransportService;
 
 /**
  * Manage AD task.
@@ -147,10 +149,10 @@ public class ADTaskManager {
         this.hashRing = hashRing;
 
         this.option = TransportRequestOptions
-                .builder()
-                .withType(TransportRequestOptions.Type.REG)
-                .withTimeout(AnomalyDetectorSettings.REQUEST_TIMEOUT.get(settings))
-                .build();
+            .builder()
+            .withType(TransportRequestOptions.Type.REG)
+            .withTimeout(AnomalyDetectorSettings.REQUEST_TIMEOUT.get(settings))
+            .build();
 
         this.maxAdTaskDocsPerDetector = MAX_OLD_AD_TASK_DOCS_PER_DETECTOR.get(settings);
         clusterService
@@ -184,6 +186,42 @@ public class ADTaskManager {
         );
     }
 
+    public void startDetector(
+        String detectorId,
+        IndexAnomalyDetectorJobActionHandler handler,
+        User user,
+        TransportService transportService,
+        ActionListener<AnomalyDetectorJobResponse> listener
+    ) {
+        getDetector(
+            detectorId,
+            (detector) -> handler.startAnomalyDetectorJob(detector), // run realtime detector
+            (detector) -> forwardToOwningNode(detector, user, transportService, listener), // run historical detector
+            listener
+        );
+    }
+
+    private void forwardToOwningNode(
+        AnomalyDetector detector,
+        User user,
+        TransportService transportService,
+        ActionListener<AnomalyDetectorJobResponse> listener
+    ) {
+        Optional<DiscoveryNode> owningNode = hashRing.getOwningNode(detector.getDetectorId());
+        if (!owningNode.isPresent()) {
+            listener.onFailure(new ElasticsearchStatusException("No eligible node to run detector", RestStatus.INTERNAL_SERVER_ERROR));
+            return;
+        }
+        transportService
+            .sendRequest(
+                owningNode.get(),
+                ForwardADTaskAction.NAME,
+                new ForwardADTaskRequest(detector, user),
+                this.option,
+                new ActionListenerResponseHandler<>(listener, AnomalyDetectorJobResponse::new)
+            );
+    }
+
     /**
      * Stop detector.
      * For realtime detector, will set detector job as disabled.
@@ -208,31 +246,6 @@ public class ADTaskManager {
             (detector) -> getLatestADTask(detectorId, (task) -> stopHistoricalDetector(detectorId, task, user, listener), listener),
             listener
         );
-    }
-
-    public void startDetector(
-            String detectorId,
-            IndexAnomalyDetectorJobActionHandler handler,
-            User user,
-            TransportService transportService,
-            ActionListener<AnomalyDetectorJobResponse> listener
-    ) {
-        getDetector(
-                detectorId,
-                (detector) -> handler.startAnomalyDetectorJob(detector), // run realtime detector
-                (detector) -> forwardToOwningNode(detector, user, transportService, listener), // run historical detector
-                listener
-        );
-    }
-
-    private void forwardToOwningNode(AnomalyDetector detector, User user, TransportService transportService, ActionListener<AnomalyDetectorJobResponse> listener) {
-        Optional<DiscoveryNode> owningNode = hashRing.getOwningNode(detector.getDetectorId());
-        if(!owningNode.isPresent()) {
-            listener.onFailure(new ElasticsearchStatusException("No eligible node to run detector", RestStatus.INTERNAL_SERVER_ERROR));
-            return;
-        }
-        transportService.sendRequest(owningNode.get(), ForwardADTaskAction.NAME, new ForwardADTaskRequest(detector, user),
-                this.option, new ActionListenerResponseHandler<>(listener, AnomalyDetectorJobResponse::new));
     }
 
     private void getDetector(
@@ -482,26 +495,37 @@ public class ADTaskManager {
     }
 
     public void startHistoricalDetector(AnomalyDetector detector, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
-        if (detectionIndices.doesDetectorStateIndexExist()) {
-            checkCurrentTaskState(detector, user, listener);
-        } else {
-            detectionIndices.initDetectionStateIndex(ActionListener.wrap(r -> {
-                if (r.isAcknowledged()) {
-                    logger.info("Created {} with mappings.", CommonName.DETECTION_STATE_INDEX);
-                    executeHistoricalDetector(detector, user, listener);
-                } else {
-                    String error = "Create index " + CommonName.DETECTION_STATE_INDEX + " with mappings not acknowledged";
-                    logger.warn(error);
-                    listener.onFailure(new ElasticsearchStatusException(error, RestStatus.INTERNAL_SERVER_ERROR));
-                }
-            }, e -> {
-                if (ExceptionsHelper.unwrapCause(e) instanceof ResourceAlreadyExistsException) {
-                    executeHistoricalDetector(detector, user, listener);
-                } else {
-                    logger.error("Failed to init anomaly detection state index", e);
-                    listener.onFailure(e);
-                }
-            }));
+        try {
+            adTaskCacheManager.put(detector.getDetectorId());
+            if (detectionIndices.doesDetectorStateIndexExist()) {
+                checkCurrentTaskState(detector, user, listener);
+            } else {
+                detectionIndices.initDetectionStateIndex(ActionListener.wrap(r -> {
+                    if (r.isAcknowledged()) {
+                        logger.info("Created {} with mappings.", CommonName.DETECTION_STATE_INDEX);
+                        executeHistoricalDetector(detector, user, listener);
+                    } else {
+                        String error = "Create index " + CommonName.DETECTION_STATE_INDEX + " with mappings not acknowledged";
+                        logger.warn(error);
+                        listener.onFailure(new ElasticsearchStatusException(error, RestStatus.INTERNAL_SERVER_ERROR));
+                    }
+                }, e -> {
+                    if (ExceptionsHelper.unwrapCause(e) instanceof ResourceAlreadyExistsException) {
+                        executeHistoricalDetector(detector, user, listener);
+                    } else {
+                        logger.error("Failed to init anomaly detection state index", e);
+                        listener.onFailure(e);
+                    }
+                }));
+            }
+        } catch (Exception e) {
+            if (e instanceof LimitExceededException && DETECTOR_ALREADY_RUNNING.equals(e.getMessage())) {
+                logger.debug(DETECTOR_ALREADY_RUNNING + ", detector id: " + detector.getDetectorId());
+                listener.onFailure(new ElasticsearchStatusException(DETECTOR_ALREADY_RUNNING, RestStatus.BAD_REQUEST));
+            } else {
+                logger.error("Failed to start historical detector " + detector.getDetectorId(), e);
+                listener.onFailure(e);
+            }
         }
     }
 
@@ -517,7 +541,7 @@ public class ADTaskManager {
 
         client.search(searchRequest, ActionListener.wrap(r -> {
             if (r.getHits().getTotalHits().value > 0) {
-                listener.onFailure(new ElasticsearchStatusException("Detector is already running", RestStatus.BAD_REQUEST));
+                listener.onFailure(new ElasticsearchStatusException(DETECTOR_ALREADY_RUNNING, RestStatus.BAD_REQUEST));
             } else {
                 executeHistoricalDetector(detector, user, listener);
             }
@@ -721,7 +745,7 @@ public class ADTaskManager {
             }
         } else if (e instanceof DuplicateTaskException) {
             updatedFields.put(IS_LATEST_FIELD, false);
-        }else {
+        } else {
             logger.error("Failed to execute AD batch task, task id: " + adTask.getTaskId() + ", detector id: " + adTask.getDetectorId(), e);
         }
         updatedFields.put(ERROR_FIELD, getErrorMessage(e));

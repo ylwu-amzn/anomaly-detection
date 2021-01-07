@@ -1,20 +1,35 @@
+/*
+ * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
+
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
-import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
-import com.amazon.opendistroforelasticsearch.commons.authuser.User;
+import static org.elasticsearch.action.ValidateActions.addValidationError;
+
+import java.io.IOException;
+
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 
-import java.io.IOException;
-
-import static org.elasticsearch.action.ValidateActions.addValidationError;
+import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
+import com.amazon.opendistroforelasticsearch.commons.authuser.User;
 
 public class ForwardADTaskRequest extends ActionRequest {
     private AnomalyDetector detector;
     private User user;
-    //TODO: add user
 
     public ForwardADTaskRequest(AnomalyDetector detector, User user) {
         this.detector = detector;
@@ -44,7 +59,7 @@ public class ForwardADTaskRequest extends ActionRequest {
     public ActionRequestValidationException validate() {
         ActionRequestValidationException validationException = null;
         if (detector == null) {
-            validationException =  addValidationError("Detector is missing", validationException);
+            validationException = addValidationError("Detector is missing", validationException);
         }
         return validationException;
     }
