@@ -26,8 +26,6 @@ import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 
-import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
-
 public class ADTaskProfileRequest extends BaseNodesRequest<ADTaskProfileRequest> {
 
     private String adTaskId;
@@ -51,7 +49,7 @@ public class ADTaskProfileRequest extends BaseNodesRequest<ADTaskProfileRequest>
     public ActionRequestValidationException validate() {
         ActionRequestValidationException validationException = null;
         if (Strings.isEmpty(adTaskId)) {
-            validationException = addValidationError(CommonErrorMessages.AD_TASK_ID_MISSING_MSG, validationException);
+            validationException = addValidationError("AD task ID is missing", validationException);
         }
         return validationException;
     }

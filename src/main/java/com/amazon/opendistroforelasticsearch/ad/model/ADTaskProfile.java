@@ -47,6 +47,16 @@ public class ADTaskProfile implements ToXContentObject, Writeable {
     private String nodeId;
 
     public ADTaskProfile(
+        Integer shingleSize,
+        Long rcfTotalUpdates,
+        Boolean thresholdModelTrained,
+        Integer thresholdNodelTrainingDataSize,
+        String nodeId
+    ) {
+        this(null, shingleSize, rcfTotalUpdates, thresholdModelTrained, thresholdNodelTrainingDataSize, nodeId);
+    }
+
+    public ADTaskProfile(
         ADTask adTask,
         Integer shingleSize,
         Long rcfTotalUpdates,

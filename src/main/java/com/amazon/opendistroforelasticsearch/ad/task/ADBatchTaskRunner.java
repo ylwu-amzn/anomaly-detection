@@ -382,6 +382,7 @@ public class ADBatchTaskRunner {
                         ),
                     ActionListener.wrap(r -> {
                         try {
+//                            rateLimiter.acquire(5);
                             checkIfADTaskCancelled(adTask.getTaskId());
                             getDateRangeOfSourceData(adTask, (minDate, maxDate) -> {
                                 long interval = ((IntervalTimeConfiguration) adTask.getDetector().getDetectionInterval())

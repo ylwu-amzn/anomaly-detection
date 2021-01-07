@@ -29,6 +29,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import com.amazon.opendistroforelasticsearch.ad.common.exception.ADTaskCancelledException;
+import com.amazon.opendistroforelasticsearch.ad.common.exception.DuplicateTaskException;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Settings;
 
@@ -74,7 +76,7 @@ public class ADTaskCacheManager {
             throw new IllegalArgumentException("AD task is already running");
         }
         if (containsTaskOfDetector(adTask.getDetectorId())) {
-            throw new IllegalArgumentException("There is one task executing for detector");
+            throw new DuplicateTaskException("There is one task executing for detector");
         }
         checkRunningTaskLimit();
         long neededCacheSize = calculateADTaskCacheSize(adTask);
@@ -202,7 +204,15 @@ public class ADTaskCacheManager {
      * @return true if there is task in cache; otherwise return false
      */
     public boolean containsTaskOfDetector(String detectorId) {
-        return taskCaches.values().stream().filter(v -> Objects.equals(detectorId, v.getDetectorId())).findAny().isPresent();
+//        return taskCaches.values().stream().filter(v -> Objects.equals(detectorId, v.getDetectorId())).findAny().isPresent();
+        boolean a = taskCaches.values().stream().filter(v -> Objects.equals(detectorId, v.getDetectorId())).findAny().isPresent();
+        for(ADBatchTaskCache value : taskCaches.values()){
+            String v = value.getDetectorId();
+            if(detectorId.equals(v)) {
+                return true;
+            }
+        };
+        return false;
     }
 
     /**
@@ -256,9 +266,17 @@ public class ADTaskCacheManager {
      * @param taskId AD task id
      * @param reason why need to cancel task
      * @param userName user name
+     * @return AD task cancellation state
      */
-    public void cancel(String taskId, String reason, String userName) {
+    public ADTaskCancellationState cancel(String taskId, String reason, String userName) {
+        if (!contains(taskId)) {
+            return ADTaskCancellationState.NOT_FOUND;
+        }
+        if (isCancelled(taskId)) {
+            return ADTaskCancellationState.ALREADY_CANCELLED;
+        }
         getBatchTaskCache(taskId).cancel(reason, userName);
+        return ADTaskCancellationState.CANCELLED;
     }
 
     /**
@@ -267,6 +285,7 @@ public class ADTaskCacheManager {
      * @param detectorId detector id
      * @param reason why need to cancel task
      * @param userName user name
+     * @return AD task cancellation state
      */
     public ADTaskCancellationState cancelByDetectorId(String detectorId, String reason, String userName) {
         List<ADBatchTaskCache> taskCaches = getTaskCacheByDetectorId(detectorId);
