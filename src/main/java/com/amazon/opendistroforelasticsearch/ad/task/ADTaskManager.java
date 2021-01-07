@@ -66,6 +66,7 @@ import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.query.BoolQueryBuilder;
+import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.RangeQueryBuilder;
 import org.elasticsearch.index.query.TermQueryBuilder;
 import org.elasticsearch.index.query.TermsQueryBuilder;
@@ -169,6 +170,7 @@ public class ADTaskManager {
         );
     }
 
+    //TODO: if AD task doc removed from index, but task still in cache, we need to remove the cache.
     public void stopDetector(
         String detectorId,
         IndexAnomalyDetectorJobActionHandler handler,
@@ -184,6 +186,35 @@ public class ADTaskManager {
             listener
         );
     }
+
+    /*private void stopAdTask(String detectorId, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
+        DiscoveryNode[] dataNodes = nodeFilter.getEligibleDataNodes();
+        String userName = user == null ? null : user.getName();
+        ADCancelTaskRequest cancelTaskRequest = new ADCancelTaskRequest(detectorId, userName, dataNodes);
+        client.execute(ADCancelTaskAction.INSTANCE, cancelTaskRequest, ActionListener.wrap(response -> {
+            Set<ADTaskCancellationState> states = response
+                    .getNodes()
+                    .stream()
+                    .filter(r -> r.getState() != null)
+                    .map(ADCancelTaskNodeResponse::getState)
+                    .collect(Collectors.toSet());
+            if (states.contains(ADTaskCancellationState.CANCELLED) || states.contains(ADTaskCancellationState.CANCELLED)) {
+                listener.onResponse(new AnomalyDetectorJobResponse(detectorId, 0, 0, 0, RestStatus.OK));
+            } else if (states.contains(ADTaskCancellationState.NOT_FOUND)) {
+                // If ES process stopped, the running task may still stay on RUNNING state after restart, for this case
+                // the cancel result will return not found, and we should reset task state as STOPPED.
+                updateADTask(
+                        taskId,
+                        ImmutableMap.of(STATE_FIELD, ADTaskState.STOPPED),
+                        ActionListener
+                                .wrap(
+                                        r -> { listener.onResponse(new AnomalyDetectorJobResponse(detectorId, 0, 0, 0, RestStatus.NOT_FOUND)); },
+                                        e -> listener.onFailure(e)
+                                )
+                );
+            }
+        }, e -> { listener.onFailure(e); }));
+    }*/
 
     private void getDetector(
         String detectorId,
@@ -230,6 +261,7 @@ public class ADTaskManager {
     private void stopTask(String detectorId, Optional<ADTask> adTask, User user, ActionListener<AnomalyDetectorJobResponse> listener) {
         if (!adTask.isPresent()) {
             listener.onFailure(new ResourceNotFoundException(detectorId, "Detector not started"));
+            //TODO: clear cache in case someone delete AD task doc, to avoid memory leak
             return;
         }
 
@@ -237,13 +269,14 @@ public class ADTaskManager {
         if (isADTaskEnded(adTask.get())) {
             // TODO: tune error messages when intgrate with frontend
             listener.onFailure(new ResourceNotFoundException(detectorId, "No running task found"));
+            //TODO: clear cache in case someone delete AD task doc, to avoid memory leak
             return;
         }
         String taskId = adTask.get().getTaskId();
 
         DiscoveryNode[] dataNodes = nodeFilter.getEligibleDataNodes();
         String userName = user == null ? null : user.getName();
-        ADCancelTaskRequest cancelTaskRequest = new ADCancelTaskRequest(taskId, userName, dataNodes);
+        ADCancelTaskRequest cancelTaskRequest = new ADCancelTaskRequest(detectorId, userName, dataNodes);
         client.execute(ADCancelTaskAction.INSTANCE, cancelTaskRequest, ActionListener.wrap(response -> {
             Set<ADTaskCancellationState> states = response
                 .getNodes()
@@ -269,6 +302,13 @@ public class ADTaskManager {
         }, e -> { listener.onFailure(e); }));
     }
 
+    /**
+     * Get latest AD task and execute consumer function.
+     *
+     * @param detectorId detector id
+     * @param function consumer function
+     * @param listener action listener
+     */
     public void getLatestADTask(String detectorId, Consumer<Optional<ADTask>> function, ActionListener listener) {
         BoolQueryBuilder query = new BoolQueryBuilder();
         query.filter(new TermQueryBuilder(DETECTOR_ID_FIELD, detectorId));
@@ -281,7 +321,10 @@ public class ADTaskManager {
 
         client.search(searchRequest, ActionListener.wrap(r -> {
             long totalTasks = r.getHits().getTotalHits().value;
-            if (totalTasks == 1) {
+            if (totalTasks < 1) {
+                // we need to get task profile data in cache even AD task not found in index.
+                function.accept(Optional.empty());
+            } else {
                 SearchHit searchHit = r.getHits().getAt(0);
                 try (
                     XContentParser parser = RestHandlerUtils.createXContentParserFromRegistry(xContentRegistry, searchHit.getSourceRef())
@@ -290,8 +333,11 @@ public class ADTaskManager {
                     ADTask adTask = ADTask.parse(parser, searchHit.getId());
 
                     if (!isADTaskEnded(adTask) && lastUpdateTimeExpired(adTask)) {
+                        // If AD task is still running, but its last updated time not refreshed
+                        // for 2 pieces intervals, we will get task profile to check if it's
+                        // really running(task still in cache).
                         getADTaskProfile(adTask, ActionListener.wrap(taskProfile -> {
-                            if (taskProfile.getNodeId() == null) {
+                            if (taskProfile.get.getNodeId() == null) {
                                 resetTaskStateAsStopped(adTask);
                                 adTask.setState(ADTaskState.STOPPED.name());
                             }
@@ -300,19 +346,20 @@ public class ADTaskManager {
                     } else {
                         function.accept(Optional.of(adTask));
                     }
-
                 } catch (Exception e) {
                     String message = "Failed to parse AD task " + detectorId;
                     logger.error(message, e);
                     listener.onFailure(new ElasticsearchStatusException(message, RestStatus.INTERNAL_SERVER_ERROR));
                 }
-            } else if (totalTasks < 1) {
-                function.accept(Optional.empty());
-                // listener.onFailure(new ResourceNotFoundException(detectorId, "No latest AD task found"));
-            } else {
-                // TODO: handle multiple running lastest task. Iterate and cancel all of them
-                listener.onFailure(new ElasticsearchStatusException("Multiple", RestStatus.INTERNAL_SERVER_ERROR));
             }
+
+//            else  if (totalTasks < 1) {
+//                // we need to get task profile data in cache even AD task not found in index.
+//                function.accept(Optional.empty());
+//            } else {
+//                // TODO: handle multiple running lastest task. Iterate and cancel all of them
+//                listener.onFailure(new ElasticsearchStatusException("Multiple", RestStatus.INTERNAL_SERVER_ERROR));
+//            }
         }, e -> {
             if (e instanceof IndexNotFoundException) {
                 function.accept(Optional.empty());
@@ -570,7 +617,7 @@ public class ADTaskManager {
             .from(maxAdTaskDocsPerDetector - 1)
             .trackTotalHits(true)
             .size(1);
-        String s = sourceBuilder.toString();
+        String s = sourceBuilder.toString();//TODO remove this line
         searchRequest.source(sourceBuilder).indices(CommonName.DETECTION_STATE_INDEX);
         String detectorId = adTask.getDetectorId();
 
@@ -701,15 +748,34 @@ public class ADTaskManager {
             );
     }
 
-    public ADTaskCancellationState cancelTask(String taskId, String reason, String userName) {
-        if (!adTaskCacheManager.contains(taskId)) {
-            return ADTaskCancellationState.NOT_FOUND;
-        }
-        if (adTaskCacheManager.isCancelled(taskId)) {
-            return ADTaskCancellationState.ALREADY_CANCELLED;
-        }
-        adTaskCacheManager.cancel(taskId, reason, userName);
-        return ADTaskCancellationState.CANCELLED;
+    public void updateADTaskByQuery(QueryBuilder query, Map<String, Object> updatedFields, ActionListener<UpdateResponse> listener) {
+
+        UpdateRequest updateRequest = new UpdateRequest(CommonName.DETECTION_STATE_INDEX, taskId);
+        Map<String, Object> updatedContent = new HashMap<>();
+        updatedContent.putAll(updatedFields);
+        updatedContent.put(LAST_UPDATE_TIME_FIELD, Instant.now().toEpochMilli());
+        updateRequest.doc(updatedContent);
+        updateRequest.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
+        client
+                .update(
+                        updateRequest,
+                        ActionListener.wrap(response -> listener.onResponse(response), exception -> listener.onFailure(exception))
+                );
     }
+
+    public ADTaskCancellationState cancelTaskByDetectorId(String detectorId, String reason, String userName) {
+        return adTaskCacheManager.cancelByDetectorId(detectorId, reason, userName);
+    }
+
+//    public ADTaskCancellationState cancelTask(String taskId, String reason, String userName) {
+//        if (!adTaskCacheManager.contains(taskId)) {
+//            return ADTaskCancellationState.NOT_FOUND;
+//        }
+//        if (adTaskCacheManager.isCancelled(taskId)) {
+//            return ADTaskCancellationState.ALREADY_CANCELLED;
+//        }
+//        adTaskCacheManager.cancel(taskId, reason, userName);
+//        return ADTaskCancellationState.CANCELLED;
+//    }
 
 }

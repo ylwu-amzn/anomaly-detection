@@ -22,29 +22,29 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 
 public class ADCancelTaskNodeRequest extends BaseNodeRequest {
-    private String adTaskId;
+    private String detectorId;
     private String userName;
 
     public ADCancelTaskNodeRequest(StreamInput in) throws IOException {
         super(in);
-        this.adTaskId = in.readString();
+        this.detectorId = in.readString();
         this.userName = in.readOptionalString();
     }
 
     public ADCancelTaskNodeRequest(ADCancelTaskRequest request) {
-        this.adTaskId = request.getAdTaskId();
+        this.detectorId = request.getDetectorId();
         this.userName = request.getUserName();
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
-        out.writeString(adTaskId);
+        out.writeString(detectorId);
         out.writeOptionalString(userName);
     }
 
-    public String getAdTaskId() {
-        return adTaskId;
+    public String getDetectorId() {
+        return detectorId;
     }
 
     public String getUserName() {

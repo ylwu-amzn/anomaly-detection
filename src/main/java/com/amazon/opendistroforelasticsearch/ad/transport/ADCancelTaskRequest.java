@@ -30,32 +30,32 @@ import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
 
 public class ADCancelTaskRequest extends BaseNodesRequest<ADCancelTaskRequest> {
 
-    private String adTaskId;
+    private String detectorId;
     private String userName;
 
     public ADCancelTaskRequest(StreamInput in) throws IOException {
         super(in);
-        this.adTaskId = in.readString();
+        this.detectorId = in.readString();
         this.userName = in.readOptionalString();
     }
 
-    public ADCancelTaskRequest(String adTaskId, String userName, String... nodeIds) {
+    public ADCancelTaskRequest(String detectorId, String userName, String... nodeIds) {
         super(nodeIds);
-        this.adTaskId = adTaskId;
+        this.detectorId = detectorId;
         this.userName = userName;
     }
 
-    public ADCancelTaskRequest(String adTaskId, String userName, DiscoveryNode... nodes) {
+    public ADCancelTaskRequest(String detectorId, String userName, DiscoveryNode... nodes) {
         super(nodes);
-        this.adTaskId = adTaskId;
+        this.detectorId = detectorId;
         this.userName = userName;
     }
 
     @Override
     public ActionRequestValidationException validate() {
         ActionRequestValidationException validationException = null;
-        if (Strings.isEmpty(adTaskId)) {
-            validationException = addValidationError(CommonErrorMessages.AD_TASK_ID_MISSING_MSG, validationException);
+        if (Strings.isEmpty(detectorId)) {
+            validationException = addValidationError(CommonErrorMessages.DETECTOR_ID_MISSING_MSG, validationException);
         }
         return validationException;
     }
@@ -63,12 +63,12 @@ public class ADCancelTaskRequest extends BaseNodesRequest<ADCancelTaskRequest> {
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
-        out.writeString(adTaskId);
+        out.writeString(detectorId);
         out.writeOptionalString(userName);
     }
 
-    public String getAdTaskId() {
-        return adTaskId;
+    public String getDetectorId() {
+        return detectorId;
     }
 
     public String getUserName() {

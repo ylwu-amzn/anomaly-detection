@@ -86,8 +86,8 @@ public class ADCancelTaskTransportAction extends
     protected ADCancelTaskNodeResponse nodeOperation(ADCancelTaskNodeRequest request) {
         String reason = "Task cancelled by user";
         String userName = request.getUserName();
-        ADTaskCancellationState state = adTaskManager.cancelTask(request.getAdTaskId(), reason, userName);
-        logger.info("AD task id: {}, {}", request.getAdTaskId(), reason);
+        ADTaskCancellationState state = adTaskManager.cancelTaskByDetectorId(request.getDetectorId(), reason, userName);
+        logger.info("AD task id: {}, {}", request.getDetectorId(), reason);
         return new ADCancelTaskNodeResponse(clusterService.localNode(), state);
     }
 }

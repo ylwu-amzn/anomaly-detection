@@ -21,11 +21,13 @@ import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorS
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.THRESHOLD_MODEL_TRAINING_SIZE;
 
 import java.util.Deque;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Settings;
@@ -220,6 +222,10 @@ public class ADTaskCacheManager {
         return taskCaches.get(taskId);
     }
 
+    private List<ADBatchTaskCache> getTaskCacheByDetectorId(String detectorId) {
+        return taskCaches.values().stream().filter(v -> Objects.equals(detectorId, v.getDetectorId())).collect(Collectors.toList());
+    }
+
     /**
      * Calculate AD task cache memory usage.
      *
@@ -253,6 +259,30 @@ public class ADTaskCacheManager {
      */
     public void cancel(String taskId, String reason, String userName) {
         getBatchTaskCache(taskId).cancel(reason, userName);
+    }
+
+    /**
+     * Cancel AD task.
+     *
+     * @param detectorId detector id
+     * @param reason why need to cancel task
+     * @param userName user name
+     */
+    public ADTaskCancellationState cancelByDetectorId(String detectorId, String reason, String userName) {
+        List<ADBatchTaskCache> taskCaches = getTaskCacheByDetectorId(detectorId);
+
+        if (taskCaches.size() == 0) {
+            return ADTaskCancellationState.NOT_FOUND;
+        }
+
+        ADTaskCancellationState cancellationState = ADTaskCancellationState.ALREADY_CANCELLED;
+        for (ADBatchTaskCache cache : taskCaches) {
+            if (!cache.isCancelled()) {
+                cancellationState = ADTaskCancellationState.CANCELLED;
+                cache.cancel(reason, userName);
+            }
+        }
+        return cancellationState;
     }
 
     /**
