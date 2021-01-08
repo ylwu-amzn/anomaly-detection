@@ -21,12 +21,10 @@ import org.elasticsearch.action.support.nodes.BaseNodeResponse;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
-import org.elasticsearch.common.xcontent.ToXContentFragment;
-import org.elasticsearch.common.xcontent.XContentBuilder;
 
 import com.amazon.opendistroforelasticsearch.ad.model.ADTaskProfile;
 
-public class ADTaskProfileNodeResponse extends BaseNodeResponse implements ToXContentFragment {
+public class ADTaskProfileNodeResponse extends BaseNodeResponse {
 
     private ADTaskProfile adTaskProfile;
 
@@ -58,13 +56,6 @@ public class ADTaskProfileNodeResponse extends BaseNodeResponse implements ToXCo
             out.writeBoolean(false);
         }
 
-    }
-
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        if (this.adTaskProfile != null) {
-            adTaskProfile.toXContent(builder, params);
-        }
-        return builder;
     }
 
     public static ADTaskProfileNodeResponse readNodeResponse(StreamInput in) throws IOException {

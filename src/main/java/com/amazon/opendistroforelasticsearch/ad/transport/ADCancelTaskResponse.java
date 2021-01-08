@@ -21,15 +21,10 @@ import java.util.List;
 import org.elasticsearch.action.FailedNodeException;
 import org.elasticsearch.action.support.nodes.BaseNodesResponse;
 import org.elasticsearch.cluster.ClusterName;
-import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
-import org.elasticsearch.common.xcontent.ToXContentObject;
-import org.elasticsearch.common.xcontent.XContentBuilder;
 
-public class ADCancelTaskResponse extends BaseNodesResponse<ADCancelTaskNodeResponse> implements ToXContentObject {
-
-    private static final String NODES_KEY = "nodes";
+public class ADCancelTaskResponse extends BaseNodesResponse<ADCancelTaskNodeResponse> {
 
     public ADCancelTaskResponse(StreamInput in) throws IOException {
         super(in);
@@ -40,11 +35,6 @@ public class ADCancelTaskResponse extends BaseNodesResponse<ADCancelTaskNodeResp
     }
 
     @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-    }
-
-    @Override
     public void writeNodesTo(StreamOutput out, List<ADCancelTaskNodeResponse> nodes) throws IOException {
         out.writeList(nodes);
     }
@@ -52,21 +42,5 @@ public class ADCancelTaskResponse extends BaseNodesResponse<ADCancelTaskNodeResp
     @Override
     public List<ADCancelTaskNodeResponse> readNodesFrom(StreamInput in) throws IOException {
         return in.readList(ADCancelTaskNodeResponse::readNodeResponse);
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        String nodeId;
-        DiscoveryNode node;
-        builder.startObject(NODES_KEY);
-        for (ADCancelTaskNodeResponse adTaskProfile : getNodes()) {
-            node = adTaskProfile.getNode();
-            nodeId = node.getId();
-            builder.startObject(nodeId);
-            adTaskProfile.toXContent(builder, params);
-            builder.endObject();
-        }
-        builder.endObject();
-        return builder;
     }
 }

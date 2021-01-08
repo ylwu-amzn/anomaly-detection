@@ -55,6 +55,7 @@ public class ADTaskManagerTests extends ADUnitTestCase {
 
     private Settings settings;
     private Client client;
+    private ClusterService clusterService;
     private ClusterSettings clusterSettings;
     private DiscoveryNodeFilterer nodeFilter;
     private AnomalyDetectionIndices anomalyDetectionIndices;
@@ -81,7 +82,7 @@ public class ADTaskManagerTests extends ADUnitTestCase {
 
         clusterSettings = clusterSetting(settings, MAX_OLD_AD_TASK_DOCS_PER_DETECTOR, BATCH_TASK_PIECE_INTERVAL_SECONDS);
 
-        final ClusterService clusterService = new ClusterService(settings, clusterSettings, null);
+        clusterService = new ClusterService(settings, clusterSettings, null);
 
         client = mock(Client.class);
         nodeFilter = mock(DiscoveryNodeFilterer.class);

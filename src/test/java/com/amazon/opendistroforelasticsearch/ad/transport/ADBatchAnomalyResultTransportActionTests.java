@@ -142,14 +142,13 @@ public class ADBatchAnomalyResultTransportActionTests extends HistoricalDetector
         updateTransientSettings(ImmutableMap.of(MAX_BATCH_TASK_PER_NODE.getKey(), 1));
         DetectionDateRange dateRange = new DetectionDateRange(startTime, endTime);
         for (int i = 0; i < getDataNodes().size(); i++) {
-            client().execute(ADBatchAnomalyResultAction.INSTANCE, adBatchAnomalyResultRequest(dateRange));
+            dataNodeClient().execute(ADBatchAnomalyResultAction.INSTANCE, adBatchAnomalyResultRequest(dateRange));
         }
-
         ADBatchAnomalyResultRequest request = adBatchAnomalyResultRequest(dateRange);
 
         RuntimeException exception = expectThrowsAnyOf(
             ImmutableList.of(LimitExceededException.class, NotSerializableExceptionWrapper.class),
-            () -> client().execute(ADBatchAnomalyResultAction.INSTANCE, request).actionGet(5000)
+            () -> dataNodeClient().execute(ADBatchAnomalyResultAction.INSTANCE, request).actionGet(5000)
         );
         assertTrue(
             exception

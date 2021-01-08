@@ -24,6 +24,7 @@ import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 
+import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.commons.authuser.User;
 
@@ -33,6 +34,7 @@ public class ForwardADTaskRequest extends ActionRequest {
 
     public ForwardADTaskRequest(AnomalyDetector detector, User user) {
         this.detector = detector;
+        this.user = user;
     }
 
     public ForwardADTaskRequest(StreamInput in) throws IOException {
@@ -59,7 +61,7 @@ public class ForwardADTaskRequest extends ActionRequest {
     public ActionRequestValidationException validate() {
         ActionRequestValidationException validationException = null;
         if (detector == null) {
-            validationException = addValidationError("Detector is missing", validationException);
+            validationException = addValidationError(CommonErrorMessages.DETECTOR_MISSING, validationException);
         }
         return validationException;
     }

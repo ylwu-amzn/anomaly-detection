@@ -41,6 +41,8 @@ import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.support.WriteRequest;
 import org.elasticsearch.action.support.master.AcknowledgedResponse;
+import org.elasticsearch.client.Client;
+import org.elasticsearch.client.node.NodeClient;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
@@ -51,6 +53,7 @@ import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.test.ESIntegTestCase;
+import org.elasticsearch.transport.MockTransportClient;
 import org.junit.Before;
 
 import com.amazon.opendistroforelasticsearch.ad.common.exception.AnomalyDetectionException;
@@ -194,6 +197,50 @@ public abstract class ADIntegTestCase extends ESIntegTestCase {
     public ImmutableOpenMap<String, DiscoveryNode> getDataNodes() {
         DiscoveryNodes nodes = clusterService().state().getNodes();
         return nodes.getDataNodes();
+    }
+
+    public Client getMockTransportClient() {
+        for (Client client : clients()) {
+            if (client instanceof MockTransportClient) {
+                return client;
+            }
+        }
+        return null;
+    }
+
+    public Client getDataNodeClient() {
+        for (Client client : clients()) {
+            if (client instanceof NodeClient) {
+                return client;
+            }
+        }
+        return null;
+        // ImmutableOpenMap<String, DiscoveryNode> dataNodes = getDataNodes();
+        // if (dataNodes.iterator().hasNext()) {
+        // Client client = client();
+        // int i = 0;
+        // while(!(client instanceof NodeClient) && i<100) {
+        // client = client();
+        // i ++;
+        // }
+        // if (client instanceof NodeClient) {
+        // return client;
+        // }
+        // throw new RuntimeException("can't find node client");
+        // } else {
+        // throw new RuntimeException("no data nodes found");
+        // }
+        // Iterator<ObjectObjectCursor<String, DiscoveryNode>> iterator = dataNodes.iterator();
+        // if (!iterator.hasNext()) {
+        // return null;
+        // }
+        // int random = randomIntBetween(0, dataNodes.size() - 1);
+        // int i = 0;
+        // while (i < random) {
+        // iterator.next();
+        // i++;
+        // }
+        // return client(iterator.next().value.getName());
     }
 
     public DiscoveryNode[] getDataNodesArray() {

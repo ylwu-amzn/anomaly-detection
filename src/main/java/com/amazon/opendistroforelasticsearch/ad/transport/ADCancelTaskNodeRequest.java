@@ -23,19 +23,16 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 
 public class ADCancelTaskNodeRequest extends BaseNodeRequest {
     private String detectorId;
-    private String taskId;
     private String userName;
 
     public ADCancelTaskNodeRequest(StreamInput in) throws IOException {
         super(in);
         this.detectorId = in.readOptionalString();
-        this.taskId = in.readOptionalString();
         this.userName = in.readOptionalString();
     }
 
     public ADCancelTaskNodeRequest(ADCancelTaskRequest request) {
         this.detectorId = request.getDetectorId();
-        this.taskId = request.getTaskId();
         this.userName = request.getUserName();
     }
 
@@ -43,16 +40,11 @@ public class ADCancelTaskNodeRequest extends BaseNodeRequest {
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
         out.writeOptionalString(detectorId);
-        out.writeOptionalString(taskId);
         out.writeOptionalString(userName);
     }
 
     public String getDetectorId() {
         return detectorId;
-    }
-
-    public String getTaskId() {
-        return taskId;
     }
 
     public String getUserName() {

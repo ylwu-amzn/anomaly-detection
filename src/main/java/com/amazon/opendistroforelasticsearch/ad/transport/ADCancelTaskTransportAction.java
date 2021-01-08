@@ -25,7 +25,6 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.nodes.TransportNodesAction;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -88,11 +87,8 @@ public class ADCancelTaskTransportAction extends
         String reason = "Task cancelled by user";
         String userName = request.getUserName();
         String detectorId = request.getDetectorId();
-        String taskId = request.getTaskId();
-        ADTaskCancellationState state = Strings.isEmpty(taskId)
-            ? adTaskManager.cancelLocalTaskByDetectorId(detectorId, reason, userName)
-            : adTaskManager.cancelLocalTaskByTaskId(taskId, reason, userName);
-        logger.debug("Cancelled AD task for taskId: {}, detectorId: {}, reason: {}", request.getTaskId(), request.getDetectorId(), reason);
+        ADTaskCancellationState state = adTaskManager.cancelLocalTaskByDetectorId(detectorId, reason, userName);
+        logger.debug("Cancelled AD task for detector: {}", request.getDetectorId());
         return new ADCancelTaskNodeResponse(clusterService.localNode(), state);
     }
 }

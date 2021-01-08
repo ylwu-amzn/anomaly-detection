@@ -26,6 +26,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
+import org.elasticsearch.action.bulk.BulkAction;
+import org.elasticsearch.action.bulk.BulkRequest;
+import org.elasticsearch.action.bulk.BulkRequestBuilder;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.search.SearchRequest;
@@ -50,6 +53,8 @@ import org.elasticsearch.transport.TransportService;
 
 import com.amazon.opendistroforelasticsearch.ad.TestHelpers;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
+import com.amazon.opendistroforelasticsearch.ad.transport.mocks.MockAnomalyDetectorJobAction;
+import com.amazon.opendistroforelasticsearch.ad.transport.mocks.MockAnomalyDetectorJobTransportActionWithUser;
 import com.google.common.collect.ImmutableList;
 
 public class MockReindexPlugin extends Plugin implements ActionPlugin {
@@ -59,7 +64,8 @@ public class MockReindexPlugin extends Plugin implements ActionPlugin {
         return Arrays
             .asList(
                 new ActionHandler<>(UpdateByQueryAction.INSTANCE, MockTransportUpdateByQueryAction.class),
-                new ActionHandler<>(DeleteByQueryAction.INSTANCE, MockTransportDeleteByQueryAction.class)
+                new ActionHandler<>(DeleteByQueryAction.INSTANCE, MockTransportDeleteByQueryAction.class),
+                new ActionHandler<>(MockAnomalyDetectorJobAction.INSTANCE, MockAnomalyDetectorJobTransportActionWithUser.class)
             );
     }
 
@@ -165,18 +171,53 @@ public class MockReindexPlugin extends Plugin implements ActionPlugin {
 
         @Override
         protected void doExecute(Task task, DeleteByQueryRequest request, ActionListener<BulkByScrollResponse> listener) {
-            SearchRequest searchRequest = request.getSearchRequest();
-            client.search(searchRequest, ActionListener.wrap(r -> {
-                long totalHits = r.getHits().getTotalHits().value;
-                MultiResponsesActionListener delegateListener = new MultiResponsesActionListener(listener, totalHits);
-                Iterator<SearchHit> iterator = r.getHits().iterator();
-                while (iterator.hasNext()) {
-                    String id = iterator.next().getId();
-                    DeleteRequest deleteRequest = new DeleteRequest(CommonName.DETECTION_STATE_INDEX, id)
-                        .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
-                    client.delete(deleteRequest, delegateListener);
-                }
-            }, e -> listener.onFailure(e)));
+            try {
+                SearchRequest searchRequest = request.getSearchRequest();
+                client.search(searchRequest, ActionListener.wrap(r -> {
+                    long totalHits = r.getHits().getTotalHits().value;
+                    Iterator<SearchHit> iterator = r.getHits().iterator();
+                    BulkRequestBuilder bulkRequestBuilder = client.prepareBulk();
+                    while (iterator.hasNext()) {
+                        String id = iterator.next().getId();
+                        DeleteRequest deleteRequest = new DeleteRequest(CommonName.DETECTION_STATE_INDEX, id);
+                        bulkRequestBuilder.add(deleteRequest);
+                    }
+                    BulkRequest bulkRequest = bulkRequestBuilder.request().setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
+                    client
+                        .execute(
+                            BulkAction.INSTANCE,
+                            bulkRequest,
+                            ActionListener
+                                .wrap(
+                                    res -> { listener.onResponse(mockBulkByScrollResponse(totalHits)); },
+                                    ex -> { listener.onFailure(ex); }
+                                )
+                        );
+
+                }, e -> { listener.onFailure(e); }));
+            } catch (Exception e) {
+                listener.onFailure(e);
+            }
+        }
+
+        private BulkByScrollResponse mockBulkByScrollResponse(long totalHits) throws IOException {
+            XContentParser parser = TestHelpers
+                .parser(
+                    "{\"slice_id\":1,\"total\":2,\"updated\":0,\"created\":0,\"deleted\":"
+                        + totalHits
+                        + ",\"batches\":6,\"version_conflicts\":0,\"noops\":0,\"retries\":{\"bulk\":0,"
+                        + "\"search\":10},\"throttled_millis\":0,\"requests_per_second\":13.0,\"canceled\":"
+                        + "\"reasonCancelled\",\"throttled_until_millis\":14}"
+                );
+            parser.nextToken();
+            BulkByScrollResponse response = new BulkByScrollResponse(
+                TimeValue.timeValueMillis(10),
+                BulkByScrollTask.Status.innerFromXContent(parser),
+                ImmutableList.of(),
+                ImmutableList.of(),
+                false
+            );
+            return response;
         }
     }
 }

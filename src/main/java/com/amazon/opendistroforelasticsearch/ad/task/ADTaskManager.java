@@ -474,8 +474,8 @@ public class ADTaskManager {
         ADTaskProfile adTaskProfile = null;
         if (adTaskCacheManager.contains(taskId)) {
             adTaskProfile = new ADTaskProfile(
-                adTaskCacheManager.getShingle(taskId) == null ? 0 : adTaskCacheManager.getShingle(taskId).size(),
-                adTaskCacheManager.getRcfModel(taskId) == null ? 0 : adTaskCacheManager.getRcfModel(taskId).getTotalUpdates(),
+                adTaskCacheManager.getShingle(taskId).size(),
+                adTaskCacheManager.getRcfModel(taskId).getTotalUpdates(),
                 adTaskCacheManager.isThresholdModelTrained(taskId),
                 adTaskCacheManager.getThresholdModelTrainingDataSize(taskId),
                 clusterService.localNode().getId()
@@ -795,18 +795,6 @@ public class ADTaskManager {
      */
     public ADTaskCancellationState cancelLocalTaskByDetectorId(String detectorId, String reason, String userName) {
         return adTaskCacheManager.cancelByDetectorId(detectorId, reason, userName);
-    }
-
-    /**
-     * Can running task by task id.
-     *
-     * @param taskId task id
-     * @param reason reason to cancel AD task
-     * @param userName which user cancel the AD task
-     * @return AD task cancellation state
-     */
-    public ADTaskCancellationState cancelLocalTaskByTaskId(String taskId, String reason, String userName) {
-        return adTaskCacheManager.cancel(taskId, reason, userName);
     }
 
 }

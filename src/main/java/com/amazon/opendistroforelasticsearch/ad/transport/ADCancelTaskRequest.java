@@ -26,46 +26,30 @@ import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 
+import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
+
 public class ADCancelTaskRequest extends BaseNodesRequest<ADCancelTaskRequest> {
 
     private String detectorId;
-    private String taskId;
     private String userName;
 
     public ADCancelTaskRequest(StreamInput in) throws IOException {
         super(in);
         this.detectorId = in.readOptionalString();
-        this.taskId = in.readOptionalString();
         this.userName = in.readOptionalString();
     }
 
-    public ADCancelTaskRequest(String detectorId, String userName, String... nodeIds) {
-        this(detectorId, null, userName, nodeIds);
-    }
-
-    public ADCancelTaskRequest(String detectorId, String taskId, String userName, String... nodeIds) {
-        super(nodeIds);
-        this.detectorId = detectorId;
-        this.taskId = taskId;
-        this.userName = userName;
-    }
-
     public ADCancelTaskRequest(String detectorId, String userName, DiscoveryNode... nodes) {
-        this(detectorId, null, userName, nodes);
-    }
-
-    public ADCancelTaskRequest(String detectorId, String taskId, String userName, DiscoveryNode... nodes) {
         super(nodes);
         this.detectorId = detectorId;
-        this.taskId = taskId;
         this.userName = userName;
     }
 
     @Override
     public ActionRequestValidationException validate() {
         ActionRequestValidationException validationException = null;
-        if (Strings.isEmpty(detectorId) && Strings.isEmpty(taskId)) {
-            validationException = addValidationError("Both detector id and task id missing", validationException);
+        if (Strings.isEmpty(detectorId)) {
+            validationException = addValidationError(CommonErrorMessages.AD_ID_MISSING_MSG, validationException);
         }
         return validationException;
     }
@@ -74,16 +58,11 @@ public class ADCancelTaskRequest extends BaseNodesRequest<ADCancelTaskRequest> {
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
         out.writeOptionalString(detectorId);
-        out.writeOptionalString(taskId);
         out.writeOptionalString(userName);
     }
 
     public String getDetectorId() {
         return detectorId;
-    }
-
-    public String getTaskId() {
-        return taskId;
     }
 
     public String getUserName() {

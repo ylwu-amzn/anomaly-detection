@@ -21,12 +21,10 @@ import org.elasticsearch.action.support.nodes.BaseNodeResponse;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
-import org.elasticsearch.common.xcontent.ToXContentFragment;
-import org.elasticsearch.common.xcontent.XContentBuilder;
 
 import com.amazon.opendistroforelasticsearch.ad.task.ADTaskCancellationState;
 
-public class ADCancelTaskNodeResponse extends BaseNodeResponse implements ToXContentFragment {
+public class ADCancelTaskNodeResponse extends BaseNodeResponse {
 
     private ADTaskCancellationState state;
 
@@ -44,13 +42,6 @@ public class ADCancelTaskNodeResponse extends BaseNodeResponse implements ToXCon
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
         out.writeEnum(state);
-    }
-
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.field("task_cancellation_state", state.name());
-        builder.endObject();
-        return builder;
     }
 
     public static ADCancelTaskNodeResponse readNodeResponse(StreamInput in) throws IOException {
