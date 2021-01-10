@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.opendistroforelasticsearch.ad.mock;
+package com.amazon.opendistroforelasticsearch.ad.mock.transport;
 
 import org.elasticsearch.action.ActionType;
 

@@ -50,7 +50,7 @@ import org.elasticsearch.common.xcontent.XContentParserUtils;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.rest.RestStatus;
 
-import com.amazon.opendistroforelasticsearch.ad.mock.MockSimpleLog;
+import com.amazon.opendistroforelasticsearch.ad.mock.model.MockSimpleLog;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;

@@ -13,18 +13,13 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.opendistroforelasticsearch.ad.plugin;
+package com.amazon.opendistroforelasticsearch.ad.mock.plugin;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
@@ -32,7 +27,6 @@ import org.elasticsearch.action.bulk.BulkAction;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkRequestBuilder;
 import org.elasticsearch.action.delete.DeleteRequest;
-import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
@@ -55,8 +49,8 @@ import org.elasticsearch.transport.TransportService;
 
 import com.amazon.opendistroforelasticsearch.ad.TestHelpers;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
-import com.amazon.opendistroforelasticsearch.ad.transport.mocks.MockAnomalyDetectorJobAction;
-import com.amazon.opendistroforelasticsearch.ad.transport.mocks.MockAnomalyDetectorJobTransportActionWithUser;
+import com.amazon.opendistroforelasticsearch.ad.mock.transport.MockAnomalyDetectorJobAction;
+import com.amazon.opendistroforelasticsearch.ad.mock.transport.MockAnomalyDetectorJobTransportActionWithUser;
 import com.google.common.collect.ImmutableList;
 
 public class MockReindexPlugin extends Plugin implements ActionPlugin {
@@ -114,65 +108,6 @@ public class MockReindexPlugin extends Plugin implements ActionPlugin {
             this.client = client;
         }
 
-        private class MultiResponsesActionListener implements ActionListener<DeleteResponse> {
-            private final ActionListener<BulkByScrollResponse> delegate;
-            private final AtomicInteger collectedResponseCount;
-            private final AtomicLong maxResponseCount;
-            private final AtomicBoolean hasFailure;
-
-            MultiResponsesActionListener(ActionListener<BulkByScrollResponse> delegate, long maxResponseCount) {
-                this.delegate = delegate;
-                this.collectedResponseCount = new AtomicInteger(0);
-                this.maxResponseCount = new AtomicLong(maxResponseCount);
-                this.hasFailure = new AtomicBoolean(false);
-            }
-
-            @Override
-            public void onResponse(DeleteResponse deleteResponse) {
-                if (collectedResponseCount.incrementAndGet() >= maxResponseCount.get()) {
-                    finish();
-                }
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                this.hasFailure.set(true);
-                if (collectedResponseCount.incrementAndGet() >= maxResponseCount.get()) {
-                    finish();
-                }
-            }
-
-            private void finish() {
-                if (this.hasFailure.get()) {
-                    this.delegate.onFailure(new RuntimeException("failed to delete old AD tasks"));
-                } else {
-                    try {
-                        XContentParser parser = TestHelpers
-                            .parser(
-                                "{\"slice_id\":1,\"total\":2,\"updated\":0,\"created\":0,\"deleted\":"
-                                    + maxResponseCount
-                                    + ",\"batches\":6,\"version_conflicts\":0,\"noops\":0,\"retries\":{\"bulk\":0,"
-                                    + "\"search\":10},\"throttled_millis\":0,\"requests_per_second\":13.0,\"canceled\":"
-                                    + "\"reasonCancelled\",\"throttled_until_millis\":14}"
-                            );
-                        parser.nextToken();
-                        BulkByScrollResponse response = new BulkByScrollResponse(
-                            TimeValue.timeValueMillis(10),
-                            BulkByScrollTask.Status.innerFromXContent(parser),
-                            ImmutableList.of(),
-                            ImmutableList.of(),
-                            false
-                        );
-                        this.delegate.onResponse(response);
-                    } catch (IOException exception) {
-                        this.delegate.onFailure(new RuntimeException("failed to parse BulkByScrollResponse"));
-                    }
-                }
-            }
-        }
-
-        private final Logger logger = LogManager.getLogger(this.getClass());
-
         @Override
         protected void doExecute(Task task, DeleteByQueryRequest request, ActionListener<BulkByScrollResponse> listener) {
             try {
@@ -191,12 +126,13 @@ public class MockReindexPlugin extends Plugin implements ActionPlugin {
                         .execute(
                             BulkAction.INSTANCE,
                             bulkRequest,
-                            ActionListener.wrap(res -> { logger.info("Deleted {} old AD task docs successfully", totalHits); }, ex -> {
-                                logger.error("Failed to delete old AD task docs successfully", ex);
-                                listener.onFailure(ex);
-                            })
+                            ActionListener
+                                .wrap(
+                                    res -> { listener.onResponse(mockBulkByScrollResponse(totalHits)); },
+                                    ex -> { listener.onFailure(ex); }
+                                )
                         );
-                    listener.onResponse(mockBulkByScrollResponse(totalHits));
+
                 }, e -> { listener.onFailure(e); }));
             } catch (Exception e) {
                 listener.onFailure(e);
