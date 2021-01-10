@@ -16,17 +16,23 @@
 package com.amazon.opendistroforelasticsearch.ad;
 
 import static org.apache.http.entity.ContentType.APPLICATION_JSON;
+import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
 import static org.elasticsearch.common.xcontent.json.JsonXContent.jsonXContent;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.function.ToDoubleFunction;
+import java.util.function.ToIntFunction;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHeaders;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.message.BasicHeader;
+import org.apache.http.util.EntityUtils;
 import org.elasticsearch.client.Request;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.RestClient;
@@ -44,6 +50,8 @@ import org.elasticsearch.common.xcontent.XContentParserUtils;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.rest.RestStatus;
 
+import com.amazon.opendistroforelasticsearch.ad.mock.MockSimpleLog;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
@@ -424,5 +432,73 @@ public abstract class AnomalyDetectorRestTestCase extends ODFERestTestCase {
                 ),
                 ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
             );
+    }
+
+    public Response ingestSimpleMockLog(
+        String indexName,
+        int startDays,
+        int totalDoc,
+        long intervalInMinutes,
+        ToDoubleFunction<Integer> valueFunc,
+        ToIntFunction<Integer> categoryFunc
+    ) throws IOException {
+        TestHelpers
+            .makeRequest(
+                client(),
+                "PUT",
+                indexName,
+                null,
+                toHttpEntity(MockSimpleLog.INDEX_MAPPING),
+                ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+            );
+
+        Response statsResponse = TestHelpers.makeRequest(client(), "GET", indexName, ImmutableMap.of(), "", null);
+        assertEquals(RestStatus.OK, restStatus(statsResponse));
+        String result = EntityUtils.toString(statsResponse.getEntity());
+        assertTrue(result.contains(indexName));
+
+        StringBuilder bulkRequestBuilder = new StringBuilder();
+        Instant startTime = Instant.now().minus(startDays, ChronoUnit.DAYS);
+        for (int i = 0; i < totalDoc; i++) {
+            bulkRequestBuilder.append("{ \"index\" : { \"_index\" : \"" + indexName + "\", \"_id\" : \"" + i + "\" } }\n");
+            MockSimpleLog simpleLog = new MockSimpleLog(
+                startTime,
+                valueFunc.applyAsDouble(i),
+                "category" + categoryFunc.applyAsInt(i),
+                randomBoolean(),
+                randomAlphaOfLength(5)
+            );
+            bulkRequestBuilder.append(TestHelpers.toJsonString(simpleLog));
+            bulkRequestBuilder.append("\n");
+            startTime = startTime.plus(intervalInMinutes, ChronoUnit.MINUTES);
+        }
+        Response bulkResponse = TestHelpers
+            .makeRequest(
+                client(),
+                "POST",
+                "_bulk?refresh=true",
+                null,
+                toHttpEntity(bulkRequestBuilder.toString()),
+                ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+            );
+        return bulkResponse;
+    }
+
+    public ADTask parseADTaskFromProfileResponse(Response profileResponse, String taskId) throws IOException {
+        String profileResult = EntityUtils.toString(profileResponse.getEntity());
+        XContentParser parser = TestHelpers.parser(profileResult);
+        ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.nextToken(), parser);
+        ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+        ADTask adTask = null;
+        while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
+            String fieldName = parser.currentName();
+            parser.nextToken();
+            if ("ad_task".equals(fieldName)) {
+                adTask = ADTask.parse(parser, taskId);
+            } else {
+                parser.skipChildren();
+            }
+        }
+        return adTask;
     }
 }

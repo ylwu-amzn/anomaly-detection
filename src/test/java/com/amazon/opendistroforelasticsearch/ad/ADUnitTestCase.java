@@ -19,9 +19,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import org.elasticsearch.Version;
-import org.elasticsearch.cluster.node.DiscoveryNode;
-import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
@@ -56,10 +53,6 @@ public class ADUnitTestCase extends ESTestCase {
             .collect(Collectors.toSet());
         ClusterSettings clusterSettings = new ClusterSettings(settings, settingsSet);
         return clusterSettings;
-    }
-
-    public DiscoveryNode mockDiscoveryNode() {
-        return new DiscoveryNode(UUIDs.randomBase64UUID(), buildNewFakeTransportAddress(), Version.CURRENT);
     }
 
 }

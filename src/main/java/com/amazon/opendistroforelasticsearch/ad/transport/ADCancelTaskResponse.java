@@ -27,7 +27,7 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 public class ADCancelTaskResponse extends BaseNodesResponse<ADCancelTaskNodeResponse> {
 
     public ADCancelTaskResponse(StreamInput in) throws IOException {
-        super(in);
+        super(new ClusterName(in), in.readList(ADCancelTaskNodeResponse::readNodeResponse), in.readList(FailedNodeException::new));
     }
 
     public ADCancelTaskResponse(ClusterName clusterName, List<ADCancelTaskNodeResponse> nodes, List<FailedNodeException> failures) {
@@ -42,5 +42,10 @@ public class ADCancelTaskResponse extends BaseNodesResponse<ADCancelTaskNodeResp
     @Override
     public List<ADCancelTaskNodeResponse> readNodesFrom(StreamInput in) throws IOException {
         return in.readList(ADCancelTaskNodeResponse::readNodeResponse);
+    }
+
+    @Override
+    public void writeTo(StreamOutput out) throws IOException {
+        super.writeTo(out);
     }
 }

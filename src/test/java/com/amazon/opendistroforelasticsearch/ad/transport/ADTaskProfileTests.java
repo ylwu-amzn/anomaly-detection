@@ -15,23 +15,43 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
+import static com.amazon.opendistroforelasticsearch.ad.TestHelpers.randomDiscoveryNode;
+
 import java.io.IOException;
+import java.util.Collection;
+import java.util.List;
 
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionRequestValidationException;
+import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
 import org.elasticsearch.common.io.stream.NamedWriteableAwareStreamInput;
+import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
+import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.test.ESSingleNodeTestCase;
+import org.elasticsearch.test.InternalSettingsPlugin;
 
-import com.amazon.opendistroforelasticsearch.ad.ADUnitTestCase;
+import com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorPlugin;
+import com.amazon.opendistroforelasticsearch.ad.TestHelpers;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTaskProfile;
+import com.google.common.collect.ImmutableList;
 
-public class ADTaskProfileTests extends ADUnitTestCase {
+public class ADTaskProfileTests extends ESSingleNodeTestCase {
+    @Override
+    protected Collection<Class<? extends Plugin>> getPlugins() {
+        return pluginList(InternalSettingsPlugin.class, AnomalyDetectorPlugin.class);
+    }
+
+    @Override
+    protected NamedWriteableRegistry writableRegistry() {
+        return getInstanceFromNode(NamedWriteableRegistry.class);
+    }
 
     public void testADTaskProfileRequest() throws IOException {
-        ADTaskProfileRequest request = new ADTaskProfileRequest(randomAlphaOfLength(5), mockDiscoveryNode());
+        ADTaskProfileRequest request = new ADTaskProfileRequest(randomAlphaOfLength(5), randomDiscoveryNode());
 
         BytesStreamOutput output = new BytesStreamOutput();
         request.writeTo(output);
@@ -49,23 +69,23 @@ public class ADTaskProfileTests extends ADUnitTestCase {
 
     public void testADTaskProfileNodeResponse() throws IOException {
         ADTaskProfile adTaskProfile = new ADTaskProfile(randomInt(), randomLong(), randomBoolean(), randomInt(), randomAlphaOfLength(5));
-        ADTaskProfileNodeResponse response = new ADTaskProfileNodeResponse(mockDiscoveryNode(), adTaskProfile);
+        ADTaskProfileNodeResponse response = new ADTaskProfileNodeResponse(randomDiscoveryNode(), adTaskProfile);
         testADTaskProfileResponse(response);
     }
 
     public void testADTaskProfileNodeResponseWithNullProfile() throws IOException {
-        ADTaskProfileNodeResponse response = new ADTaskProfileNodeResponse(mockDiscoveryNode(), null);
+        ADTaskProfileNodeResponse response = new ADTaskProfileNodeResponse(randomDiscoveryNode(), null);
         testADTaskProfileResponse(response);
     }
 
     public void testADTaskProfileNodeResponseReadMethod() throws IOException {
         ADTaskProfile adTaskProfile = new ADTaskProfile(randomInt(), randomLong(), randomBoolean(), randomInt(), randomAlphaOfLength(5));
-        ADTaskProfileNodeResponse response = new ADTaskProfileNodeResponse(mockDiscoveryNode(), adTaskProfile);
+        ADTaskProfileNodeResponse response = new ADTaskProfileNodeResponse(randomDiscoveryNode(), adTaskProfile);
         testADTaskProfileResponse(response);
     }
 
     public void testADTaskProfileNodeResponseReadMethodWithNullProfile() throws IOException {
-        ADTaskProfileNodeResponse response = new ADTaskProfileNodeResponse(mockDiscoveryNode(), null);
+        ADTaskProfileNodeResponse response = new ADTaskProfileNodeResponse(randomDiscoveryNode(), null);
         testADTaskProfileResponse(response);
     }
 
@@ -79,5 +99,36 @@ public class ADTaskProfileTests extends ADUnitTestCase {
         } else {
             assertNull(parsedResponse.getAdTaskProfile());
         }
+    }
+
+    public void testSerializeResponse() throws IOException {
+        DiscoveryNode node = randomDiscoveryNode();
+        ADTaskProfile profile = new ADTaskProfile(
+            TestHelpers.randomAdTask(),
+            randomInt(),
+            randomLong(),
+            randomBoolean(),
+            randomInt(),
+            randomAlphaOfLength(5)
+        );
+        ADTaskProfileNodeResponse nodeResponse = new ADTaskProfileNodeResponse(node, profile);
+        ImmutableList<ADTaskProfileNodeResponse> nodes = ImmutableList.of(nodeResponse);
+        ADTaskProfileResponse response = new ADTaskProfileResponse(new ClusterName("test"), nodes, ImmutableList.of());
+
+        BytesStreamOutput output = new BytesStreamOutput();
+        response.writeNodesTo(output, nodes);
+        NamedWriteableAwareStreamInput input = new NamedWriteableAwareStreamInput(output.bytes().streamInput(), writableRegistry());
+
+        List<ADTaskProfileNodeResponse> adTaskProfileNodeResponses = response.readNodesFrom(input);
+        assertEquals(1, adTaskProfileNodeResponses.size());
+        assertEquals(profile, adTaskProfileNodeResponses.get(0).getAdTaskProfile());
+
+        BytesStreamOutput output2 = new BytesStreamOutput();
+        response.writeTo(output2);
+        NamedWriteableAwareStreamInput input2 = new NamedWriteableAwareStreamInput(output2.bytes().streamInput(), writableRegistry());
+
+        ADTaskProfileResponse response2 = new ADTaskProfileResponse(input2);
+        assertEquals(1, response2.getNodes().size());
+        assertEquals(profile, response2.getNodes().get(0).getAdTaskProfile());
     }
 }

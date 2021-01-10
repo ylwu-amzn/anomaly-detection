@@ -15,22 +15,26 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
-import java.io.IOException;
+import static com.amazon.opendistroforelasticsearch.ad.TestHelpers.randomDiscoveryNode;
 
-import org.elasticsearch.Version;
+import java.io.IOException;
+import java.util.List;
+
 import org.elasticsearch.action.ActionRequestValidationException;
-import org.elasticsearch.cluster.node.DiscoveryNode;
-import org.elasticsearch.common.UUIDs;
+import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
 import org.elasticsearch.common.io.stream.NamedWriteableAwareStreamInput;
+import org.elasticsearch.common.io.stream.StreamInput;
 
 import com.amazon.opendistroforelasticsearch.ad.ADUnitTestCase;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskCancellationState;
+import com.google.common.collect.ImmutableList;
 
 public class ADCancelTaskTests extends ADUnitTestCase {
 
     public void testADCancelTaskRequest() throws IOException {
-        ADCancelTaskRequest request = new ADCancelTaskRequest(randomAlphaOfLength(5), randomAlphaOfLength(5), mockDiscoveryNode());
+        ADCancelTaskRequest request = new ADCancelTaskRequest(randomAlphaOfLength(5), randomAlphaOfLength(5), randomDiscoveryNode());
 
         BytesStreamOutput output = new BytesStreamOutput();
         request.writeTo(output);
@@ -41,9 +45,32 @@ public class ADCancelTaskTests extends ADUnitTestCase {
     }
 
     public void testInvalidADCancelTaskRequest() {
-        DiscoveryNode node = new DiscoveryNode(UUIDs.randomBase64UUID(), buildNewFakeTransportAddress(), Version.CURRENT);
-        ADCancelTaskRequest request = new ADCancelTaskRequest(null, null, node);
+        ADCancelTaskRequest request = new ADCancelTaskRequest(null, null, randomDiscoveryNode());
         ActionRequestValidationException validationException = request.validate();
         assertTrue(validationException.getMessage().contains(CommonErrorMessages.AD_ID_MISSING_MSG));
+    }
+
+    public void testSerializeResponse() throws IOException {
+        ADTaskCancellationState state = ADTaskCancellationState.CANCELLED;
+        ADCancelTaskNodeResponse nodeResponse = new ADCancelTaskNodeResponse(randomDiscoveryNode(), state);
+
+        List<ADCancelTaskNodeResponse> nodes = ImmutableList.of(nodeResponse);
+        ADCancelTaskResponse response = new ADCancelTaskResponse(new ClusterName("test"), nodes, ImmutableList.of());
+
+        BytesStreamOutput output = new BytesStreamOutput();
+        response.writeNodesTo(output, nodes);
+        StreamInput input = output.bytes().streamInput();
+
+        List<ADCancelTaskNodeResponse> adCancelTaskNodeResponses = response.readNodesFrom(input);
+        assertEquals(1, adCancelTaskNodeResponses.size());
+        assertEquals(state, adCancelTaskNodeResponses.get(0).getState());
+
+        BytesStreamOutput output2 = new BytesStreamOutput();
+        response.writeTo(output2);
+        StreamInput input2 = output2.bytes().streamInput();
+
+        ADCancelTaskResponse response2 = new ADCancelTaskResponse(input2);
+        assertEquals(1, response2.getNodes().size());
+        assertEquals(state, response2.getNodes().get(0).getState());
     }
 }

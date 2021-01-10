@@ -138,6 +138,13 @@ public abstract class ADIntegTestCase extends ESIntegTestCase {
         return admin().indices().delete(deleteIndexRequest).actionGet(timeout);
     }
 
+    public void deleteIndexIfExists(String indexName) {
+        if (indexExists(indexName)) {
+            DeleteIndexRequest deleteIndexRequest = new DeleteIndexRequest(indexName);
+            admin().indices().delete(deleteIndexRequest).actionGet(timeout);
+        }
+    }
+
     public String indexDoc(String indexName, XContentBuilder source) {
         IndexRequest indexRequest = new IndexRequest(indexName).setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE).source(source);
         IndexResponse indexResponse = client().index(indexRequest).actionGet(timeout);

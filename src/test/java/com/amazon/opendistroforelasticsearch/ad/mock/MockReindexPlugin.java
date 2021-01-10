@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.opendistroforelasticsearch.ad.plugin;
+package com.amazon.opendistroforelasticsearch.ad.mock;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -23,8 +23,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
@@ -55,8 +53,6 @@ import org.elasticsearch.transport.TransportService;
 
 import com.amazon.opendistroforelasticsearch.ad.TestHelpers;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
-import com.amazon.opendistroforelasticsearch.ad.transport.mocks.MockAnomalyDetectorJobAction;
-import com.amazon.opendistroforelasticsearch.ad.transport.mocks.MockAnomalyDetectorJobTransportActionWithUser;
 import com.google.common.collect.ImmutableList;
 
 public class MockReindexPlugin extends Plugin implements ActionPlugin {
@@ -171,8 +167,6 @@ public class MockReindexPlugin extends Plugin implements ActionPlugin {
             }
         }
 
-        private final Logger logger = LogManager.getLogger(this.getClass());
-
         @Override
         protected void doExecute(Task task, DeleteByQueryRequest request, ActionListener<BulkByScrollResponse> listener) {
             try {
@@ -191,12 +185,13 @@ public class MockReindexPlugin extends Plugin implements ActionPlugin {
                         .execute(
                             BulkAction.INSTANCE,
                             bulkRequest,
-                            ActionListener.wrap(res -> { logger.info("Deleted {} old AD task docs successfully", totalHits); }, ex -> {
-                                logger.error("Failed to delete old AD task docs successfully", ex);
-                                listener.onFailure(ex);
-                            })
+                            ActionListener
+                                .wrap(
+                                    res -> { listener.onResponse(mockBulkByScrollResponse(totalHits)); },
+                                    ex -> { listener.onFailure(ex); }
+                                )
                         );
-                    listener.onResponse(mockBulkByScrollResponse(totalHits));
+
                 }, e -> { listener.onFailure(e); }));
             } catch (Exception e) {
                 listener.onFailure(e);

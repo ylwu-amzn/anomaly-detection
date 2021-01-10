@@ -55,7 +55,6 @@ public class ADTaskProfileNodeResponse extends BaseNodeResponse {
         } else {
             out.writeBoolean(false);
         }
-
     }
 
     public static ADTaskProfileNodeResponse readNodeResponse(StreamInput in) throws IOException {

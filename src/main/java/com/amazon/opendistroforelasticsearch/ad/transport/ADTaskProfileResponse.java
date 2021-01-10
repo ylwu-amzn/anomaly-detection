@@ -27,7 +27,7 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 public class ADTaskProfileResponse extends BaseNodesResponse<ADTaskProfileNodeResponse> {
 
     public ADTaskProfileResponse(StreamInput in) throws IOException {
-        super(in);
+        super(new ClusterName(in), in.readList(ADTaskProfileNodeResponse::readNodeResponse), in.readList(FailedNodeException::new));
     }
 
     public ADTaskProfileResponse(ClusterName clusterName, List<ADTaskProfileNodeResponse> nodes, List<FailedNodeException> failures) {
@@ -44,4 +44,8 @@ public class ADTaskProfileResponse extends BaseNodesResponse<ADTaskProfileNodeRe
         return in.readList(ADTaskProfileNodeResponse::readNodeResponse);
     }
 
+    @Override
+    public void writeTo(StreamOutput out) throws IOException {
+        super.writeTo(out);
+    }
 }

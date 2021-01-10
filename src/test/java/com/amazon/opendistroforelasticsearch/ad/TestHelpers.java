@@ -19,6 +19,7 @@ import static org.apache.http.entity.ContentType.APPLICATION_JSON;
 import static org.elasticsearch.cluster.node.DiscoveryNodeRole.BUILT_IN_ROLES;
 import static org.elasticsearch.index.query.AbstractQueryBuilder.parseInnerQueryBuilder;
 import static org.elasticsearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
+import static org.elasticsearch.test.ESTestCase.buildNewFakeTransportAddress;
 import static org.elasticsearch.test.ESTestCase.randomAlphaOfLength;
 import static org.elasticsearch.test.ESTestCase.randomBoolean;
 import static org.elasticsearch.test.ESTestCase.randomDouble;
@@ -938,5 +939,10 @@ public class TestHelpers {
         IntStream.range(0, totalHits).forEach(i -> hitList.add(new SearchHit(i)));
         SearchHit[] hitArray = new SearchHit[hitList.size()];
         return new SearchHits(hitList.toArray(hitArray), new TotalHits(totalHits, TotalHits.Relation.EQUAL_TO), 1.0F);
+    }
+
+    public static DiscoveryNode randomDiscoveryNode() {
+        return new DiscoveryNode(UUIDs.randomBase64UUID(), buildNewFakeTransportAddress(), Version.CURRENT);
+
     }
 }
