@@ -15,8 +15,9 @@
 
 package com.amazon.opendistroforelasticsearch.ad;
 
+import static com.amazon.opendistroforelasticsearch.ad.TestHelpers.AD_BASE_DETECTORS_URI;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.BATCH_TASK_PIECE_INTERVAL_SECONDS;
 import static org.apache.http.entity.ContentType.APPLICATION_JSON;
-import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
 import static org.elasticsearch.common.xcontent.json.JsonXContent.jsonXContent;
 
 import java.io.IOException;
@@ -49,17 +50,29 @@ import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.XContentParserUtils;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.rest.RestStatus;
+import org.elasticsearch.search.aggregations.AggregationBuilder;
+import org.junit.Before;
 
 import com.amazon.opendistroforelasticsearch.ad.mock.model.MockSimpleLog;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTaskProfile;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTaskState;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
+import com.amazon.opendistroforelasticsearch.ad.model.DetectionDateRange;
+import com.amazon.opendistroforelasticsearch.ad.model.Feature;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.gson.JsonArray;
 
 public abstract class AnomalyDetectorRestTestCase extends ODFERestTestCase {
+
+    protected String historicalDetectorTestIndex = "test_historical_detector_data";
+    protected int detectionIntervalInMinutes = 1;
+    protected ImmutableSet<String> historicalDetectorRunningStats = ImmutableSet
+        .of(ADTaskState.CREATED.name(), ADTaskState.INIT.name(), ADTaskState.RUNNING.name());
 
     @Override
     protected NamedXContentRegistry xContentRegistry() {
@@ -69,6 +82,15 @@ public abstract class AnomalyDetectorRestTestCase extends ODFERestTestCase {
     @Override
     protected Settings restClientSettings() {
         return super.restClientSettings();
+    }
+
+    @Before
+    @Override
+    public void setUp() throws Exception {
+        super.setUp();
+        updateClusterSettings(BATCH_TASK_PIECE_INTERVAL_SECONDS.getKey(), 1);
+        // ingest test data
+        ingestTestDataForHistoricalDetector(historicalDetectorTestIndex, detectionIntervalInMinutes);
     }
 
     protected AnomalyDetector createRandomAnomalyDetector(Boolean refresh, Boolean withMetadata, RestClient client) throws IOException {
@@ -125,7 +147,9 @@ public abstract class AnomalyDetectorRestTestCase extends ODFERestTestCase {
             detector.getSchemaVersion(),
             detector.getLastUpdateTime(),
             detector.getCategoryField(),
-            detector.getUser()
+            detector.getUser(),
+            detector.getDetectorType(),
+            detector.getDetectionDateRange()
         );
     }
 
@@ -148,21 +172,31 @@ public abstract class AnomalyDetectorRestTestCase extends ODFERestTestCase {
     }
 
     public AnomalyDetector getAnomalyDetector(String detectorId, BasicHeader header, RestClient client) throws IOException {
-        return (AnomalyDetector) getAnomalyDetector(detectorId, header, false, client)[0];
+        return (AnomalyDetector) getAnomalyDetector(detectorId, header, false, false, client)[0];
     }
 
     public ToXContentObject[] getAnomalyDetector(String detectorId, boolean returnJob, RestClient client) throws IOException {
         BasicHeader header = new BasicHeader(HttpHeaders.CONTENT_TYPE, "application/json");
-        return getAnomalyDetector(detectorId, header, returnJob, client);
+        return getAnomalyDetector(detectorId, header, returnJob, false, client);
     }
 
-    public ToXContentObject[] getAnomalyDetector(String detectorId, BasicHeader header, boolean returnJob, RestClient client)
-        throws IOException {
+    public ToXContentObject[] getHistoricalAnomalyDetector(String detectorId, boolean returnTask, RestClient client) throws IOException {
+        BasicHeader header = new BasicHeader(HttpHeaders.CONTENT_TYPE, "application/json");
+        return getAnomalyDetector(detectorId, header, false, returnTask, client);
+    }
+
+    public ToXContentObject[] getAnomalyDetector(
+        String detectorId,
+        BasicHeader header,
+        boolean returnJob,
+        boolean returnTask,
+        RestClient client
+    ) throws IOException {
         Response response = TestHelpers
             .makeRequest(
                 client,
                 "GET",
-                TestHelpers.AD_BASE_DETECTORS_URI + "/" + detectorId + "?job=" + returnJob,
+                TestHelpers.AD_BASE_DETECTORS_URI + "/" + detectorId + "?job=" + returnJob + "&task=" + returnTask,
                 null,
                 "",
                 ImmutableList.of(header)
@@ -176,6 +210,7 @@ public abstract class AnomalyDetectorRestTestCase extends ODFERestTestCase {
         Long version = null;
         AnomalyDetector detector = null;
         AnomalyDetectorJob detectorJob = null;
+        ADTask adTask = null;
         while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
             String fieldName = parser.currentName();
             parser.nextToken();
@@ -191,6 +226,9 @@ public abstract class AnomalyDetectorRestTestCase extends ODFERestTestCase {
                     break;
                 case "anomaly_detector_job":
                     detectorJob = AnomalyDetectorJob.parse(parser);
+                    break;
+                case "anomaly_detection_task":
+                    adTask = ADTask.parse(parser);
                     break;
             }
         }
@@ -212,9 +250,18 @@ public abstract class AnomalyDetectorRestTestCase extends ODFERestTestCase {
                 detector.getSchemaVersion(),
                 detector.getLastUpdateTime(),
                 null,
-                detector.getUser()
+                detector.getUser(),
+                detector.getDetectorType(),
+                detector.getDetectionDateRange()
             ),
-            detectorJob };
+            detectorJob,
+            adTask };
+    }
+
+    public ADTaskProfile getADTaskProfile(String detectorId) throws IOException {
+        Response profileResponse = TestHelpers
+            .makeRequest(client(), "GET", AD_BASE_DETECTORS_URI + "/" + detectorId + "/_profile/ad_task", ImmutableMap.of(), "", null);
+        return parseADTaskProfile(profileResponse);
     }
 
     protected HttpEntity toHttpEntity(ToXContentObject object) throws IOException {
@@ -484,21 +531,78 @@ public abstract class AnomalyDetectorRestTestCase extends ODFERestTestCase {
         return bulkResponse;
     }
 
-    public ADTask parseADTaskFromProfileResponse(Response profileResponse, String taskId) throws IOException {
+    public ADTaskProfile parseADTaskProfile(Response profileResponse) throws IOException {
         String profileResult = EntityUtils.toString(profileResponse.getEntity());
         XContentParser parser = TestHelpers.parser(profileResult);
-        ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.nextToken(), parser);
-        ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-        ADTask adTask = null;
+        ADTaskProfile adTaskProfile = null;
         while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
             String fieldName = parser.currentName();
             parser.nextToken();
             if ("ad_task".equals(fieldName)) {
-                adTask = ADTask.parse(parser, taskId);
+                adTaskProfile = ADTaskProfile.parse(parser);
             } else {
                 parser.skipChildren();
             }
         }
-        return adTask;
+        return adTaskProfile;
     }
+
+    protected void ingestTestDataForHistoricalDetector(String indexName, int detectionIntervalInMinutes) throws IOException {
+        ingestSimpleMockLog(indexName, 10, 3000, detectionIntervalInMinutes, (i) -> {
+            if (i % 500 == 0) {
+                return randomDoubleBetween(100, 1000, true);
+            } else {
+                return randomDoubleBetween(1, 10, true);
+            }
+        }, (i) -> 1);
+    }
+
+    protected AnomalyDetector createHistoricalDetector() throws IOException {
+        AggregationBuilder aggregationBuilder = TestHelpers
+            .parseAggregation("{\"test\":{\"max\":{\"field\":\"" + MockSimpleLog.VALUE_FIELD + "\"}}}");
+        Feature feature = new Feature(randomAlphaOfLength(5), randomAlphaOfLength(10), true, aggregationBuilder);
+        Instant endTime = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        Instant startTime = endTime.minus(10, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
+        DetectionDateRange dateRange = new DetectionDateRange(startTime, endTime);
+        AnomalyDetector detector = TestHelpers
+            .randomDetector(
+                dateRange,
+                ImmutableList.of(feature),
+                historicalDetectorTestIndex,
+                detectionIntervalInMinutes,
+                MockSimpleLog.TIME_FIELD
+            );
+        return createAnomalyDetector(detector, true, client());
+        // String detectorId = createdDetector.getDetectorId();
+        // assertNotNull(detectorId);
+        // return new AnomalyDetector(
+        // id,
+        // version,
+        // detector.getName(),
+        // detector.getDescription(),
+        // detector.getTimeField(),
+        // detector.getIndices(),
+        // detector.getFeatureAttributes(),
+        // detector.getFilterQuery(),
+        // detector.getDetectionInterval(),
+        // detector.getWindowDelay(),
+        // detector.getShingleSize(),
+        // detector.getUiMetadata(),
+        // detector.getSchemaVersion(),
+        // detector.getLastUpdateTime(),
+        // null,
+        // detector.getUser(),
+        // detector.getDetectorType(),
+        // detector.getDetectionDateRange()
+        // );
+    }
+
+    protected String startHistoricalDetector(String detectorId) throws IOException {
+        Response startDetectorResponse = startAnomalyDetector(detectorId, client());
+        Map<String, Object> startDetectorResponseMap = responseAsMap(startDetectorResponse);
+        String taskId = (String) startDetectorResponseMap.get("_id");
+        assertNotNull(taskId);
+        return taskId;
+    }
+
 }

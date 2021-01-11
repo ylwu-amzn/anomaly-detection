@@ -17,12 +17,10 @@ package com.amazon.opendistroforelasticsearch.ad.rest;
 
 import static com.amazon.opendistroforelasticsearch.ad.TestHelpers.AD_BASE_DETECTORS_URI;
 import static com.amazon.opendistroforelasticsearch.ad.TestHelpers.AD_BASE_STATS_URI;
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.BATCH_TASK_PIECE_INTERVAL_SECONDS;
 import static org.hamcrest.Matchers.containsString;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.Map;
 
 import org.apache.http.entity.ContentType;
@@ -34,7 +32,6 @@ import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.xcontent.ToXContentObject;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.rest.RestStatus;
-import org.elasticsearch.search.aggregations.AggregationBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.junit.Assert;
 
@@ -42,19 +39,16 @@ import com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorPlugin;
 import com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorRestTestCase;
 import com.amazon.opendistroforelasticsearch.ad.TestHelpers;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonErrorMessages;
-import com.amazon.opendistroforelasticsearch.ad.mock.model.MockSimpleLog;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTaskProfile;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTaskState;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorExecutionInput;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyResult;
-import com.amazon.opendistroforelasticsearch.ad.model.DetectionDateRange;
-import com.amazon.opendistroforelasticsearch.ad.model.Feature;
 import com.amazon.opendistroforelasticsearch.ad.settings.EnabledSetting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 
 public class AnomalyDetectorRestApiIT extends AnomalyDetectorRestTestCase {
 
@@ -999,39 +993,20 @@ public class AnomalyDetectorRestApiIT extends AnomalyDetectorRestTestCase {
         Assert.assertTrue(exception.getMessage().contains("Detector job is running"));
     }
 
-    public void testHistoricalDetectorWorkflow() throws Exception {
-        String indexName = "test_historical_detector_data";
-        int detectionIntervalInMinutes = 1;
-        // ingest test data
-        ingestSimpleMockLog(indexName, 10, 3000, detectionIntervalInMinutes, (i) -> {
-            if (i % 500 == 0) {
-                return randomDoubleBetween(100, 1000, true);
-            } else {
-                return randomDoubleBetween(1, 10, true);
-            }
-        }, (i) -> 1);
-
-        updateClusterSettings(BATCH_TASK_PIECE_INTERVAL_SECONDS.getKey(), 1);
-
+    public void testCreateHistoricalDetector() throws Exception {
         // create historical detector
-        AggregationBuilder aggregationBuilder = TestHelpers
-            .parseAggregation("{\"test\":{\"max\":{\"field\":\"" + MockSimpleLog.VALUE_FIELD + "\"}}}");
-        Feature feature = new Feature(randomAlphaOfLength(5), randomAlphaOfLength(10), true, aggregationBuilder);
-        Instant endTime = Instant.now().truncatedTo(ChronoUnit.SECONDS);
-        Instant startTime = endTime.minus(10, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
-        DetectionDateRange dateRange = new DetectionDateRange(startTime, endTime);
-        AnomalyDetector detector = TestHelpers
-            .randomDetector(dateRange, ImmutableList.of(feature), indexName, detectionIntervalInMinutes, MockSimpleLog.TIME_FIELD);
-        AnomalyDetector createdDetector = createAnomalyDetector(detector, true, client());
-        String detectorId = createdDetector.getDetectorId();
+        AnomalyDetector detector = createHistoricalDetector();
+        String detectorId = detector.getDetectorId();
         assertNotNull(detectorId);
+    }
+
+    public void testStartHistoricalDetector() throws Exception {
+        // create historical detector
+        AnomalyDetector detector = createHistoricalDetector();
+        String detectorId = detector.getDetectorId();
 
         // start historical detector
-        Response startDetectorResponse = TestHelpers
-            .makeRequest(client(), "POST", AD_BASE_DETECTORS_URI + "/" + detectorId + "/_start", ImmutableMap.of(), "", null);
-        Map<String, Object> startDetectorResponseMap = responseAsMap(startDetectorResponse);
-        String taskId = (String) startDetectorResponseMap.get("_id");
-        assertNotNull(taskId);
+        String taskId = startHistoricalDetector(detectorId);
 
         // get task stats
         Response statsResponse = TestHelpers.makeRequest(client(), "GET", AD_BASE_STATS_URI, ImmutableMap.of(), "", null);
@@ -1039,31 +1014,59 @@ public class AnomalyDetectorRestApiIT extends AnomalyDetectorRestTestCase {
         assertTrue(statsResult.contains("\"ad_executing_batch_task_count\":1"));
 
         // get task profile
-        Response profileResponse = TestHelpers
-            .makeRequest(client(), "GET", AD_BASE_DETECTORS_URI + "/" + detectorId + "/_profile/ad_task", ImmutableMap.of(), "", null);
-        ImmutableSet<String> runningStats = ImmutableSet
-            .of(ADTaskState.CREATED.name(), ADTaskState.INIT.name(), ADTaskState.RUNNING.name());
-        ADTask adTask = parseADTaskFromProfileResponse(profileResponse, taskId);
-        assertEquals(detectorId, adTask.getDetectorId());
-        assertTrue(runningStats.contains(adTask.getState()));
+        ADTaskProfile adTaskProfile = getADTaskProfile(detectorId);
+        ADTask adTask = adTaskProfile.getAdTask();
+        assertEquals(taskId, adTask.getTaskId());
+        assertTrue(historicalDetectorRunningStats.contains(adTask.getState()));
         assertTrue(detector.equals(adTask.getDetector()));
+    }
+
+    public void testStopHistoricalDetector() throws Exception {
+        // create historical detector
+        AnomalyDetector detector = createHistoricalDetector();
+        String detectorId = detector.getDetectorId();
+
+        // start historical detector
+        String taskId = startHistoricalDetector(detectorId);
 
         // stop historical detector
-        Response stopDetectorResponse = TestHelpers
-            .makeRequest(client(), "POST", AD_BASE_DETECTORS_URI + "/" + detectorId + "/_stop", ImmutableMap.of(), "", null);
+        Response stopDetectorResponse = stopAnomalyDetector(detectorId, client());
         assertEquals(RestStatus.OK, restStatus(stopDetectorResponse));
 
+        // get task profile
+        ADTaskProfile adTaskProfile = getADTaskProfile(detectorId);
         int i = 0;
-        do {
-            profileResponse = TestHelpers
-                .makeRequest(client(), "GET", AD_BASE_DETECTORS_URI + "/" + detectorId + "/_profile/ad_task", ImmutableMap.of(), "", null);
-            adTask = parseADTaskFromProfileResponse(profileResponse, taskId);
+        while (historicalDetectorRunningStats.contains(adTaskProfile.getAdTask().getState()) && i < 5) {
+            adTaskProfile = getADTaskProfile(detectorId);
             Thread.sleep(2000);
             i++;
-        } while (runningStats.contains(adTask.getState()) && i < 5);
-
+        }
+        ADTask adTask = adTaskProfile.getAdTask();
+        assertEquals(taskId, adTask.getTaskId());
         assertEquals(ADTaskState.STOPPED.name(), adTask.getState());
         assertTrue(detector.equals(adTask.getDetector()));
+    }
+
+    public void testGetHistoricalAnomalyDetectorWithTask() throws Exception {
+        // create historical detector
+        AnomalyDetector detector = createHistoricalDetector();
+        String detectorId = detector.getDetectorId();
+
+        // start historical detector
+        String taskId = startHistoricalDetector(detectorId);
+
+        // get historical detector with AD task
+        ToXContentObject[] result = getHistoricalAnomalyDetector(detectorId, true, client());
+        AnomalyDetector parsedDetector = (AnomalyDetector) result[0];
+        AnomalyDetectorJob parsedJob = (AnomalyDetectorJob) result[1];
+        ADTask parsedADTask = (ADTask) result[2];
+        assertNull(parsedJob);
+        assertNotNull(parsedDetector);
+        assertNotNull(parsedADTask);
+        assertTrue(detector.equals(parsedDetector));
+        assertTrue(detector.equals(parsedADTask.getDetector()));
+        assertEquals(taskId, parsedADTask.getTaskId());
+        System.out.println(result);
     }
 
 }

@@ -46,6 +46,7 @@ import org.junit.Test;
 import org.mockito.Mockito;
 
 import com.amazon.opendistroforelasticsearch.ad.TestHelpers;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
 import com.amazon.opendistroforelasticsearch.ad.model.EntityProfile;
@@ -106,6 +107,7 @@ public class GetAnomalyDetectorTransportActionTests extends ESSingleNodeTestCase
             "1234",
             4321,
             false,
+            false,
             "nonempty",
             "",
             false,
@@ -116,7 +118,16 @@ public class GetAnomalyDetectorTransportActionTests extends ESSingleNodeTestCase
 
     @Test
     public void testGetTransportActionWithReturnJob() throws IOException {
-        GetAnomalyDetectorRequest getAnomalyDetectorRequest = new GetAnomalyDetectorRequest("1234", 4321, true, "", "abcd", false, null);
+        GetAnomalyDetectorRequest getAnomalyDetectorRequest = new GetAnomalyDetectorRequest(
+            "1234",
+            4321,
+            true,
+            false,
+            "",
+            "abcd",
+            false,
+            null
+        );
         action.doExecute(task, getAnomalyDetectorRequest, response);
     }
 
@@ -128,7 +139,7 @@ public class GetAnomalyDetectorTransportActionTests extends ESSingleNodeTestCase
 
     @Test
     public void testGetAnomalyDetectorRequest() throws IOException {
-        GetAnomalyDetectorRequest request = new GetAnomalyDetectorRequest("1234", 4321, true, "", "abcd", false, "value");
+        GetAnomalyDetectorRequest request = new GetAnomalyDetectorRequest("1234", 4321, true, false, "", "abcd", false, "value");
         BytesStreamOutput out = new BytesStreamOutput();
         request.writeTo(out);
         StreamInput input = out.bytes().streamInput();
@@ -140,7 +151,7 @@ public class GetAnomalyDetectorTransportActionTests extends ESSingleNodeTestCase
 
     @Test
     public void testGetAnomalyDetectorRequestNoEntityValue() throws IOException {
-        GetAnomalyDetectorRequest request = new GetAnomalyDetectorRequest("1234", 4321, true, "", "abcd", false, null);
+        GetAnomalyDetectorRequest request = new GetAnomalyDetectorRequest("1234", 4321, true, false, "", "abcd", false, null);
         BytesStreamOutput out = new BytesStreamOutput();
         request.writeTo(out);
         StreamInput input = out.bytes().streamInput();
@@ -161,6 +172,8 @@ public class GetAnomalyDetectorTransportActionTests extends ESSingleNodeTestCase
             9867,
             detector,
             adJob,
+            false,
+            mock(ADTask.class),
             false,
             RestStatus.OK,
             null,
@@ -192,6 +205,8 @@ public class GetAnomalyDetectorTransportActionTests extends ESSingleNodeTestCase
             9867,
             detector,
             adJob,
+            false,
+            mock(ADTask.class),
             false,
             RestStatus.OK,
             null,

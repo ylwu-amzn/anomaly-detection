@@ -15,6 +15,8 @@
 
 package com.amazon.opendistroforelasticsearch.ad.model;
 
+import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
+
 import java.io.IOException;
 
 import org.elasticsearch.common.io.stream.StreamInput;
@@ -22,6 +24,7 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
 import org.elasticsearch.common.xcontent.ToXContentObject;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentParser;
 
 import com.amazon.opendistroforelasticsearch.ad.annotation.Generated;
 import com.google.common.base.Objects;
@@ -33,17 +36,16 @@ public class ADTaskProfile implements ToXContentObject, Writeable {
 
     public static final String AD_Task_FIELD = "ad_task";
     public static final String SHINGLE_SIZE_FIELD = "shingle_size";
-    public static final String SHINGLE_FIELD = "shingle";
     public static final String RCF_TOTAL_UPDATES_FIELD = "rcf_total_updates";
     public static final String THRESHOLD_MODEL_TRAINED_FIELD = "threshold_model_trained";
     public static final String THRESHOLD_MODEL_TRAINING_DATA_SIZE_FIELD = "threshold_model_training_data_size";
     public static final String NODE_ID_FIELD = "node_id";
 
-    private ADTask adTask = null;
-    private Integer shingleSize = null;
-    private Long rcfTotalUpdates = null;
-    private Boolean thresholdModelTrained = null;
-    private Integer thresholdNodelTrainingDataSize = null;
+    private ADTask adTask;
+    private Integer shingleSize;
+    private Long rcfTotalUpdates;
+    private Boolean thresholdModelTrained;
+    private Integer thresholdNodelTrainingDataSize;
     private String nodeId;
 
     public ADTaskProfile(
@@ -123,6 +125,46 @@ public class ADTaskProfile implements ToXContentObject, Writeable {
             xContentBuilder.field(NODE_ID_FIELD, nodeId);
         }
         return xContentBuilder.endObject();
+    }
+
+    public static ADTaskProfile parse(XContentParser parser) throws IOException {
+        ADTask adTask = null;
+        Integer shingleSize = null;
+        Long rcfTotalUpdates = null;
+        Boolean thresholdModelTrained = null;
+        Integer thresholdNodelTrainingDataSize = null;
+        String nodeId = null;
+
+        ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.currentToken(), parser);
+        while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
+            String fieldName = parser.currentName();
+            parser.nextToken();
+
+            switch (fieldName) {
+                case AD_Task_FIELD:
+                    adTask = ADTask.parse(parser);
+                    break;
+                case SHINGLE_SIZE_FIELD:
+                    shingleSize = parser.intValue();
+                    break;
+                case RCF_TOTAL_UPDATES_FIELD:
+                    rcfTotalUpdates = parser.longValue();
+                    break;
+                case THRESHOLD_MODEL_TRAINED_FIELD:
+                    thresholdModelTrained = parser.booleanValue();
+                    break;
+                case THRESHOLD_MODEL_TRAINING_DATA_SIZE_FIELD:
+                    thresholdNodelTrainingDataSize = parser.intValue();
+                    break;
+                case NODE_ID_FIELD:
+                    nodeId = parser.text();
+                    break;
+                default:
+                    parser.skipChildren();
+                    break;
+            }
+        }
+        return new ADTaskProfile(adTask, shingleSize, rcfTotalUpdates, thresholdModelTrained, thresholdNodelTrainingDataSize, nodeId);
     }
 
     @Generated

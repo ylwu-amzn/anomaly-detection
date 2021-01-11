@@ -117,7 +117,7 @@ public class GetAnomalyDetectorTests extends AbstractADTest {
 
         rawPath = "_opendistro/_anomaly_detection/detectors/T4c3dXUBj-2IZN7itix_/_profile";
 
-        request = new GetAnomalyDetectorRequest(detectorId, 0L, false, typeStr, rawPath, false, entityValue);
+        request = new GetAnomalyDetectorRequest(detectorId, 0L, false, false, typeStr, rawPath, false, entityValue);
 
         future = new PlainActionFuture<>();
         action.doExecute(null, request, future);
@@ -142,7 +142,7 @@ public class GetAnomalyDetectorTests extends AbstractADTest {
 
         rawPath = "_opendistro/_anomaly_detection/detectors/T4c3dXUBj-2IZN7itix_/_profile";
 
-        request = new GetAnomalyDetectorRequest(detectorId, 0L, false, typeStr, rawPath, false, entityValue);
+        request = new GetAnomalyDetectorRequest(detectorId, 0L, false, false, typeStr, rawPath, false, entityValue);
 
         future = new PlainActionFuture<>();
         action.doExecute(null, request, future);

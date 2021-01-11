@@ -27,6 +27,7 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -55,6 +56,7 @@ import org.elasticsearch.transport.TransportService;
 import com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorProfileRunner;
 import com.amazon.opendistroforelasticsearch.ad.EntityProfileRunner;
 import com.amazon.opendistroforelasticsearch.ad.Name;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
 import com.amazon.opendistroforelasticsearch.ad.model.DetectorProfile;
@@ -148,6 +150,7 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
         String entityValue = request.getEntityValue();
         boolean all = request.isAll();
         boolean returnJob = request.isReturnJob();
+        boolean returnTask = request.isReturnTask();
 
         try {
             if (!Strings.isEmpty(typesStr) || rawPath.endsWith(PROFILE) || rawPath.endsWith(PROFILE + "/")) {
@@ -168,7 +171,21 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
                                     profile -> {
                                         listener
                                             .onResponse(
-                                                new GetAnomalyDetectorResponse(0, null, 0, 0, null, null, false, null, null, profile, true)
+                                                new GetAnomalyDetectorResponse(
+                                                    0,
+                                                    null,
+                                                    0,
+                                                    0,
+                                                    null,
+                                                    null,
+                                                    false,
+                                                    null,
+                                                    false,
+                                                    null,
+                                                    null,
+                                                    profile,
+                                                    true
+                                                )
                                             );
                                     },
                                     e -> listener.onFailure(e)
@@ -176,6 +193,7 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
                         );
                 } else {
                     Set<DetectorProfileName> profilesToCollect = getProfilesToCollect(typesStr, all);
+
                     AnomalyDetectorProfileRunner profileRunner = new AnomalyDetectorProfileRunner(
                         client,
                         xContentRegistry,
@@ -186,13 +204,16 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
                     profileRunner.profile(detectorID, getProfileActionListener(listener, detectorID), profilesToCollect);
                 }
             } else {
-                MultiGetRequest.Item adItem = new MultiGetRequest.Item(ANOMALY_DETECTORS_INDEX, detectorID).version(version);
-                MultiGetRequest multiGetRequest = new MultiGetRequest().add(adItem);
-                if (returnJob) {
-                    MultiGetRequest.Item adJobItem = new MultiGetRequest.Item(ANOMALY_DETECTOR_JOB_INDEX, detectorID).version(version);
-                    multiGetRequest.add(adJobItem);
+                if (returnTask) {
+                    adTaskManager
+                        .getLatestADTask(
+                            detectorID,
+                            (adTask) -> getDetectorAndJob(detectorID, returnJob, returnTask, adTask, listener),
+                            listener
+                        );
+                } else {
+                    getDetectorAndJob(detectorID, returnJob, returnTask, Optional.empty(), listener);
                 }
-                client.multiGet(multiGetRequest, onMultiGetResponse(listener, returnJob, detectorID));
             }
         } catch (Exception e) {
             LOG.error(e);
@@ -200,9 +221,27 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
         }
     }
 
+    private void getDetectorAndJob(
+        String detectorID,
+        boolean returnJob,
+        boolean returnTask,
+        Optional<ADTask> adTask,
+        ActionListener<GetAnomalyDetectorResponse> listener
+    ) {
+        MultiGetRequest.Item adItem = new MultiGetRequest.Item(ANOMALY_DETECTORS_INDEX, detectorID);
+        MultiGetRequest multiGetRequest = new MultiGetRequest().add(adItem);
+        if (returnJob) {
+            MultiGetRequest.Item adJobItem = new MultiGetRequest.Item(ANOMALY_DETECTOR_JOB_INDEX, detectorID);
+            multiGetRequest.add(adJobItem);
+        }
+        client.multiGet(multiGetRequest, onMultiGetResponse(listener, returnJob, returnTask, adTask, detectorID));
+    }
+
     private ActionListener<MultiGetResponse> onMultiGetResponse(
         ActionListener<GetAnomalyDetectorResponse> listener,
         boolean returnJob,
+        boolean returnTask,
+        Optional<ADTask> adTask,
         String detectorId
     ) {
         return new ActionListener<MultiGetResponse>() {
@@ -272,6 +311,8 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
                             detector,
                             adJob,
                             returnJob,
+                            adTask.orElse(null),
+                            returnTask,
                             RestStatus.OK,
                             null,
                             null,
@@ -294,7 +335,8 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
         return ActionListener.wrap(new CheckedConsumer<DetectorProfile, Exception>() {
             @Override
             public void accept(DetectorProfile profile) throws Exception {
-                listener.onResponse(new GetAnomalyDetectorResponse(0, null, 0, 0, null, null, false, null, profile, null, true));
+                listener
+                    .onResponse(new GetAnomalyDetectorResponse(0, null, 0, 0, null, null, false, null, false, null, profile, null, true));
             }
         }, exception -> { listener.onFailure(exception); });
     }
@@ -305,11 +347,11 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
     }
 
     /**
-    *
-    * @param typesStr a list of input profile types separated by comma
-    * @param all whether we should return all profile in the response
-    * @return profiles to collect for a detector
-    */
+     *
+     * @param typesStr a list of input profile types separated by comma
+     * @param all whether we should return all profile in the response
+     * @return profiles to collect for a detector
+     */
     private Set<DetectorProfileName> getProfilesToCollect(String typesStr, boolean all) {
         if (all) {
             return this.allProfileTypes;

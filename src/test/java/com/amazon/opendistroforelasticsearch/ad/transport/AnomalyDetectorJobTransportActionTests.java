@@ -371,7 +371,7 @@ public class AnomalyDetectorJobTransportActionTests extends HistoricalDetectorIn
     }
 
     private GetAnomalyDetectorRequest taskProfileRequest(String detectorId) throws IOException {
-        return new GetAnomalyDetectorRequest(detectorId, Versions.MATCH_ANY, false, "", PROFILE, true, null);
+        return new GetAnomalyDetectorRequest(detectorId, Versions.MATCH_ANY, false, false, "", PROFILE, true, null);
     }
 
     private long getExecutingADTask() {
