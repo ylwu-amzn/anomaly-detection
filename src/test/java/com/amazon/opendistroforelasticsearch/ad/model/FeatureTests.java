@@ -42,4 +42,17 @@ public class FeatureTests extends ESTestCase {
             );
     }
 
+    public void testXor() {
+        boolean a = true ^ false;
+        System.out.println("true ^ false = " + a);
+
+        a = false ^ true;
+        System.out.println("false ^ true = " + a);
+
+        a = true ^ true;
+        System.out.println("true ^ true = " + a);
+
+        a = false ^ false;
+        System.out.println("false ^ false = " + a);
+    }
 }

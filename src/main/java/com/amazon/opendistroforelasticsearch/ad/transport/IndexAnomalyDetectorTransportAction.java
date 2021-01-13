@@ -48,6 +48,7 @@ import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.rest.handler.AnomalyDetectorFunction;
 import com.amazon.opendistroforelasticsearch.ad.rest.handler.IndexAnomalyDetectorActionHandler;
 import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.commons.authuser.User;
 
 public class IndexAnomalyDetectorTransportAction extends HandledTransportAction<IndexAnomalyDetectorRequest, IndexAnomalyDetectorResponse> {
@@ -56,6 +57,7 @@ public class IndexAnomalyDetectorTransportAction extends HandledTransportAction<
     private final AnomalyDetectionIndices anomalyDetectionIndices;
     private final ClusterService clusterService;
     private final NamedXContentRegistry xContentRegistry;
+    private final ADTaskManager adTaskManager;
     private volatile Boolean filterByEnabled;
 
     @Inject
@@ -66,13 +68,15 @@ public class IndexAnomalyDetectorTransportAction extends HandledTransportAction<
         ClusterService clusterService,
         Settings settings,
         AnomalyDetectionIndices anomalyDetectionIndices,
-        NamedXContentRegistry xContentRegistry
+        NamedXContentRegistry xContentRegistry,
+        ADTaskManager adTaskManager
     ) {
         super(IndexAnomalyDetectorAction.NAME, transportService, actionFilters, IndexAnomalyDetectorRequest::new);
         this.client = client;
         this.clusterService = clusterService;
         this.anomalyDetectionIndices = anomalyDetectionIndices;
         this.xContentRegistry = xContentRegistry;
+        this.adTaskManager = adTaskManager;
         filterByEnabled = AnomalyDetectorSettings.FILTER_BY_BACKEND_ROLES.get(settings);
         clusterService.getClusterSettings().addSettingsUpdateConsumer(FILTER_BY_BACKEND_ROLES, it -> filterByEnabled = it);
     }
@@ -156,7 +160,8 @@ public class IndexAnomalyDetectorTransportAction extends HandledTransportAction<
                     maxAnomalyFeatures,
                     method,
                     xContentRegistry,
-                    user
+                    user,
+                    adTaskManager
                 );
                 try {
                     indexAnomalyDetectorActionHandler.start();

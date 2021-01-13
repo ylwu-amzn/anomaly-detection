@@ -16,7 +16,6 @@
 package com.amazon.opendistroforelasticsearch.ad.rest.handler;
 
 import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector.ANOMALY_DETECTORS_INDEX;
-import static com.amazon.opendistroforelasticsearch.ad.util.ExceptionUtil.getShardsFailure;
 import static com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils.XCONTENT_WITH_TYPE;
 import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
 
@@ -45,6 +44,7 @@ import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.action.support.WriteRequest;
+import org.elasticsearch.action.support.replication.ReplicationResponse;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.unit.TimeValue;
@@ -61,6 +61,7 @@ import org.elasticsearch.search.builder.SearchSourceBuilder;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.transport.IndexAnomalyDetectorResponse;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 import com.amazon.opendistroforelasticsearch.commons.authuser.User;
@@ -97,6 +98,7 @@ public class IndexAnomalyDetectorActionHandler {
     private final NamedXContentRegistry xContentRegistry;
     private final ActionListener<IndexAnomalyDetectorResponse> listener;
     private final User user;
+    private final ADTaskManager adTaskManager;
 
     /**
      * Constructor function.
@@ -117,6 +119,7 @@ public class IndexAnomalyDetectorActionHandler {
      * @param method                  Rest Method type
      * @param xContentRegistry        Registry which is used for XContentParser
      * @param user                    User context
+     * @param adTaskManager           AD Task manager
      */
     public IndexAnomalyDetectorActionHandler(
         ClusterService clusterService,
@@ -134,7 +137,8 @@ public class IndexAnomalyDetectorActionHandler {
         Integer maxAnomalyFeatures,
         RestRequest.Method method,
         NamedXContentRegistry xContentRegistry,
-        User user
+        User user,
+        ADTaskManager adTaskManager
     ) {
         this.clusterService = clusterService;
         this.client = client;
@@ -152,6 +156,7 @@ public class IndexAnomalyDetectorActionHandler {
         this.method = method;
         this.xContentRegistry = xContentRegistry;
         this.user = user;
+        this.adTaskManager = adTaskManager;
     }
 
     /**
@@ -213,10 +218,31 @@ public class IndexAnomalyDetectorActionHandler {
         try (XContentParser parser = RestHandlerUtils.createXContentParserFromRegistry(xContentRegistry, response.getSourceAsBytesRef())) {
             ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
             AnomalyDetector existingDetector = AnomalyDetector.parse(parser, response.getId(), response.getVersion());
-            if (!hasCategoryField(existingDetector) && hasCategoryField(this.anomalyDetector)) {
-                validateAgainstExistingMultiEntityAnomalyDetector(detectorId);
+            // We have separate flows for realtime and historical detector currently. User
+            // can't change detector from realtime to historical, vice versa.
+            if (!(existingDetector.isRealTimeDetector() ^ !anomalyDetector.isRealTimeDetector())) {
+                listener
+                    .onFailure(
+                        new ElasticsearchStatusException(
+                            "Can't change detector type between realtime and historical detector",
+                            RestStatus.BAD_REQUEST
+                        )
+                    );
+                return;
+            }
+
+            if (existingDetector.isRealTimeDetector()) {
+                validateDetector(existingDetector);
             } else {
-                validateCategoricalField(detectorId);
+                adTaskManager.getLatestADTask(detectorId, (adTask) -> {
+                    if (adTask.isPresent() && !adTaskManager.isADTaskEnded(adTask.get())) {
+                        // can't update detector if there is AD task running
+                        listener.onFailure(new ElasticsearchStatusException("Detector is running", RestStatus.INTERNAL_SERVER_ERROR));
+                    } else {
+                        // TODO: change to validateDetector method when we support HC historical detector
+                        searchAdInputIndices(detectorId);
+                    }
+                }, listener);
             }
         } catch (IOException e) {
             String message = "Failed to parse anomaly detector " + detectorId;
@@ -224,6 +250,14 @@ public class IndexAnomalyDetectorActionHandler {
             listener.onFailure(new ElasticsearchStatusException(message, RestStatus.INTERNAL_SERVER_ERROR));
         }
 
+    }
+
+    private void validateDetector(AnomalyDetector existingDetector) {
+        if (!hasCategoryField(existingDetector) && hasCategoryField(this.anomalyDetector)) {
+            validateAgainstExistingMultiEntityAnomalyDetector(detectorId);
+        } else {
+            validateCategoricalField(detectorId);
+        }
     }
 
     private boolean hasCategoryField(AnomalyDetector detector) {
@@ -464,7 +498,7 @@ public class IndexAnomalyDetectorActionHandler {
         client.index(indexRequest, new ActionListener<IndexResponse>() {
             @Override
             public void onResponse(IndexResponse indexResponse) {
-                String errorMsg = getShardsFailure(indexResponse);
+                String errorMsg = checkShardsFailure(indexResponse);
                 if (errorMsg != null) {
                     listener.onFailure(new ElasticsearchStatusException(errorMsg, indexResponse.status()));
                     return;
@@ -484,7 +518,15 @@ public class IndexAnomalyDetectorActionHandler {
 
             @Override
             public void onFailure(Exception e) {
-                listener.onFailure(e);
+                logger.warn("Failed to update detector", e);
+                if (e.getMessage() != null && e.getMessage().contains("version conflict")) {
+                    listener
+                        .onFailure(
+                            new IllegalArgumentException("There was a problem updating the historical detector:[" + detectorId + "]")
+                        );
+                } else {
+                    listener.onFailure(e);
+                }
             }
         });
     }
@@ -505,4 +547,14 @@ public class IndexAnomalyDetectorActionHandler {
         }
     }
 
+    private String checkShardsFailure(IndexResponse response) {
+        StringBuilder failureReasons = new StringBuilder();
+        if (response.getShardInfo().getFailed() > 0) {
+            for (ReplicationResponse.ShardInfo.Failure failure : response.getShardInfo().getFailures()) {
+                failureReasons.append(failure);
+            }
+            return failureReasons.toString();
+        }
+        return null;
+    }
 }

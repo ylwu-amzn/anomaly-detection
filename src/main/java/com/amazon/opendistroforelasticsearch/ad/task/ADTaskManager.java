@@ -50,6 +50,7 @@ import org.elasticsearch.ResourceAlreadyExistsException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionListenerResponseHandler;
 import org.elasticsearch.action.bulk.BulkItemResponse;
+import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.get.GetRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
@@ -236,7 +237,7 @@ public class ADTaskManager {
         );
     }
 
-    private void getDetector(
+    public void getDetector(
         String detectorId,
         Consumer<AnomalyDetector> realTimeDetectorConsumer,
         Consumer<AnomalyDetector> historicalDetectorConsumer,
@@ -377,7 +378,7 @@ public class ADTaskManager {
         return adTask.getLastUpdateTime().plus(2 * pieceIntervalSeconds, ChronoUnit.SECONDS).isBefore(Instant.now());
     }
 
-    private boolean isADTaskEnded(ADTask adTask) {
+    public boolean isADTaskEnded(ADTask adTask) {
         return ADTaskState.STOPPED.name().equals(adTask.getState())
             || ADTaskState.FINISHED.name().equals(adTask.getState())
             || ADTaskState.FAILED.name().equals(adTask.getState());
@@ -793,4 +794,16 @@ public class ADTaskManager {
         return adTaskCacheManager.cancelByDetectorId(detectorId, reason, userName);
     }
 
+    public void deleteADTasks(String detectorId, Consumer consumer, ActionListener<DeleteResponse> listener) {
+        DeleteByQueryRequest request = new DeleteByQueryRequest(CommonName.DETECTION_STATE_INDEX);
+
+        BoolQueryBuilder query = new BoolQueryBuilder();
+        query.filter(new TermQueryBuilder(DETECTOR_ID_FIELD, detectorId));
+
+        request.setQuery(query);
+        client.execute(DeleteByQueryAction.INSTANCE, request, ActionListener.wrap(r -> {
+            logger.info("AD tasks deleted for detector {}", detectorId);
+            consumer.accept(r);
+        }, e -> listener.onFailure(e)));
+    }
 }
