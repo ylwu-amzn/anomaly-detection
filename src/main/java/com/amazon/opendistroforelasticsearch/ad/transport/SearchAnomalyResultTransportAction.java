@@ -19,6 +19,7 @@ import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorS
 import static com.amazon.opendistroforelasticsearch.ad.util.ParseUtils.addUserBackendRolesFilter;
 import static com.amazon.opendistroforelasticsearch.ad.util.ParseUtils.getUserContext;
 
+import com.amazon.opendistroforelasticsearch.ad.transport.handler.ADSearchHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
@@ -38,69 +39,17 @@ import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings
 import com.amazon.opendistroforelasticsearch.commons.authuser.User;
 
 public class SearchAnomalyResultTransportAction extends HandledTransportAction<SearchRequest, SearchResponse> {
-    private final Logger logger = LogManager.getLogger(SearchAnomalyResultTransportAction.class);
-
-    private final Client client;
-    private volatile Boolean filterEnabled;
+    private ADSearchHandler searchHandler;
 
     @Inject
-    public SearchAnomalyResultTransportAction(
-        Settings settings,
-        TransportService transportService,
-        ClusterService clusterService,
-        ActionFilters actionFilters,
-        Client client
-    ) {
-        super(SearchAnomalyResultAction.NAME, transportService, actionFilters, SearchRequest::new);
-        this.client = client;
-        filterEnabled = AnomalyDetectorSettings.FILTER_BY_BACKEND_ROLES.get(settings);
-        clusterService.getClusterSettings().addSettingsUpdateConsumer(FILTER_BY_BACKEND_ROLES, it -> filterEnabled = it);
+    public SearchAnomalyResultTransportAction(TransportService transportService, ActionFilters actionFilters, ADSearchHandler searchHandler) {
+        super(SearchADTasksAction.NAME, transportService, actionFilters, SearchRequest::new);
+        this.searchHandler = searchHandler;
     }
 
     @Override
     protected void doExecute(Task task, SearchRequest request, ActionListener<SearchResponse> listener) {
-        User user = getUserContext(client);
-        try (ThreadContext.StoredContext context = client.threadPool().getThreadContext().stashContext()) {
-            validateRole(request, user, listener);
-        } catch (Exception e) {
-            logger.error(e);
-            listener.onFailure(e);
-        }
-    }
-
-    private void validateRole(SearchRequest request, User user, ActionListener<SearchResponse> listener) {
-        if (user == null) {
-            // Auth Header is empty when 1. Security is disabled. 2. When user is super-admin
-            // Proceed with search
-            search(request, listener);
-        } else if (!filterEnabled) {
-            // Security is enabled and filter is disabled
-            // Proceed with search as user is already authenticated to hit this API.
-            search(request, listener);
-        } else {
-            // Security is enabled and filter is enabled
-            try {
-                addUserBackendRolesFilter(user, request.source());
-                logger.debug("Filtering result by " + user.getBackendRoles());
-                search(request, listener);
-            } catch (Exception e) {
-                listener.onFailure(e);
-            }
-        }
-    }
-
-    private void search(SearchRequest request, ActionListener<SearchResponse> listener) {
-        client.search(request, new ActionListener<SearchResponse>() {
-            @Override
-            public void onResponse(SearchResponse searchResponse) {
-                listener.onResponse(searchResponse);
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                listener.onFailure(e);
-            }
-        });
+        searchHandler.search(request, listener);
     }
 
 }

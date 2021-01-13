@@ -66,6 +66,7 @@ public class ADSearchHandler {
             // Security is enabled and filter is enabled
             try {
                 addUserBackendRolesFilter(user, request.source());
+                logger.debug("Filtering result by " + user.getBackendRoles());
                 searchDocs(request, listener);
             } catch (Exception e) {
                 listener.onFailure(e);
