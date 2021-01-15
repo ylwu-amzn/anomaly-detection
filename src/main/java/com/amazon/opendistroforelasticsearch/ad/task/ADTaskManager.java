@@ -275,11 +275,11 @@ public class ADTaskManager {
         );
     }
 
-    private void getDetector(
+    public <T> void getDetector(
         String detectorId,
         Consumer<AnomalyDetector> realTimeDetectorConsumer,
         Consumer<AnomalyDetector> historicalDetectorConsumer,
-        ActionListener<AnomalyDetectorJobResponse> listener
+        ActionListener<T> listener
     ) {
         GetRequest getRequest = new GetRequest(AnomalyDetector.ANOMALY_DETECTORS_INDEX).id(detectorId);
         client.get(getRequest, ActionListener.wrap(response -> {
@@ -423,7 +423,7 @@ public class ADTaskManager {
         return adTask.getLastUpdateTime().plus(2 * pieceIntervalSeconds, ChronoUnit.SECONDS).isBefore(Instant.now());
     }
 
-    private boolean isADTaskEnded(ADTask adTask) {
+    public boolean isADTaskEnded(ADTask adTask) {
         return ADTaskState.STOPPED.name().equals(adTask.getState())
             || ADTaskState.FINISHED.name().equals(adTask.getState())
             || ADTaskState.FAILED.name().equals(adTask.getState());
@@ -498,7 +498,7 @@ public class ADTaskManager {
                     listener.onFailure(e);
                 }));
             } else {
-                listener.onFailure(new ResourceNotFoundException(detectorId, "Can't find task for detector"));
+                listener.onFailure(new ResourceNotFoundException(detectorId, "Can't find latest task for detector"));
             }
         }, transportService, listener);
     }
@@ -737,7 +737,7 @@ public class ADTaskManager {
         });
         try {
             // Put detector id in cache. If detector id already in cache, will throw
-            // LimitExceededException. This is to solve race condition when user send
+            // DuplicateTaskException. This is to solve race condition when user send
             // multiple start request for one historical detector.
             adTaskCacheManager.put(adTask.getDetectorId());
         } catch (Exception e) {
@@ -929,6 +929,26 @@ public class ADTaskManager {
         ADTaskCancellationState cancellationState = adTaskCacheManager.cancelByDetectorId(detectorId, reason, userName);
         logger.debug("Cancelled AD task for detector: " + detectorId + ", state: " + cancellationState);
         return cancellationState;
+    }
+
+    /**
+     * Delete AD tasks docs.
+     *
+     * @param detectorId detector id
+     * @param consumer consumer function
+     * @param listener action listener
+     */
+    public void deleteADTasks(String detectorId, Consumer consumer, ActionListener<DeleteResponse> listener) {
+        DeleteByQueryRequest request = new DeleteByQueryRequest(CommonName.DETECTION_STATE_INDEX);
+
+        BoolQueryBuilder query = new BoolQueryBuilder();
+        query.filter(new TermQueryBuilder(DETECTOR_ID_FIELD, detectorId));
+
+        request.setQuery(query);
+        client.execute(DeleteByQueryAction.INSTANCE, request, ActionListener.wrap(r -> {
+            logger.info("AD tasks deleted for detector {}", detectorId);
+            consumer.accept(r);
+        }, e -> listener.onFailure(e)));
     }
 
     /**

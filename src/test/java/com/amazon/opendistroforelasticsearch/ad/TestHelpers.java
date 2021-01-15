@@ -61,6 +61,7 @@ import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
 import org.elasticsearch.action.admin.indices.mapping.get.GetFieldMappingsResponse.FieldMappingMetadata;
 import org.elasticsearch.action.get.GetResponse;
+import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.search.ShardSearchFailure;
 import org.elasticsearch.client.AdminClient;
@@ -97,6 +98,8 @@ import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.get.GetResult;
 import org.elasticsearch.index.mapper.MapperService;
+import org.elasticsearch.index.query.BoolQueryBuilder;
+import org.elasticsearch.index.query.MatchAllQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.SearchHits;
@@ -946,5 +949,11 @@ public class TestHelpers {
 
     public static DiscoveryNode randomDiscoveryNode() {
         return new DiscoveryNode(UUIDs.randomBase64UUID(), buildNewFakeTransportAddress(), Version.CURRENT);
+    }
+
+    public static SearchRequest matchAllRequest() {
+        BoolQueryBuilder query = new BoolQueryBuilder().filter(new MatchAllQueryBuilder());
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().query(query);
+        return new SearchRequest().source(searchSourceBuilder);
     }
 }
