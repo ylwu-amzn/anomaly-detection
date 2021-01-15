@@ -51,6 +51,7 @@ import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.threadpool.TestThreadPool;
 import org.elasticsearch.threadpool.ThreadPool;
+import org.elasticsearch.transport.TransportService;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -78,6 +79,7 @@ public class IndexAnomalyDetectorActionHandlerTests extends AbstractADTest {
     private IndexAnomalyDetectorActionHandler handler;
     private ClusterService clusterService;
     private NodeClient clientMock;
+    private TransportService transportService;
     private ActionListener<IndexAnomalyDetectorResponse> channel;
     private AnomalyDetectionIndices anomalyDetectionIndices;
     private String detectorId;
@@ -133,6 +135,7 @@ public class IndexAnomalyDetectorActionHandlerTests extends AbstractADTest {
         settings = Settings.EMPTY;
         clusterService = mock(ClusterService.class);
         clientMock = spy(new NodeClient(settings, null));
+        transportService = mock(TransportService.class);
 
         channel = mock(ActionListener.class);
 
@@ -163,6 +166,7 @@ public class IndexAnomalyDetectorActionHandlerTests extends AbstractADTest {
         handler = new IndexAnomalyDetectorActionHandler(
             clusterService,
             clientMock,
+            transportService,
             channel,
             anomalyDetectionIndices,
             detectorId,
@@ -209,6 +213,7 @@ public class IndexAnomalyDetectorActionHandlerTests extends AbstractADTest {
         handler = new IndexAnomalyDetectorActionHandler(
             clusterService,
             clientMock,
+            transportService,
             channel,
             anomalyDetectionIndices,
             detectorId,
@@ -273,6 +278,7 @@ public class IndexAnomalyDetectorActionHandlerTests extends AbstractADTest {
         handler = new IndexAnomalyDetectorActionHandler(
             clusterService,
             client,
+            transportService,
             channel,
             anomalyDetectionIndices,
             detectorId,
@@ -349,6 +355,7 @@ public class IndexAnomalyDetectorActionHandlerTests extends AbstractADTest {
         handler = new IndexAnomalyDetectorActionHandler(
             clusterService,
             clientSpy,
+            transportService,
             channel,
             anomalyDetectionIndices,
             detectorId,
@@ -442,6 +449,7 @@ public class IndexAnomalyDetectorActionHandlerTests extends AbstractADTest {
         handler = new IndexAnomalyDetectorActionHandler(
             clusterService,
             clientSpy,
+            transportService,
             channel,
             anomalyDetectionIndices,
             detectorId,
@@ -563,6 +571,7 @@ public class IndexAnomalyDetectorActionHandlerTests extends AbstractADTest {
         handler = new IndexAnomalyDetectorActionHandler(
             clusterService,
             clientMock,
+            transportService,
             channel,
             anomalyDetectionIndices,
             detectorId,
@@ -636,6 +645,7 @@ public class IndexAnomalyDetectorActionHandlerTests extends AbstractADTest {
         handler = new IndexAnomalyDetectorActionHandler(
             clusterService,
             clientMock,
+            transportService,
             channel,
             anomalyDetectionIndices,
             detectorId,

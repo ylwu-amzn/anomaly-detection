@@ -45,6 +45,7 @@ public class HistoricalDetectorRestApiIT extends HistoricalDetectorRestTestCase 
 
         // start historical detector
         String taskId = startHistoricalDetector(detectorId);
+        Thread.sleep(1000);
 
         // get task stats
         Response statsResponse = TestHelpers.makeRequest(client(), "GET", AD_BASE_STATS_URI, ImmutableMap.of(), "", null);
@@ -52,7 +53,17 @@ public class HistoricalDetectorRestApiIT extends HistoricalDetectorRestTestCase 
         assertTrue(statsResult.contains("\"ad_executing_batch_task_count\":1"));
 
         // get task profile
-        ADTaskProfile adTaskProfile = getADTaskProfile(detectorId);
+        int i = 0;
+        ADTaskProfile adTaskProfile = null;
+        while (adTaskProfile == null && i < 100) {
+            try {
+                adTaskProfile = getADTaskProfile(detectorId);
+            } catch (Exception e) {
+                Thread.sleep(100);
+            }
+            i++;
+        }
+
         ADTask adTask = adTaskProfile.getAdTask();
         assertEquals(taskId, adTask.getTaskId());
         assertTrue(TestHelpers.historicalDetectorRunningStats.contains(adTask.getState()));
@@ -67,6 +78,27 @@ public class HistoricalDetectorRestApiIT extends HistoricalDetectorRestTestCase 
         assertNotNull(parsedADTask);
         assertEquals(taskId, parsedADTask.getTaskId());
 
+        // get task profile
+        ADTaskProfile endTaskProfile = getADTaskProfile(detectorId);
+        i = 0;
+        while (TestHelpers.historicalDetectorRunningStats.contains(endTaskProfile.getAdTask().getState()) && i < 10) {
+            endTaskProfile = getADTaskProfile(detectorId);
+            Thread.sleep(2000);
+            i++;
+        }
+        ADTask stoppedAdTask = endTaskProfile.getAdTask();
+        assertEquals(taskId, stoppedAdTask.getTaskId());
+        assertEquals(ADTaskState.FINISHED.name(), stoppedAdTask.getState());
+    }
+
+    public void testStopHistoricalDetector() throws Exception {
+        // create historical detector
+        AnomalyDetector detector = createHistoricalDetector();
+        String detectorId = detector.getDetectorId();
+
+        // start historical detector
+        String taskId = startHistoricalDetector(detectorId);
+
         // stop historical detector
         Response stopDetectorResponse = stopAnomalyDetector(detectorId, client());
         assertEquals(RestStatus.OK, restStatus(stopDetectorResponse));
@@ -76,7 +108,7 @@ public class HistoricalDetectorRestApiIT extends HistoricalDetectorRestTestCase 
         int i = 0;
         while (TestHelpers.historicalDetectorRunningStats.contains(stoppedAdTaskProfile.getAdTask().getState()) && i < 10) {
             stoppedAdTaskProfile = getADTaskProfile(detectorId);
-            Thread.sleep(2000);
+            Thread.sleep(1000);
             i++;
         }
         ADTask stoppedAdTask = stoppedAdTaskProfile.getAdTask();
@@ -167,7 +199,7 @@ public class HistoricalDetectorRestApiIT extends HistoricalDetectorRestTestCase 
             );
     }
 
-    public void testSearchTasks() throws IOException {
+    public void testSearchTasks() throws IOException, InterruptedException {
         // create historical detector
         AnomalyDetector detector = createHistoricalDetector();
         String detectorId = detector.getDetectorId();
@@ -175,6 +207,7 @@ public class HistoricalDetectorRestApiIT extends HistoricalDetectorRestTestCase 
         // start historical detector
         String taskId = startHistoricalDetector(detectorId);
 
+        Thread.sleep(5000);
         String query = String.format("{\"query\":{\"term\":{\"detector_id\":{\"value\":\"%s\"}}}}", detectorId);
 
         Response response = TestHelpers

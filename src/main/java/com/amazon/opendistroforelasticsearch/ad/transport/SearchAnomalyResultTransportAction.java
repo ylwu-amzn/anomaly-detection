@@ -15,35 +15,27 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
-import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.FILTER_BY_BACKEND_ROLES;
-import static com.amazon.opendistroforelasticsearch.ad.util.ParseUtils.addUserBackendRolesFilter;
-import static com.amazon.opendistroforelasticsearch.ad.util.ParseUtils.getUserContext;
-
-import com.amazon.opendistroforelasticsearch.ad.transport.handler.ADSearchHandler;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
-import org.elasticsearch.client.Client;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.transport.TransportService;
 
-import com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings;
-import com.amazon.opendistroforelasticsearch.commons.authuser.User;
+import com.amazon.opendistroforelasticsearch.ad.transport.handler.ADSearchHandler;
 
 public class SearchAnomalyResultTransportAction extends HandledTransportAction<SearchRequest, SearchResponse> {
     private ADSearchHandler searchHandler;
 
     @Inject
-    public SearchAnomalyResultTransportAction(TransportService transportService, ActionFilters actionFilters, ADSearchHandler searchHandler) {
-        super(SearchADTasksAction.NAME, transportService, actionFilters, SearchRequest::new);
+    public SearchAnomalyResultTransportAction(
+        TransportService transportService,
+        ActionFilters actionFilters,
+        ADSearchHandler searchHandler
+    ) {
+        super(SearchAnomalyResultAction.NAME, transportService, actionFilters, SearchRequest::new);
         this.searchHandler = searchHandler;
     }
 

@@ -54,6 +54,7 @@ import com.amazon.opendistroforelasticsearch.commons.authuser.User;
 public class IndexAnomalyDetectorTransportAction extends HandledTransportAction<IndexAnomalyDetectorRequest, IndexAnomalyDetectorResponse> {
     private static final Logger LOG = LogManager.getLogger(IndexAnomalyDetectorTransportAction.class);
     private final Client client;
+    private final TransportService transportService;
     private final AnomalyDetectionIndices anomalyDetectionIndices;
     private final ClusterService clusterService;
     private final NamedXContentRegistry xContentRegistry;
@@ -73,6 +74,7 @@ public class IndexAnomalyDetectorTransportAction extends HandledTransportAction<
     ) {
         super(IndexAnomalyDetectorAction.NAME, transportService, actionFilters, IndexAnomalyDetectorRequest::new);
         this.client = client;
+        this.transportService = transportService;
         this.clusterService = clusterService;
         this.anomalyDetectionIndices = anomalyDetectionIndices;
         this.xContentRegistry = xContentRegistry;
@@ -147,6 +149,7 @@ public class IndexAnomalyDetectorTransportAction extends HandledTransportAction<
                 IndexAnomalyDetectorActionHandler indexAnomalyDetectorActionHandler = new IndexAnomalyDetectorActionHandler(
                     clusterService,
                     client,
+                    transportService,
                     listener,
                     anomalyDetectionIndices,
                     detectorId,

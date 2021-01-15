@@ -61,6 +61,7 @@ public class DeleteAnomalyDetectorTransportAction extends HandledTransportAction
     private static final Logger LOG = LogManager.getLogger(DeleteAnomalyDetectorTransportAction.class);
     private final Client client;
     private final ClusterService clusterService;
+    private final TransportService transportService;
     private NamedXContentRegistry xContentRegistry;
     private final ADTaskManager adTaskManager;
     private volatile Boolean filterByEnabled;
@@ -76,6 +77,7 @@ public class DeleteAnomalyDetectorTransportAction extends HandledTransportAction
         ADTaskManager adTaskManager
     ) {
         super(DeleteAnomalyDetectorAction.NAME, transportService, actionFilters, DeleteAnomalyDetectorRequest::new);
+        this.transportService = transportService;
         this.client = client;
         this.clusterService = clusterService;
         this.xContentRegistry = xContentRegistry;
@@ -115,7 +117,7 @@ public class DeleteAnomalyDetectorTransportAction extends HandledTransportAction
                             } else {
                                 deleteDetectorStateDoc(detectorId, listener);
                             }
-                        }, listener),
+                        }, transportService, listener),
                         listener
                     ),
                 client,

@@ -57,6 +57,7 @@ import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
+import org.elasticsearch.transport.TransportService;
 
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
@@ -95,6 +96,7 @@ public class IndexAnomalyDetectorActionHandler {
     private final AnomalyDetectorActionHandler handler = new AnomalyDetectorActionHandler();
     private final RestRequest.Method method;
     private final Client client;
+    private final TransportService transportService;
     private final NamedXContentRegistry xContentRegistry;
     private final ActionListener<IndexAnomalyDetectorResponse> listener;
     private final User user;
@@ -105,6 +107,7 @@ public class IndexAnomalyDetectorActionHandler {
      *
      * @param clusterService          ClusterService
      * @param client                  ES node client that executes actions on the local node
+     * @param transportService        ES transport service
      * @param listener                 ES channel used to construct bytes / builder based outputs, and send responses
      * @param anomalyDetectionIndices anomaly detector index manager
      * @param detectorId              detector identifier
@@ -124,6 +127,7 @@ public class IndexAnomalyDetectorActionHandler {
     public IndexAnomalyDetectorActionHandler(
         ClusterService clusterService,
         Client client,
+        TransportService transportService,
         ActionListener<IndexAnomalyDetectorResponse> listener,
         AnomalyDetectionIndices anomalyDetectionIndices,
         String detectorId,
@@ -142,6 +146,7 @@ public class IndexAnomalyDetectorActionHandler {
     ) {
         this.clusterService = clusterService;
         this.client = client;
+        this.transportService = transportService;
         this.anomalyDetectionIndices = anomalyDetectionIndices;
         this.listener = listener;
         this.detectorId = detectorId;
@@ -242,7 +247,7 @@ public class IndexAnomalyDetectorActionHandler {
                         // TODO: change to validateDetector method when we support HC historical detector
                         searchAdInputIndices(detectorId);
                     }
-                }, listener);
+                }, transportService, listener);
             }
         } catch (IOException e) {
             String message = "Failed to parse anomaly detector " + detectorId;

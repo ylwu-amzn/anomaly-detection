@@ -275,11 +275,11 @@ public class ADTaskManager {
         );
     }
 
-    public void getDetector(
+    public <T> void getDetector(
         String detectorId,
         Consumer<AnomalyDetector> realTimeDetectorConsumer,
         Consumer<AnomalyDetector> historicalDetectorConsumer,
-        ActionListener<AnomalyDetectorJobResponse> listener
+        ActionListener<T> listener
     ) {
         GetRequest getRequest = new GetRequest(AnomalyDetector.ANOMALY_DETECTORS_INDEX).id(detectorId);
         client.get(getRequest, ActionListener.wrap(response -> {
@@ -498,7 +498,7 @@ public class ADTaskManager {
                     listener.onFailure(e);
                 }));
             } else {
-                listener.onFailure(new ResourceNotFoundException(detectorId, "Can't find task for detector"));
+                listener.onFailure(new ResourceNotFoundException(detectorId, "Can't find latest task for detector"));
             }
         }, transportService, listener);
     }
@@ -934,9 +934,9 @@ public class ADTaskManager {
     /**
      * Delete AD tasks docs.
      *
-     * @param detectorId
-     * @param consumer
-     * @param listener
+     * @param detectorId detector id
+     * @param consumer consumer function
+     * @param listener action listener
      */
     public void deleteADTasks(String detectorId, Consumer consumer, ActionListener<DeleteResponse> listener) {
         DeleteByQueryRequest request = new DeleteByQueryRequest(CommonName.DETECTION_STATE_INDEX);
