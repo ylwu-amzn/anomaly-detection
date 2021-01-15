@@ -225,7 +225,7 @@ public class IndexAnomalyDetectorActionHandler {
             AnomalyDetector existingDetector = AnomalyDetector.parse(parser, response.getId(), response.getVersion());
             // We have separate flows for realtime and historical detector currently. User
             // can't change detector from realtime to historical, vice versa.
-            if (!(existingDetector.isRealTimeDetector() ^ !anomalyDetector.isRealTimeDetector())) {
+            if (existingDetector.isRealTimeDetector() != anomalyDetector.isRealTimeDetector()) {
                 listener
                     .onFailure(
                         new ElasticsearchStatusException(
