@@ -171,4 +171,30 @@ public abstract class HistoricalDetectorRestTestCase extends AnomalyDetectorRest
         return taskId;
     }
 
+    protected ADTaskProfile waitUntilGetTaskProfile(String detectorId) throws InterruptedException {
+        int i = 0;
+        ADTaskProfile adTaskProfile = null;
+        while (adTaskProfile == null && i < 200) {
+            try {
+                adTaskProfile = getADTaskProfile(detectorId);
+            } catch (Exception e) {
+                Thread.sleep(100);
+            }
+            i++;
+        }
+        assertNotNull(adTaskProfile);
+        return adTaskProfile;
+    }
+
+    protected ADTaskProfile waitUntilTaskFinished(String detectorId) throws IOException, InterruptedException {
+        ADTaskProfile stoppedAdTaskProfile = getADTaskProfile(detectorId);
+        int i = 0;
+        while (TestHelpers.historicalDetectorRunningStats.contains(stoppedAdTaskProfile.getAdTask().getState()) && i < 10) {
+            stoppedAdTaskProfile = getADTaskProfile(detectorId);
+            Thread.sleep(1000);
+            i++;
+        }
+        assertNotNull(stoppedAdTaskProfile);
+        return stoppedAdTaskProfile;
+    }
 }
