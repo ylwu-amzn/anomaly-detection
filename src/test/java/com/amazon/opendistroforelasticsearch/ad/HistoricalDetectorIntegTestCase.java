@@ -117,8 +117,8 @@ public abstract class HistoricalDetectorIntegTestCase extends ADIntegTestCase {
         return new Feature(randomAlphaOfLength(5), randomAlphaOfLength(10), true, aggregationBuilder);
     }
 
-    public AnomalyDetector randomDetector(DetectionDateRange dateRange, List<Feature> features) throws IOException {
-        return TestHelpers.randomDetector(dateRange, features, testIndex, detectionIntervalInMinutes, timeField);
+    public AnomalyDetector randomDetector(List<Feature> features) throws IOException {
+        return TestHelpers.randomDetector(features, testIndex, detectionIntervalInMinutes, timeField);
     }
 
     public ADTask randomCreatedADTask(String taskId, AnomalyDetector detector) {
@@ -134,7 +134,7 @@ public abstract class HistoricalDetectorIntegTestCase extends ADIntegTestCase {
         ADTask.Builder builder = ADTask
             .builder()
             .taskId(taskId)
-            .taskType(ADTaskType.HISTORICAL.name())
+            .taskType(ADTaskType.HISTORICAL_SINGLE_ENTITY.name())
             .detectorId(detectorId)
             .detector(detector)
             .state(state.name())
@@ -203,9 +203,8 @@ public abstract class HistoricalDetectorIntegTestCase extends ADIntegTestCase {
     }
 
     public ADTask startHistoricalDetector(Instant startTime, Instant endTime) throws IOException {
-        DetectionDateRange dateRange = new DetectionDateRange(startTime, endTime);
         AnomalyDetector detector = TestHelpers
-            .randomDetector(dateRange, ImmutableList.of(maxValueFeature()), testIndex, detectionIntervalInMinutes, timeField);
+            .randomDetector(ImmutableList.of(maxValueFeature()), testIndex, detectionIntervalInMinutes, timeField);
         String detectorId = createDetector(detector);
         AnomalyDetectorJobRequest request = new AnomalyDetectorJobRequest(
             detectorId,

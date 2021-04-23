@@ -190,9 +190,8 @@ public class ParseUtilsTests extends ESTestCase {
                 ImmutableList.of(feature1, feature2),
                 null,
                 now,
-                AnomalyDetectorType.HISTORICAL_MULTI_ENTITY.name(),
+                AnomalyDetectorType.MULTI_ENTITY.name(),
                 1,
-                TestHelpers.randomDetectionDateRange(),
                 false
             );
 
@@ -233,9 +232,8 @@ public class ParseUtilsTests extends ESTestCase {
                 ImmutableList.of(TestHelpers.randomFeature(false)),
                 null,
                 now,
-                AnomalyDetectorType.HISTORICAL_MULTI_ENTITY.name(),
+                AnomalyDetectorType.MULTI_ENTITY.name(),
                 1,
-                TestHelpers.randomDetectionDateRange(),
                 false
             );
 
@@ -258,9 +256,8 @@ public class ParseUtilsTests extends ESTestCase {
                 ImmutableList.of(),
                 null,
                 now,
-                AnomalyDetectorType.HISTORICAL_MULTI_ENTITY.name(),
+                AnomalyDetectorType.MULTI_ENTITY.name(),
                 1,
-                TestHelpers.randomDetectionDateRange(),
                 false
             );
 

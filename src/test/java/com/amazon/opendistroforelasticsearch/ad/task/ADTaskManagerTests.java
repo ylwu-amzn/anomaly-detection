@@ -125,7 +125,6 @@ public class ADTaskManagerTests extends ADUnitTestCase {
             return null;
         }).when(anomalyDetectionIndices).initDetectionStateIndex(any());
         AnomalyDetector detector = randomDetector(
-            new DetectionDateRange(startTime, endTime),
             ImmutableList.of(randomFeature(true)),
             randomAlphaOfLength(5),
             1,
@@ -147,7 +146,6 @@ public class ADTaskManagerTests extends ADUnitTestCase {
             return null;
         }).when(anomalyDetectionIndices).initDetectionStateIndex(any());
         AnomalyDetector detector = randomDetector(
-            new DetectionDateRange(startTime, endTime),
             ImmutableList.of(randomFeature(true)),
             randomAlphaOfLength(5),
             1,
@@ -166,7 +164,6 @@ public class ADTaskManagerTests extends ADUnitTestCase {
             return null;
         }).when(anomalyDetectionIndices).initDetectionStateIndex(any());
         AnomalyDetector detector = randomDetector(
-            new DetectionDateRange(startTime, endTime),
             ImmutableList.of(randomFeature(true)),
             randomAlphaOfLength(5),
             1,

@@ -247,16 +247,15 @@ public class TestHelpers {
         String detectorType,
         DetectionDateRange dateRange
     ) throws IOException {
-        return randomAnomalyDetector(features, uiMetadata, lastUpdateTime, detectorType, dateRange, true);
+        return randomAnomalyDetector(features, uiMetadata, lastUpdateTime, detectorType, true);
     }
 
     public static AnomalyDetector randomAnomalyDetector(
-        List<Feature> features,
-        Map<String, Object> uiMetadata,
-        Instant lastUpdateTime,
-        String detectorType,
-        DetectionDateRange dateRange,
-        boolean withUser
+            List<Feature> features,
+            Map<String, Object> uiMetadata,
+            Instant lastUpdateTime,
+            String detectorType,
+            boolean withUser
     ) throws IOException {
         return randomAnomalyDetector(
             ImmutableList.of(randomAlphaOfLength(10).toLowerCase()),
@@ -265,20 +264,18 @@ public class TestHelpers {
             lastUpdateTime,
             detectorType,
             ESRestTestCase.randomLongBetween(1, 1000),
-            dateRange,
-            withUser
+                withUser
         );
     }
 
     public static AnomalyDetector randomAnomalyDetector(
-        List<String> indices,
-        List<Feature> features,
-        Map<String, Object> uiMetadata,
-        Instant lastUpdateTime,
-        String detectorType,
-        long detectionIntervalInMinutes,
-        DetectionDateRange dateRange,
-        boolean withUser
+            List<String> indices,
+            List<Feature> features,
+            Map<String, Object> uiMetadata,
+            Instant lastUpdateTime,
+            String detectorType,
+            long detectionIntervalInMinutes,
+            boolean withUser
     ) throws IOException {
         User user = withUser ? randomUser() : null;
         return new AnomalyDetector(
@@ -298,21 +295,16 @@ public class TestHelpers {
             lastUpdateTime,
             null,
             user,
-            detectorType,
-            dateRange
+            detectorType
         );
     }
 
     public static AnomalyDetector randomDetector(
-        DetectionDateRange dateRange,
-        List<Feature> features,
-        String indexName,
-        int detectionIntervalInMinutes,
-        String timeField
+            List<Feature> features,
+            String indexName,
+            int detectionIntervalInMinutes,
+            String timeField
     ) throws IOException {
-        String detectorType = dateRange == null
-            ? AnomalyDetectorType.REALTIME_SINGLE_ENTITY.name()
-            : AnomalyDetectorType.HISTORICAL_SINGLE_ENTITY.name();
         return new AnomalyDetector(
             randomAlphaOfLength(10),
             randomLong(),
@@ -330,8 +322,7 @@ public class TestHelpers {
             Instant.now(),
             null,
             null,
-            detectorType,
-            dateRange
+            AnomalyDetectorType.SINGLE_ENTITY.name()
         );
     }
 
@@ -881,7 +872,7 @@ public class TestHelpers {
         ADTask task = ADTask
             .builder()
             .taskId(taskId)
-            .taskType(ADTaskType.HISTORICAL.name())
+            .taskType(ADTaskType.HISTORICAL_SINGLE_ENTITY.name())
             .detectorId(detectorId)
             .detector(detector)
             .state(state.name())
@@ -909,7 +900,7 @@ public class TestHelpers {
         ADTask task = ADTask
             .builder()
             .taskId(taskId)
-            .taskType(ADTaskType.HISTORICAL.name())
+            .taskType(ADTaskType.HISTORICAL_SINGLE_ENTITY.name())
             .detectorId(randomAlphaOfLength(5))
             .detector(detector)
             .state(state.name())

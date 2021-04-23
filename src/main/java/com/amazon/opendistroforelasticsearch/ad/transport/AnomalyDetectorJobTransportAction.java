@@ -20,26 +20,33 @@ import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorS
 import static com.amazon.opendistroforelasticsearch.ad.util.ParseUtils.getUserContext;
 import static com.amazon.opendistroforelasticsearch.ad.util.ParseUtils.resolveUserAndExecute;
 
+import com.amazon.opendistroforelasticsearch.ad.model.ADTaskAction;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
+import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.transport.TransportService;
 
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
+import com.amazon.opendistroforelasticsearch.ad.model.DetectionDateRange;
 import com.amazon.opendistroforelasticsearch.ad.rest.handler.IndexAnomalyDetectorJobActionHandler;
 import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
 import com.amazon.opendistroforelasticsearch.commons.authuser.User;
+
+import java.util.Optional;
 
 public class AnomalyDetectorJobTransportAction extends HandledTransportAction<AnomalyDetectorJobRequest, AnomalyDetectorJobResponse> {
     private final Logger logger = LogManager.getLogger(AnomalyDetectorJobTransportAction.class);
@@ -79,6 +86,7 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
     @Override
     protected void doExecute(Task task, AnomalyDetectorJobRequest request, ActionListener<AnomalyDetectorJobResponse> listener) {
         String detectorId = request.getDetectorID();
+        DetectionDateRange detectionDateRange = request.getDetectionDateRange();
         long seqNo = request.getSeqNo();
         long primaryTerm = request.getPrimaryTerm();
         String rawPath = request.getRawPath();
@@ -92,7 +100,17 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
                 detectorId,
                 filterByEnabled,
                 listener,
-                () -> executeDetector(listener, detectorId, seqNo, primaryTerm, rawPath, requestTimeout, user),
+                () -> executeDetector(
+                    listener,
+                    detectorId,
+                    detectionDateRange,
+                    historical,
+                    seqNo,
+                    primaryTerm,
+                    rawPath,
+                    requestTimeout,
+                    user
+                ),
                 client,
                 clusterService,
                 xContentRegistry
@@ -106,6 +124,8 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
     private void executeDetector(
         ActionListener<AnomalyDetectorJobResponse> listener,
         String detectorId,
+        DetectionDateRange detectionDateRange,
+        boolean historical,
         long seqNo,
         long primaryTerm,
         String rawPath,
@@ -120,10 +140,20 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
             seqNo,
             primaryTerm,
             requestTimeout,
-            xContentRegistry
+            xContentRegistry,
+            adTaskManager
         );
         if (rawPath.endsWith(RestHandlerUtils.START_JOB)) {
-            adTaskManager.startDetector(detectorId, handler, user, transportService, listener);
+            //TODO: refactor with detector manager
+            adTaskManager.getDetector(detectorId, (detector) -> {
+                if (detectionDateRange == null) {
+                    // start realtime job
+                    handler.startAnomalyDetectorJob(detector);
+                } else {
+                    // start historical analysis task
+                    adTaskManager.startHistoricalADTask(detector, detectionDateRange, handler, user, transportService, listener);
+                }
+            }, listener);
         } else if (rawPath.endsWith(RestHandlerUtils.STOP_JOB)) {
             adTaskManager.stopDetector(detectorId, handler, user, transportService, listener);
         }

@@ -39,7 +39,6 @@ import org.junit.Before;
 import com.amazon.opendistroforelasticsearch.ad.mock.model.MockSimpleLog;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTaskProfile;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
-import com.amazon.opendistroforelasticsearch.ad.model.DetectionDateRange;
 import com.amazon.opendistroforelasticsearch.ad.model.Feature;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -151,11 +150,9 @@ public abstract class HistoricalDetectorRestTestCase extends AnomalyDetectorRest
         Feature feature = new Feature(randomAlphaOfLength(5), randomAlphaOfLength(10), true, aggregationBuilder);
         Instant endTime = Instant.now().truncatedTo(ChronoUnit.SECONDS);
         Instant startTime = endTime.minus(10, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
-        DetectionDateRange dateRange = new DetectionDateRange(startTime, endTime);
         AnomalyDetector detector = TestHelpers
             .randomDetector(
-                dateRange,
-                ImmutableList.of(feature),
+                    ImmutableList.of(feature),
                 historicalDetectorTestIndex,
                 detectionIntervalInMinutes,
                 MockSimpleLog.TIME_FIELD

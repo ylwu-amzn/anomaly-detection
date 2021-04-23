@@ -55,7 +55,6 @@ import com.amazon.opendistroforelasticsearch.ad.model.ADTaskProfile;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTaskState;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
-import com.amazon.opendistroforelasticsearch.ad.model.DetectionDateRange;
 import com.amazon.opendistroforelasticsearch.ad.stats.StatNames;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -118,9 +117,8 @@ public class AnomalyDetectorJobTransportActionTests extends HistoricalDetectorIn
     }
 
     public void testStartHistoricalDetectorWithUser() throws IOException {
-        DetectionDateRange dateRange = new DetectionDateRange(startTime, endTime);
         AnomalyDetector detector = TestHelpers
-            .randomDetector(dateRange, ImmutableList.of(maxValueFeature()), testIndex, detectionIntervalInMinutes, timeField);
+            .randomDetector(ImmutableList.of(maxValueFeature()), testIndex, detectionIntervalInMinutes, timeField);
         String detectorId = createDetector(detector);
         AnomalyDetectorJobRequest request = new AnomalyDetectorJobRequest(
             detectorId,
@@ -138,9 +136,8 @@ public class AnomalyDetectorJobTransportActionTests extends HistoricalDetectorIn
     }
 
     public void testRunMultipleTasksForHistoricalDetector() throws IOException, InterruptedException {
-        DetectionDateRange dateRange = new DetectionDateRange(startTime, endTime);
         AnomalyDetector detector = TestHelpers
-            .randomDetector(dateRange, ImmutableList.of(maxValueFeature()), testIndex, detectionIntervalInMinutes, timeField);
+            .randomDetector(ImmutableList.of(maxValueFeature()), testIndex, detectionIntervalInMinutes, timeField);
         String detectorId = createDetector(detector);
         AnomalyDetectorJobRequest request = startDetectorJobRequest(detectorId);
         AnomalyDetectorJobResponse response = client().execute(AnomalyDetectorJobAction.INSTANCE, request).actionGet(10000);
@@ -158,9 +155,8 @@ public class AnomalyDetectorJobTransportActionTests extends HistoricalDetectorIn
     }
 
     public void testRaceConditionByStartingMultipleTasks() throws IOException, InterruptedException {
-        DetectionDateRange dateRange = new DetectionDateRange(startTime, endTime);
         AnomalyDetector detector = TestHelpers
-            .randomDetector(dateRange, ImmutableList.of(maxValueFeature()), testIndex, detectionIntervalInMinutes, timeField);
+            .randomDetector(ImmutableList.of(maxValueFeature()), testIndex, detectionIntervalInMinutes, timeField);
         String detectorId = createDetector(detector);
         AnomalyDetectorJobRequest request = new AnomalyDetectorJobRequest(
             detectorId,
@@ -180,9 +176,8 @@ public class AnomalyDetectorJobTransportActionTests extends HistoricalDetectorIn
     }
 
     public void testCleanOldTaskDocs() throws InterruptedException, IOException {
-        DetectionDateRange dateRange = new DetectionDateRange(startTime, endTime);
         AnomalyDetector detector = TestHelpers
-            .randomDetector(dateRange, ImmutableList.of(maxValueFeature()), testIndex, detectionIntervalInMinutes, timeField);
+            .randomDetector(ImmutableList.of(maxValueFeature()), testIndex, detectionIntervalInMinutes, timeField);
         String detectorId = createDetector(detector);
 
         createDetectionStateIndex();
@@ -228,7 +223,7 @@ public class AnomalyDetectorJobTransportActionTests extends HistoricalDetectorIn
 
     private String startRealtimeDetector() throws IOException {
         AnomalyDetector detector = TestHelpers
-            .randomDetector(null, ImmutableList.of(maxValueFeature()), testIndex, detectionIntervalInMinutes, timeField);
+            .randomDetector(ImmutableList.of(maxValueFeature()), testIndex, detectionIntervalInMinutes, timeField);
         String detectorId = createDetector(detector);
         AnomalyDetectorJobRequest request = startDetectorJobRequest(detectorId);
         AnomalyDetectorJobResponse response = client().execute(AnomalyDetectorJobAction.INSTANCE, request).actionGet(10000);
@@ -237,14 +232,13 @@ public class AnomalyDetectorJobTransportActionTests extends HistoricalDetectorIn
     }
 
     public void testRealtimeDetectorWithoutFeature() throws IOException {
-        AnomalyDetector detector = TestHelpers.randomDetector(null, ImmutableList.of(), testIndex, detectionIntervalInMinutes, timeField);
+        AnomalyDetector detector = TestHelpers.randomDetector(ImmutableList.of(), testIndex, detectionIntervalInMinutes, timeField);
         testInvalidDetector(detector, "Can't start detector job as no features configured");
     }
 
     public void testHistoricalDetectorWithoutFeature() throws IOException {
         AnomalyDetector detector = TestHelpers
             .randomDetector(
-                new DetectionDateRange(startTime, endTime),
                 ImmutableList.of(),
                 testIndex,
                 detectionIntervalInMinutes,
@@ -255,14 +249,13 @@ public class AnomalyDetectorJobTransportActionTests extends HistoricalDetectorIn
 
     public void testRealtimeDetectorWithoutEnabledFeature() throws IOException {
         AnomalyDetector detector = TestHelpers
-            .randomDetector(null, ImmutableList.of(TestHelpers.randomFeature(false)), testIndex, detectionIntervalInMinutes, timeField);
+            .randomDetector(ImmutableList.of(TestHelpers.randomFeature(false)), testIndex, detectionIntervalInMinutes, timeField);
         testInvalidDetector(detector, "Can't start detector job as no enabled features configured");
     }
 
     public void testHistoricalDetectorWithoutEnabledFeature() throws IOException {
         AnomalyDetector detector = TestHelpers
             .randomDetector(
-                new DetectionDateRange(startTime, endTime),
                 ImmutableList.of(TestHelpers.randomFeature(false)),
                 testIndex,
                 detectionIntervalInMinutes,

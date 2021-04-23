@@ -63,9 +63,9 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
 
     public static final String PARSE_FIELD_NAME = "AnomalyDetector";
     public static final NamedXContentRegistry.Entry XCONTENT_REGISTRY = new NamedXContentRegistry.Entry(
-        AnomalyDetector.class,
-        new ParseField(PARSE_FIELD_NAME),
-        it -> parse(it)
+            AnomalyDetector.class,
+            new ParseField(PARSE_FIELD_NAME),
+            it -> parse(it)
     );
     public static final String NO_ID = "";
     public static final String ANOMALY_DETECTORS_INDEX = ".opendistro-anomaly-detectors";
@@ -106,7 +106,6 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
     private final List<String> categoryFields;
     private User user;
     private String detectorType;
-    private DetectionDateRange detectionDateRange;
 
     /**
      * Constructor function.
@@ -129,64 +128,62 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
      * @param user              user to which detector is associated
      */
     public AnomalyDetector(
-        String detectorId,
-        Long version,
-        String name,
-        String description,
-        String timeField,
-        List<String> indices,
-        List<Feature> features,
-        QueryBuilder filterQuery,
-        TimeConfiguration detectionInterval,
-        TimeConfiguration windowDelay,
-        Integer shingleSize,
-        Map<String, Object> uiMetadata,
-        Integer schemaVersion,
-        Instant lastUpdateTime,
-        List<String> categoryFields,
-        User user
+            String detectorId,
+            Long version,
+            String name,
+            String description,
+            String timeField,
+            List<String> indices,
+            List<Feature> features,
+            QueryBuilder filterQuery,
+            TimeConfiguration detectionInterval,
+            TimeConfiguration windowDelay,
+            Integer shingleSize,
+            Map<String, Object> uiMetadata,
+            Integer schemaVersion,
+            Instant lastUpdateTime,
+            List<String> categoryFields,
+            User user
     ) {
         this(
-            detectorId,
-            version,
-            name,
-            description,
-            timeField,
-            indices,
-            features,
-            filterQuery,
-            detectionInterval,
-            windowDelay,
-            shingleSize,
-            uiMetadata,
-            schemaVersion,
-            lastUpdateTime,
-            categoryFields,
-            user,
-            null,
-            null
+                detectorId,
+                version,
+                name,
+                description,
+                timeField,
+                indices,
+                features,
+                filterQuery,
+                detectionInterval,
+                windowDelay,
+                shingleSize,
+                uiMetadata,
+                schemaVersion,
+                lastUpdateTime,
+                categoryFields,
+                user,
+                null
         );
     }
 
     public AnomalyDetector(
-        String detectorId,
-        Long version,
-        String name,
-        String description,
-        String timeField,
-        List<String> indices,
-        List<Feature> features,
-        QueryBuilder filterQuery,
-        TimeConfiguration detectionInterval,
-        TimeConfiguration windowDelay,
-        Integer shingleSize,
-        Map<String, Object> uiMetadata,
-        Integer schemaVersion,
-        Instant lastUpdateTime,
-        List<String> categoryFields,
-        User user,
-        String detectorType,
-        DetectionDateRange detectionDateRange
+            String detectorId,
+            Long version,
+            String name,
+            String description,
+            String timeField,
+            List<String> indices,
+            List<Feature> features,
+            QueryBuilder filterQuery,
+            TimeConfiguration detectionInterval,
+            TimeConfiguration windowDelay,
+            Integer shingleSize,
+            Map<String, Object> uiMetadata,
+            Integer schemaVersion,
+            Instant lastUpdateTime,
+            List<String> categoryFields,
+            User user,
+            String detectorType
     ) {
         if (Strings.isBlank(name)) {
             throw new IllegalArgumentException("Detector name should be set");
@@ -226,12 +223,6 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         this.categoryFields = categoryFields;
         this.user = user;
         this.detectorType = detectorType;
-        this.detectionDateRange = detectionDateRange;
-
-        // TODO: remove this check when we support HC historical detector
-        if (!isRealTimeDetector(detectionDateRange) && categoryFields != null && categoryFields.size() > 0) {
-            throw new IllegalArgumentException("Don't support high cardinality historical detector now");
-        }
     }
 
     public AnomalyDetector(StreamInput input) throws IOException {
@@ -253,11 +244,6 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
             this.user = new User(input);
         } else {
             user = null;
-        }
-        if (input.readBoolean()) {
-            detectionDateRange = new DetectionDateRange(input);
-        } else {
-            detectionDateRange = null;
         }
         detectorType = input.readOptionalString();
         if (input.readBoolean()) {
@@ -293,12 +279,6 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         } else {
             output.writeBoolean(false); // user does not exist
         }
-        if (detectionDateRange != null) {
-            output.writeBoolean(true); // detectionDateRange exists
-            detectionDateRange.writeTo(output);
-        } else {
-            output.writeBoolean(false); // detectionDateRange does not exist
-        }
         output.writeOptionalString(detectorType);
         if (uiMetadata != null) {
             output.writeBoolean(true);
@@ -311,17 +291,17 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         XContentBuilder xContentBuilder = builder
-            .startObject()
-            .field(NAME_FIELD, name)
-            .field(DESCRIPTION_FIELD, description)
-            .field(TIMEFIELD_FIELD, timeField)
-            .field(INDICES_FIELD, indices.toArray())
-            .field(FILTER_QUERY_FIELD, filterQuery)
-            .field(DETECTION_INTERVAL_FIELD, detectionInterval)
-            .field(WINDOW_DELAY_FIELD, windowDelay)
-            .field(SHINGLE_SIZE_FIELD, shingleSize)
-            .field(CommonName.SCHEMA_VERSION_FIELD, schemaVersion)
-            .field(FEATURE_ATTRIBUTES_FIELD, featureAttributes.toArray());
+                .startObject()
+                .field(NAME_FIELD, name)
+                .field(DESCRIPTION_FIELD, description)
+                .field(TIMEFIELD_FIELD, timeField)
+                .field(INDICES_FIELD, indices.toArray())
+                .field(FILTER_QUERY_FIELD, filterQuery)
+                .field(DETECTION_INTERVAL_FIELD, detectionInterval)
+                .field(WINDOW_DELAY_FIELD, windowDelay)
+                .field(SHINGLE_SIZE_FIELD, shingleSize)
+                .field(CommonName.SCHEMA_VERSION_FIELD, schemaVersion)
+                .field(FEATURE_ATTRIBUTES_FIELD, featureAttributes.toArray());
 
         if (uiMetadata != null && !uiMetadata.isEmpty()) {
             xContentBuilder.field(UI_METADATA_FIELD, uiMetadata);
@@ -329,7 +309,7 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         if (lastUpdateTime != null) {
             xContentBuilder.field(LAST_UPDATE_TIME_FIELD, lastUpdateTime.toEpochMilli());
         }
-        if (categoryFields != null) {
+        if (categoryFields != null && categoryFields.size() > 0) {
             xContentBuilder.field(CATEGORY_FIELD, categoryFields.toArray());
         }
         if (user != null) {
@@ -337,9 +317,6 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         }
         if (detectorType != null) {
             xContentBuilder.field(DETECTOR_TYPE_FIELD, detectorType);
-        }
-        if (detectionDateRange != null) {
-            xContentBuilder.field(DETECTION_DATE_RANGE_FIELD, detectionDateRange);
         }
         return xContentBuilder.endObject();
     }
@@ -384,11 +361,11 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
      * @throws IOException IOException if content can't be parsed correctly
      */
     public static AnomalyDetector parse(
-        XContentParser parser,
-        String detectorId,
-        Long version,
-        TimeValue defaultDetectionInterval,
-        TimeValue defaultDetectionWindowDelay
+            XContentParser parser,
+            String detectorId,
+            Long version,
+            TimeValue defaultDetectionInterval,
+            TimeValue defaultDetectionWindowDelay
     ) throws IOException {
         String name = null;
         String description = null;
@@ -396,11 +373,11 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         List<String> indices = new ArrayList<String>();
         QueryBuilder filterQuery = QueryBuilders.matchAllQuery();
         TimeConfiguration detectionInterval = defaultDetectionInterval == null
-            ? null
-            : new IntervalTimeConfiguration(defaultDetectionInterval.getMinutes(), ChronoUnit.MINUTES);
+                ? null
+                : new IntervalTimeConfiguration(defaultDetectionInterval.getMinutes(), ChronoUnit.MINUTES);
         TimeConfiguration windowDelay = defaultDetectionWindowDelay == null
-            ? null
-            : new IntervalTimeConfiguration(defaultDetectionWindowDelay.getSeconds(), ChronoUnit.SECONDS);
+                ? null
+                : new IntervalTimeConfiguration(defaultDetectionWindowDelay.getSeconds(), ChronoUnit.SECONDS);
         Integer shingleSize = null;
         List<Feature> features = new ArrayList<>();
         Integer schemaVersion = CommonValue.NO_SCHEMA_VERSION;
@@ -480,35 +457,27 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
                     break;
             }
         }
-        String detectorType;
-        if (AnomalyDetector.isRealTimeDetector(detectionDateRange)) {
-            detectorType = AnomalyDetector.isMultientityDetector(categoryField)
-                ? AnomalyDetectorType.REALTIME_MULTI_ENTITY.name()
-                : AnomalyDetectorType.REALTIME_SINGLE_ENTITY.name();
-        } else {
-            detectorType = AnomalyDetector.isMultientityDetector(categoryField)
-                ? AnomalyDetectorType.HISTORICAL_MULTI_ENTITY.name()
-                : AnomalyDetectorType.HISTORICAL_SINGLE_ENTITY.name();
-        }
+        String detectorType = AnomalyDetector.isMultientityDetector(categoryField)
+                ? AnomalyDetectorType.MULTI_ENTITY.name()
+                : AnomalyDetectorType.SINGLE_ENTITY.name();
         return new AnomalyDetector(
-            detectorId,
-            version,
-            name,
-            description,
-            timeField,
-            indices,
-            features,
-            filterQuery,
-            detectionInterval,
-            windowDelay,
-            getShingleSize(shingleSize, categoryField),
-            uiMetadata,
-            schemaVersion,
-            lastUpdateTime,
-            categoryField,
-            user,
-            detectorType,
-            detectionDateRange
+                detectorId,
+                version,
+                name,
+                description,
+                timeField,
+                indices,
+                features,
+                filterQuery,
+                detectionInterval,
+                windowDelay,
+                getShingleSize(shingleSize, categoryField),
+                uiMetadata,
+                schemaVersion,
+                lastUpdateTime,
+                categoryField,
+                user,
+                detectorType
         );
     }
 
@@ -521,40 +490,38 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
             return false;
         AnomalyDetector detector = (AnomalyDetector) o;
         return Objects.equal(getName(), detector.getName())
-            && Objects.equal(getDescription(), detector.getDescription())
-            && Objects.equal(getTimeField(), detector.getTimeField())
-            && Objects.equal(getIndices(), detector.getIndices())
-            && Objects.equal(getFeatureAttributes(), detector.getFeatureAttributes())
-            && Objects.equal(getFilterQuery(), detector.getFilterQuery())
-            && Objects.equal(getDetectionInterval(), detector.getDetectionInterval())
-            && Objects.equal(getWindowDelay(), detector.getWindowDelay())
-            && Objects.equal(getShingleSize(), detector.getShingleSize())
-            && Objects.equal(getCategoryField(), detector.getCategoryField())
-            && Objects.equal(getUser(), detector.getUser())
-            && Objects.equal(getDetectionDateRange(), detector.getDetectionDateRange());
+                && Objects.equal(getDescription(), detector.getDescription())
+                && Objects.equal(getTimeField(), detector.getTimeField())
+                && Objects.equal(getIndices(), detector.getIndices())
+                && Objects.equal(getFeatureAttributes(), detector.getFeatureAttributes())
+                && Objects.equal(getFilterQuery(), detector.getFilterQuery())
+                && Objects.equal(getDetectionInterval(), detector.getDetectionInterval())
+                && Objects.equal(getWindowDelay(), detector.getWindowDelay())
+                && Objects.equal(getShingleSize(), detector.getShingleSize())
+                && Objects.equal(getCategoryField(), detector.getCategoryField())
+                && Objects.equal(getUser(), detector.getUser());
     }
 
     @Generated
     @Override
     public int hashCode() {
         return Objects
-            .hashCode(
-                detectorId,
-                name,
-                description,
-                timeField,
-                indices,
-                featureAttributes,
-                detectionInterval,
-                windowDelay,
-                shingleSize,
-                uiMetadata,
-                schemaVersion,
-                lastUpdateTime,
-                user,
-                detectorType,
-                detectionDateRange
-            );
+                .hashCode(
+                        detectorId,
+                        name,
+                        description,
+                        timeField,
+                        indices,
+                        featureAttributes,
+                        detectionInterval,
+                        windowDelay,
+                        shingleSize,
+                        uiMetadata,
+                        schemaVersion,
+                        lastUpdateTime,
+                        user,
+                        detectorType
+                );
     }
 
     public String getDetectorId() {
@@ -627,8 +594,8 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
      */
     private static Integer getShingleSize(Integer customShingleSize, List<String> categoryField) {
         return customShingleSize == null
-            ? (categoryField != null && categoryField.size() > 0 ? DEFAULT_MULTI_ENTITY_SHINGLE : DEFAULT_SHINGLE_SIZE)
-            : customShingleSize;
+                ? (categoryField != null && categoryField.size() > 0 ? DEFAULT_MULTI_ENTITY_SHINGLE : DEFAULT_SHINGLE_SIZE)
+                : customShingleSize;
     }
 
     public Map<String, Object> getUiMetadata() {
@@ -671,10 +638,6 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         return detectorType;
     }
 
-    public DetectionDateRange getDetectionDateRange() {
-        return detectionDateRange;
-    }
-
     public boolean isMultientityDetector() {
         return AnomalyDetector.isMultientityDetector(getCategoryField());
     }
@@ -683,11 +646,4 @@ public class AnomalyDetector implements Writeable, ToXContentObject {
         return categoryFields != null && categoryFields.size() > 0;
     }
 
-    public boolean isRealTimeDetector() {
-        return AnomalyDetector.isRealTimeDetector(getDetectionDateRange());
-    }
-
-    private static boolean isRealTimeDetector(DetectionDateRange detectionDateRange) {
-        return detectionDateRange == null || detectionDateRange.getEndTime() == null;
-    }
 }

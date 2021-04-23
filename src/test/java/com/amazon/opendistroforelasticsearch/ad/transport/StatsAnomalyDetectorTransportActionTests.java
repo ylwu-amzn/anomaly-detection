@@ -44,8 +44,7 @@ public class StatsAnomalyDetectorTransportActionTests extends ADIntegTestCase {
                             ImmutableList.of(TestHelpers.randomFeature()),
                             ImmutableMap.of(),
                             Instant.now(),
-                            AnomalyDetectorType.HISTORICAL_SINGLE_ENTITY.name(),
-                            TestHelpers.randomDetectionDateRange(),
+                            AnomalyDetectorType.SINGLE_ENTITY.name(),
                             true
                         )
                 ),

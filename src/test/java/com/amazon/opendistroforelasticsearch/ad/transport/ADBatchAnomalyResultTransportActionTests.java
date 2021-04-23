@@ -85,7 +85,7 @@ public class ADBatchAnomalyResultTransportActionTests extends HistoricalDetector
     }
 
     public void testRealtimeAnomalyDetector() throws IOException {
-        AnomalyDetector detector = randomDetector(null, ImmutableList.of(randomFeature(true)));
+        AnomalyDetector detector = randomDetector(ImmutableList.of(randomFeature(true)));
         ADTask task = randomCreatedADTask(randomAlphaOfLength(5), detector);
         ADBatchAnomalyResultRequest request = new ADBatchAnomalyResultRequest(task);
         ActionRequestValidationException exception = expectThrows(
@@ -96,7 +96,7 @@ public class ADBatchAnomalyResultTransportActionTests extends HistoricalDetector
     }
 
     public void testAnomalyDetectorWithNullTaskId() throws IOException {
-        AnomalyDetector detector = randomDetector(null, ImmutableList.of(randomFeature(true)));
+        AnomalyDetector detector = randomDetector(ImmutableList.of(randomFeature(true)));
         ADTask task = randomCreatedADTask(null, detector);
         ADBatchAnomalyResultRequest request = new ADBatchAnomalyResultRequest(task);
         ActionRequestValidationException exception = expectThrows(
@@ -197,7 +197,7 @@ public class ADBatchAnomalyResultTransportActionTests extends HistoricalDetector
 
     private ADBatchAnomalyResultRequest adBatchAnomalyResultRequest(DetectionDateRange dateRange, String indexName) throws IOException {
         AnomalyDetector detector = TestHelpers
-            .randomDetector(dateRange, ImmutableList.of(maxValueFeature()), indexName, detectionIntervalInMinutes, timeField);
+            .randomDetector(ImmutableList.of(maxValueFeature()), indexName, detectionIntervalInMinutes, timeField);
         ADTask adTask = randomCreatedADTask(randomAlphaOfLength(5), detector);
         adTask.setTaskId(createADTask(adTask));
         return new ADBatchAnomalyResultRequest(adTask);

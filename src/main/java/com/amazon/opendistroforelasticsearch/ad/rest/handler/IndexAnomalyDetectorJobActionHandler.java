@@ -45,6 +45,7 @@ import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob;
 import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
+import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyDetectorJobResponse;
 import com.amazon.opendistroforelasticsearch.ad.transport.StopDetectorAction;
 import com.amazon.opendistroforelasticsearch.ad.transport.StopDetectorRequest;
@@ -65,6 +66,7 @@ public class IndexAnomalyDetectorJobActionHandler {
     private final Client client;
     private final ActionListener<AnomalyDetectorJobResponse> listener;
     private final NamedXContentRegistry xContentRegistry;
+    private final ADTaskManager adTaskManager;
 
     private final Logger logger = LogManager.getLogger(IndexAnomalyDetectorJobActionHandler.class);
     private final TimeValue requestTimeout;
@@ -80,6 +82,7 @@ public class IndexAnomalyDetectorJobActionHandler {
      * @param primaryTerm             primary term of last modification
      * @param requestTimeout          request time out configuration
      * @param xContentRegistry        Registry which is used for XContentParser
+     * @param adTaskManager           AD task manager
      */
     public IndexAnomalyDetectorJobActionHandler(
         Client client,
@@ -89,7 +92,8 @@ public class IndexAnomalyDetectorJobActionHandler {
         Long seqNo,
         Long primaryTerm,
         TimeValue requestTimeout,
-        NamedXContentRegistry xContentRegistry
+        NamedXContentRegistry xContentRegistry,
+        ADTaskManager adTaskManager
     ) {
         this.client = client;
         this.listener = listener;
@@ -99,6 +103,7 @@ public class IndexAnomalyDetectorJobActionHandler {
         this.primaryTerm = primaryTerm;
         this.requestTimeout = requestTimeout;
         this.xContentRegistry = xContentRegistry;
+        this.adTaskManager = adTaskManager;
     }
 
     /**
@@ -147,7 +152,7 @@ public class IndexAnomalyDetectorJobActionHandler {
                 detector.getUser()
             );
 
-            getAnomalyDetectorJobForWrite(job);
+            getAnomalyDetectorJobForWrite(detector, job);
         } catch (Exception e) {
             String message = "Failed to parse anomaly detector job " + detectorId;
             logger.error(message, e);
@@ -155,17 +160,17 @@ public class IndexAnomalyDetectorJobActionHandler {
         }
     }
 
-    private void getAnomalyDetectorJobForWrite(AnomalyDetectorJob job) {
+    private void getAnomalyDetectorJobForWrite(AnomalyDetector detector, AnomalyDetectorJob job) {
         GetRequest getRequest = new GetRequest(AnomalyDetectorJob.ANOMALY_DETECTOR_JOB_INDEX).id(detectorId);
 
         client
             .get(
                 getRequest,
-                ActionListener.wrap(response -> onGetAnomalyDetectorJobForWrite(response, job), exception -> listener.onFailure(exception))
+                ActionListener.wrap(response -> onGetAnomalyDetectorJobForWrite(response, detector, job), exception -> listener.onFailure(exception))
             );
     }
 
-    private void onGetAnomalyDetectorJobForWrite(GetResponse response, AnomalyDetectorJob job) throws IOException {
+    private void onGetAnomalyDetectorJobForWrite(GetResponse response, AnomalyDetector detector, AnomalyDetectorJob job) throws IOException {
         if (response.isExists()) {
             try (
                 XContentParser parser = RestHandlerUtils.createXContentParserFromRegistry(xContentRegistry, response.getSourceAsBytesRef())
@@ -190,7 +195,10 @@ public class IndexAnomalyDetectorJobActionHandler {
                         job.getLockDurationSeconds(),
                         job.getUser()
                     );
-                    indexAnomalyDetectorJob(newJob, null);
+                    indexAnomalyDetectorJob(
+                            newJob,
+                            () -> { adTaskManager.startAnomalyDetector(detector, null, job.getUser(), null, listener); }
+                    );
                 }
             } catch (IOException e) {
                 String message = "Failed to parse anomaly detector job " + job.getName();
@@ -198,7 +206,7 @@ public class IndexAnomalyDetectorJobActionHandler {
                 listener.onFailure(new ElasticsearchStatusException(message, RestStatus.INTERNAL_SERVER_ERROR));
             }
         } else {
-            indexAnomalyDetectorJob(job, null);
+            indexAnomalyDetectorJob(job, () -> { adTaskManager.startAnomalyDetector(detector, null, job.getUser(), null, listener); });
         }
     }
 

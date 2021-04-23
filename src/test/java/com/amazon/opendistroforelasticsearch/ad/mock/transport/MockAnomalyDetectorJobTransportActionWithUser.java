@@ -19,6 +19,7 @@ import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorS
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.REQUEST_TIMEOUT;
 import static com.amazon.opendistroforelasticsearch.ad.util.ParseUtils.resolveUserAndExecute;
 
+import com.amazon.opendistroforelasticsearch.ad.model.DetectionDateRange;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
@@ -85,6 +86,7 @@ public class MockAnomalyDetectorJobTransportActionWithUser extends
         long seqNo = request.getSeqNo();
         long primaryTerm = request.getPrimaryTerm();
         String rawPath = request.getRawPath();
+        DetectionDateRange detectionDateRange = request.getDetectionDateRange();
         TimeValue requestTimeout = REQUEST_TIMEOUT.get(settings);
         String userStr = "user_name|backendrole1,backendrole2|roles1,role2";
         // By the time request reaches here, the user permissions are validated by Security plugin.
@@ -95,7 +97,7 @@ public class MockAnomalyDetectorJobTransportActionWithUser extends
                 detectorId,
                 filterByEnabled,
                 listener,
-                () -> executeDetector(listener, detectorId, seqNo, primaryTerm, rawPath, requestTimeout, user),
+                () -> executeDetector(listener, detectorId, detectionDateRange, seqNo, primaryTerm, rawPath, requestTimeout, user),
                 client,
                 clusterService,
                 xContentRegistry
@@ -107,13 +109,14 @@ public class MockAnomalyDetectorJobTransportActionWithUser extends
     }
 
     private void executeDetector(
-        ActionListener<AnomalyDetectorJobResponse> listener,
-        String detectorId,
-        long seqNo,
-        long primaryTerm,
-        String rawPath,
-        TimeValue requestTimeout,
-        User user
+            ActionListener<AnomalyDetectorJobResponse> listener,
+            String detectorId,
+            DetectionDateRange detectionDateRange,
+            long seqNo,
+            long primaryTerm,
+            String rawPath,
+            TimeValue requestTimeout,
+            User user
     ) {
         IndexAnomalyDetectorJobActionHandler handler = new IndexAnomalyDetectorJobActionHandler(
             client,
@@ -123,13 +126,23 @@ public class MockAnomalyDetectorJobTransportActionWithUser extends
             seqNo,
             primaryTerm,
             requestTimeout,
-            xContentRegistry
+            xContentRegistry,
+            adTaskManager
         );
         if (rawPath.endsWith(RestHandlerUtils.START_JOB)) {
-            adTaskManager.startDetector(detectorId, handler, user, transportService, listener);
+            adTaskManager.getDetector(detectorId, (detector) -> {
+                if (detectionDateRange == null) {
+                    // start realtime job
+                    handler.startAnomalyDetectorJob(detector);
+                } else {
+                    // start historical analysis task
+                    adTaskManager.startHistoricalADTask(detector, detectionDateRange, handler, user, transportService, listener);
+                }
+            }, listener);
         } else if (rawPath.endsWith(RestHandlerUtils.STOP_JOB)) {
             // Stop detector
-            adTaskManager.stopDetector(detectorId, handler, user, transportService, listener);
+            // TODO: support realtime?
+            adTaskManager.stopDetector(detectorId, true, handler, user, transportService, listener);
         }
     }
 }
