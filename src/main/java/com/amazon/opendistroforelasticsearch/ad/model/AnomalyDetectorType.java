@@ -16,6 +16,7 @@
 package com.amazon.opendistroforelasticsearch.ad.model;
 
 public enum AnomalyDetectorType {
+    // TODO: change to SINGLE_ENTITY and MULTI_ENTITY only
     REALTIME_SINGLE_ENTITY,
     REALTIME_MULTI_ENTITY,
     HISTORICAL_SINGLE_ENTITY,
