@@ -28,20 +28,20 @@ import org.elasticsearch.index.query.MatchAllQueryBuilder;
 import org.elasticsearch.index.query.TermQueryBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 
-import com.amazon.opendistroforelasticsearch.ad.HistoricalDetectorIntegTestCase;
+import com.amazon.opendistroforelasticsearch.ad.HistoricalAnalysisIntegTestCase;
 import com.amazon.opendistroforelasticsearch.ad.TestHelpers;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorType;
 import com.google.common.collect.ImmutableList;
 
-public class SearchAnomalyDetectorActionTests extends HistoricalDetectorIntegTestCase {
+public class SearchAnomalyDetectorActionTests extends HistoricalAnalysisIntegTestCase {
 
     private String indexName = "test-data";
     private Instant startTime = Instant.now().minus(2, ChronoUnit.DAYS);
 
     public void testSearchDetectorAction() throws IOException {
         ingestTestData(indexName, startTime, 1, "test", 3000);
-        String detectorType = AnomalyDetectorType.REALTIME_SINGLE_ENTITY.name();
+        String detectorType = AnomalyDetectorType.SINGLE_ENTITY.name();
         AnomalyDetector detector = TestHelpers
             .randomAnomalyDetector(
                 ImmutableList.of(indexName),
@@ -50,7 +50,6 @@ public class SearchAnomalyDetectorActionTests extends HistoricalDetectorIntegTes
                 Instant.now(),
                 detectorType,
                 1,
-                null,
                 false
             );
         createDetectorIndex();

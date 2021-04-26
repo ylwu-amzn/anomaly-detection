@@ -35,6 +35,7 @@ import org.elasticsearch.tasks.Task;
 import org.elasticsearch.transport.TransportService;
 
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
+import com.amazon.opendistroforelasticsearch.ad.model.DetectionDateRange;
 import com.amazon.opendistroforelasticsearch.ad.rest.handler.IndexAnomalyDetectorJobActionHandler;
 import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.transport.AnomalyDetectorJobRequest;
@@ -82,6 +83,8 @@ public class MockAnomalyDetectorJobTransportActionWithUser extends
     @Override
     protected void doExecute(Task task, AnomalyDetectorJobRequest request, ActionListener<AnomalyDetectorJobResponse> listener) {
         String detectorId = request.getDetectorID();
+        DetectionDateRange detectionDateRange = request.getDetectionDateRange();
+        boolean historical = request.isHistorical();
         long seqNo = request.getSeqNo();
         long primaryTerm = request.getPrimaryTerm();
         String rawPath = request.getRawPath();
@@ -95,7 +98,17 @@ public class MockAnomalyDetectorJobTransportActionWithUser extends
                 detectorId,
                 filterByEnabled,
                 listener,
-                () -> executeDetector(listener, detectorId, seqNo, primaryTerm, rawPath, requestTimeout, user),
+                () -> executeDetector(
+                    listener,
+                    detectorId,
+                    seqNo,
+                    primaryTerm,
+                    rawPath,
+                    requestTimeout,
+                    user,
+                    detectionDateRange,
+                    historical
+                ),
                 client,
                 clusterService,
                 xContentRegistry
@@ -113,7 +126,9 @@ public class MockAnomalyDetectorJobTransportActionWithUser extends
         long primaryTerm,
         String rawPath,
         TimeValue requestTimeout,
-        User user
+        User user,
+        DetectionDateRange detectionDateRange,
+        boolean historical
     ) {
         IndexAnomalyDetectorJobActionHandler handler = new IndexAnomalyDetectorJobActionHandler(
             client,
@@ -126,10 +141,10 @@ public class MockAnomalyDetectorJobTransportActionWithUser extends
             xContentRegistry
         );
         if (rawPath.endsWith(RestHandlerUtils.START_JOB)) {
-            adTaskManager.startDetector(detectorId, handler, user, transportService, listener);
+            adTaskManager.startDetector(detectorId, detectionDateRange, handler, user, transportService, listener);
         } else if (rawPath.endsWith(RestHandlerUtils.STOP_JOB)) {
             // Stop detector
-            adTaskManager.stopDetector(detectorId, handler, user, transportService, listener);
+            adTaskManager.stopDetector(detectorId, historical, handler, user, transportService, listener);
         }
     }
 }

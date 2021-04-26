@@ -124,15 +124,10 @@ public class ADTaskManagerTests extends ADUnitTestCase {
             listener.onResponse(new CreateIndexResponse(false, false, ANOMALY_RESULT_INDEX_ALIAS));
             return null;
         }).when(anomalyDetectionIndices).initDetectionStateIndex(any());
-        AnomalyDetector detector = randomDetector(
-            new DetectionDateRange(startTime, endTime),
-            ImmutableList.of(randomFeature(true)),
-            randomAlphaOfLength(5),
-            1,
-            randomAlphaOfLength(5)
-        );
+        AnomalyDetector detector = randomDetector(ImmutableList.of(randomFeature(true)), randomAlphaOfLength(5), 1, randomAlphaOfLength(5));
 
-        adTaskManager.startHistoricalDetector(detector, randomUser(), transportService, listener);
+        adTaskManager
+            .startHistoricalAnalysisTask(detector, new DetectionDateRange(startTime, endTime), randomUser(), transportService, listener);
         verify(listener, times(1)).onFailure(exceptionCaptor.capture());
         assertEquals(
             "Create index .opendistro-anomaly-detection-state with mappings not acknowledged",
@@ -146,15 +141,10 @@ public class ADTaskManagerTests extends ADUnitTestCase {
             listener.onFailure(new ResourceAlreadyExistsException("index created"));
             return null;
         }).when(anomalyDetectionIndices).initDetectionStateIndex(any());
-        AnomalyDetector detector = randomDetector(
-            new DetectionDateRange(startTime, endTime),
-            ImmutableList.of(randomFeature(true)),
-            randomAlphaOfLength(5),
-            1,
-            randomAlphaOfLength(5)
-        );
+        AnomalyDetector detector = randomDetector(ImmutableList.of(randomFeature(true)), randomAlphaOfLength(5), 1, randomAlphaOfLength(5));
 
-        adTaskManager.startHistoricalDetector(detector, randomUser(), transportService, listener);
+        adTaskManager
+            .startHistoricalAnalysisTask(detector, new DetectionDateRange(startTime, endTime), randomUser(), transportService, listener);
         verify(listener, never()).onFailure(any());
     }
 
@@ -165,15 +155,10 @@ public class ADTaskManagerTests extends ADUnitTestCase {
             listener.onFailure(new RuntimeException(error));
             return null;
         }).when(anomalyDetectionIndices).initDetectionStateIndex(any());
-        AnomalyDetector detector = randomDetector(
-            new DetectionDateRange(startTime, endTime),
-            ImmutableList.of(randomFeature(true)),
-            randomAlphaOfLength(5),
-            1,
-            randomAlphaOfLength(5)
-        );
+        AnomalyDetector detector = randomDetector(ImmutableList.of(randomFeature(true)), randomAlphaOfLength(5), 1, randomAlphaOfLength(5));
 
-        adTaskManager.startHistoricalDetector(detector, randomUser(), transportService, listener);
+        adTaskManager
+            .startHistoricalAnalysisTask(detector, new DetectionDateRange(startTime, endTime), randomUser(), transportService, listener);
         verify(listener, times(1)).onFailure(exceptionCaptor.capture());
         assertEquals(error, exceptionCaptor.getValue().getMessage());
     }

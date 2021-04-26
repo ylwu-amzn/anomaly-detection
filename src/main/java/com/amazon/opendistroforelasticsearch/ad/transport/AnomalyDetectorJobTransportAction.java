@@ -36,6 +36,7 @@ import org.elasticsearch.tasks.Task;
 import org.elasticsearch.transport.TransportService;
 
 import com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices;
+import com.amazon.opendistroforelasticsearch.ad.model.DetectionDateRange;
 import com.amazon.opendistroforelasticsearch.ad.rest.handler.IndexAnomalyDetectorJobActionHandler;
 import com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager;
 import com.amazon.opendistroforelasticsearch.ad.util.RestHandlerUtils;
@@ -79,6 +80,8 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
     @Override
     protected void doExecute(Task task, AnomalyDetectorJobRequest request, ActionListener<AnomalyDetectorJobResponse> listener) {
         String detectorId = request.getDetectorID();
+        DetectionDateRange detectionDateRange = request.getDetectionDateRange();
+        boolean historical = request.isHistorical();
         long seqNo = request.getSeqNo();
         long primaryTerm = request.getPrimaryTerm();
         String rawPath = request.getRawPath();
@@ -92,7 +95,17 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
                 detectorId,
                 filterByEnabled,
                 listener,
-                () -> executeDetector(listener, detectorId, seqNo, primaryTerm, rawPath, requestTimeout, user),
+                () -> executeDetector(
+                    listener,
+                    detectorId,
+                    detectionDateRange,
+                    historical,
+                    seqNo,
+                    primaryTerm,
+                    rawPath,
+                    requestTimeout,
+                    user
+                ),
                 client,
                 clusterService,
                 xContentRegistry
@@ -106,6 +119,8 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
     private void executeDetector(
         ActionListener<AnomalyDetectorJobResponse> listener,
         String detectorId,
+        DetectionDateRange detectionDateRange,
+        boolean historical,
         long seqNo,
         long primaryTerm,
         String rawPath,
@@ -123,9 +138,11 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
             xContentRegistry
         );
         if (rawPath.endsWith(RestHandlerUtils.START_JOB)) {
-            adTaskManager.startDetector(detectorId, handler, user, transportService, listener);
+            // TODO: refactor with detector manager
+            adTaskManager.startDetector(detectorId, detectionDateRange, handler, user, transportService, listener);
         } else if (rawPath.endsWith(RestHandlerUtils.STOP_JOB)) {
-            adTaskManager.stopDetector(detectorId, handler, user, transportService, listener);
+            adTaskManager.stopDetector(detectorId, historical, handler, user, transportService, listener);
         }
     }
+
 }

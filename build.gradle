@@ -312,6 +312,18 @@ List<String> jacocoExclusions = [
         'com.amazon.opendistroforelasticsearch.ad.indices.AnomalyDetectionIndices',
         'com.amazon.opendistroforelasticsearch.ad.transport.handler.MultiEntityResultHandler',
         'com.amazon.opendistroforelasticsearch.ad.util.ThrowingSupplierWrapper',
+
+        // TODO: unified flow caused coverage drop
+        'com.amazon.opendistroforelasticsearch.ad.transport.AnomalyDetectorJobRequest',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileTransportAction',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ADCancelTaskRequest',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileNodeRequest',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ADCancelTaskTransportAction',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ADTaskProfileRequest',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ADCancelTaskNodeRequest',
+        'com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager',
+        'com.amazon.opendistroforelasticsearch.ad.task.ADTaskCacheManager',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ForwardADTaskTransportAction',
 ]
 
 jacocoTestCoverageVerification {

@@ -32,12 +32,12 @@ import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.junit.Before;
 
-import com.amazon.opendistroforelasticsearch.ad.HistoricalDetectorIntegTestCase;
+import com.amazon.opendistroforelasticsearch.ad.HistoricalAnalysisIntegTestCase;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
 
 @ESIntegTestCase.ClusterScope(scope = ESIntegTestCase.Scope.TEST, numDataNodes = 2)
-public class SearchADTasksTransportActionTests extends HistoricalDetectorIntegTestCase {
+public class SearchADTasksTransportActionTests extends HistoricalAnalysisIntegTestCase {
 
     private Instant startTime;
     private Instant endTime;
@@ -75,7 +75,7 @@ public class SearchADTasksTransportActionTests extends HistoricalDetectorIntegTe
     }
 
     public void testSearchWithExistingTask() throws IOException {
-        startHistoricalDetector(startTime, endTime);
+        startHistoricalAnalysis(startTime, endTime);
         SearchRequest searchRequest = searchRequest(true);
         SearchResponse response = client().execute(SearchADTasksAction.INSTANCE, searchRequest).actionGet(10000);
         assertEquals(1, response.getHits().getTotalHits().value);

@@ -73,14 +73,13 @@ public class AnomalyDetectorTests extends AbstractADTest {
         assertEquals("Parsing anomaly detector doesn't work", detector, parsedDetector);
     }
 
-    public void testParseHistoricalAnomalyDetector() throws IOException {
+    public void testParseSingleEntityAnomalyDetector() throws IOException {
         AnomalyDetector detector = TestHelpers
             .randomAnomalyDetector(
                 ImmutableList.of(TestHelpers.randomFeature()),
                 TestHelpers.randomUiMetadata(),
                 Instant.now(),
-                AnomalyDetectorType.HISTORICAL_SINGLE_ENTITY.name(),
-                TestHelpers.randomDetectionDateRange()
+                AnomalyDetectorType.SINGLE_ENTITY.name()
             );
         String detectorString = TestHelpers.xContentBuilderToString(detector.toXContent(TestHelpers.builder(), ToXContent.EMPTY_PARAMS));
         LOG.info(detectorString);
@@ -97,7 +96,6 @@ public class AnomalyDetectorTests extends AbstractADTest {
                 TestHelpers.randomUiMetadata(),
                 Instant.now(),
                 AnomalyDetectorType.HISTORICAL_SINGLE_ENTITY.name(),
-                TestHelpers.randomDetectionDateRange(),
                 false
             );
         String detectorString = TestHelpers.xContentBuilderToString(detector.toXContent(TestHelpers.builder(), ToXContent.EMPTY_PARAMS));
@@ -382,7 +380,6 @@ public class AnomalyDetectorTests extends AbstractADTest {
                 Instant.now(),
                 null,
                 null,
-                null,
                 null
             )
         );
@@ -407,7 +404,6 @@ public class AnomalyDetectorTests extends AbstractADTest {
                 null,
                 randomInt(),
                 Instant.now(),
-                null,
                 null,
                 null,
                 null
@@ -498,29 +494,4 @@ public class AnomalyDetectorTests extends AbstractADTest {
         assertEquals(0, anomalyDetector.getFeatureAttributes().size());
     }
 
-    public void testHistoricalHCDetector() {
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> new AnomalyDetector(
-                randomAlphaOfLength(5),
-                randomLong(),
-                randomAlphaOfLength(5),
-                randomAlphaOfLength(5),
-                randomAlphaOfLength(5),
-                ImmutableList.of(randomAlphaOfLength(5)),
-                null,
-                TestHelpers.randomQuery(),
-                TestHelpers.randomIntervalTimeConfiguration(),
-                TestHelpers.randomIntervalTimeConfiguration(),
-                null,
-                null,
-                1,
-                Instant.now(),
-                ImmutableList.of(randomAlphaOfLength(5)),
-                TestHelpers.randomUser(),
-                null,
-                TestHelpers.randomDetectionDateRange()
-            )
-        );
-    }
 }

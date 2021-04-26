@@ -17,6 +17,7 @@ package com.amazon.opendistroforelasticsearch.ad.rest;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -31,6 +32,7 @@ import org.junit.Before;
 import com.amazon.opendistroforelasticsearch.ad.AnomalyDetectorRestTestCase;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorExecutionInput;
+import com.amazon.opendistroforelasticsearch.ad.model.DetectionDateRange;
 import com.amazon.opendistroforelasticsearch.commons.rest.SecureRestClientBuilder;
 
 public class SecureADRestIT extends AnomalyDetectorRestTestCase {
@@ -101,7 +103,10 @@ public class SecureADRestIT extends AnomalyDetectorRestTestCase {
         // User Bob has AD read access, should not be able to modify a detector
         AnomalyDetector aliceDetector = createRandomAnomalyDetector(false, false, aliceClient);
         Assert.assertNotNull(aliceDetector.getDetectorId());
-        Exception exception = expectThrows(IOException.class, () -> { startAnomalyDetector(aliceDetector.getDetectorId(), bobClient); });
+        Exception exception = expectThrows(
+            IOException.class,
+            () -> { startAnomalyDetector(aliceDetector.getDetectorId(), null, bobClient); }
+        );
         Assert.assertTrue(exception.getMessage().contains("no permissions for [cluster:admin/opendistro/ad/detector/jobmanagement]"));
     }
 
@@ -109,7 +114,12 @@ public class SecureADRestIT extends AnomalyDetectorRestTestCase {
         // User Alice has AD full access, should be able to modify a detector
         AnomalyDetector aliceDetector = createRandomAnomalyDetector(false, false, aliceClient);
         Assert.assertNotNull(aliceDetector.getDetectorId());
-        Response response = startAnomalyDetector(aliceDetector.getDetectorId(), aliceClient);
+        Instant now = Instant.now();
+        Response response = startAnomalyDetector(
+            aliceDetector.getDetectorId(),
+            new DetectionDateRange(now.minus(10, ChronoUnit.DAYS), now),
+            aliceClient
+        );
         Assert.assertEquals(response.getStatusLine().toString(), "HTTP/1.1 200 OK");
     }
 
@@ -140,7 +150,13 @@ public class SecureADRestIT extends AnomalyDetectorRestTestCase {
         enableFilterBy();
         // User Cat has AD full access, but is part of different backend role so Cat should not be able to access
         // Alice detector
-        Exception exception = expectThrows(IOException.class, () -> { startAnomalyDetector(aliceDetector.getDetectorId(), catClient); });
+        Instant now = Instant.now();
+        Exception exception = expectThrows(
+            IOException.class,
+            () -> {
+                startAnomalyDetector(aliceDetector.getDetectorId(), new DetectionDateRange(now.minus(10, ChronoUnit.DAYS), now), catClient);
+            }
+        );
         Assert
             .assertTrue(
                 exception.getMessage().contains("User does not have permissions to access detector: " + aliceDetector.getDetectorId())

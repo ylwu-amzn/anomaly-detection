@@ -192,7 +192,6 @@ public class ParseUtilsTests extends ESTestCase {
                 now,
                 AnomalyDetectorType.HISTORICAL_MULTI_ENTITY.name(),
                 1,
-                TestHelpers.randomDetectionDateRange(),
                 false
             );
 
@@ -235,7 +234,6 @@ public class ParseUtilsTests extends ESTestCase {
                 now,
                 AnomalyDetectorType.HISTORICAL_MULTI_ENTITY.name(),
                 1,
-                TestHelpers.randomDetectionDateRange(),
                 false
             );
 
@@ -260,7 +258,6 @@ public class ParseUtilsTests extends ESTestCase {
                 now,
                 AnomalyDetectorType.HISTORICAL_MULTI_ENTITY.name(),
                 1,
-                TestHelpers.randomDetectionDateRange(),
                 false
             );
 

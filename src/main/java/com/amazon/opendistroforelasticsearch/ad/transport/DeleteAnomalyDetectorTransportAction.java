@@ -101,6 +101,7 @@ public class DeleteAnomalyDetectorTransportAction extends HandledTransportAction
                 () -> adTaskManager
                     .getDetector(
                         detectorId,
+                        // TODO: fix this later
                         // realtime detector
                         detector -> getDetectorJob(detectorId, listener, () -> deleteAnomalyDetectorJobDoc(detectorId, listener)),
                         // historical detector
