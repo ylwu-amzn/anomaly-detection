@@ -54,6 +54,10 @@ public class ForwardADTaskRequest extends ActionRequest {
         this.staleRunningEntities = staleRunningEntities;
         this.user = user;
         this.adTaskAction = adTaskAction;
+        if (adTask != null) {
+            this.detector = adTask.getDetector();
+            this.detectionDateRange = adTask.getDetectionDateRange();
+        }
     }
 
     public ForwardADTaskRequest(StreamInput in) throws IOException {

@@ -139,9 +139,19 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
             adTaskManager
         );
         if (rawPath.endsWith(RestHandlerUtils.START_JOB)) {
+            //TODO: refactor with detector manager
             adTaskManager.startDetector(detectorId, detectionDateRange, handler, user, transportService, listener);
+//            adTaskManager.getDetector(detectorId, (detector) -> {
+//                if (detectionDateRange == null) {
+//                    // start realtime job
+//                    handler.startAnomalyDetectorJob(detector);
+//                } else {
+//                    // start historical analysis task
+//                    adTaskManager.startHistoricalADTask(detector, detectionDateRange, user, transportService, listener);
+//                }
+//            }, listener);
+
         } else if (rawPath.endsWith(RestHandlerUtils.STOP_JOB)) {
-            // TODO: stop realtime or historical?
             adTaskManager.stopDetector(detectorId, historical, handler, user, transportService, listener);
         }
     }

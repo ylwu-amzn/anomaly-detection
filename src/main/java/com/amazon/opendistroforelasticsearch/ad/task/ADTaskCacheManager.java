@@ -576,21 +576,7 @@ public class ADTaskCacheManager {
         }
     }
 
-    // public void moveToPendingEntity(String detectorId, String entity) {
-    // if (this.hcTaskCaches.containsKey(detectorId)) {
-    // ADHCTaskCache hcTaskCache = this.hcTaskCaches.get(detectorId);
-    // hcTaskCache.push(entity);
-    // }
-    // }
-
     public synchronized boolean hasEntity(String detectorId) {
-        // ADHCTaskCache hcTaskCache = getExistingHCTaskCache(detectorId);
-        // logger.info("ylwudebug: pending entities contains detector: {}, not empty pending entity: {} ",
-        // hcTaskCache.getPendingEntityCount());
-        // logger.info("ylwudebug: running entities contains detector: {}, not empty running entity: {} ",
-        // runningEntities.containsKey(detectorId), runningEntities.containsKey(detectorId) && !runningEntities.get(detectorId).isEmpty());
-        // return (hcTaskCaches.containsKey(detectorId) && hcTaskCaches.get(detectorId).getPendingEntityCount() > 0) ||
-        // (hcTaskCaches.containsKey(detectorId) && hcTaskCaches.get(detectorId).getRunningEntityCount() > 0);
         return hcTaskCaches.containsKey(detectorId) && hcTaskCaches.get(detectorId).hasEntity();
     }
 

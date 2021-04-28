@@ -203,7 +203,7 @@ public class IndexAnomalyDetectorJobActionHandler {
                     );
                     indexAnomalyDetectorJob(
                         newJob,
-                        () -> { adTaskManager.startAnomalyDetector(detector, null, job.getUser(), null, listener); }
+                        () -> { adTaskManager.startDetector(detector, null, job.getUser(), null, listener); }
                     );
                 }
             } catch (IOException e) {
@@ -212,7 +212,7 @@ public class IndexAnomalyDetectorJobActionHandler {
                 listener.onFailure(new ElasticsearchStatusException(message, RestStatus.INTERNAL_SERVER_ERROR));
             }
         } else {
-            indexAnomalyDetectorJob(job, () -> { adTaskManager.startAnomalyDetector(detector, null, job.getUser(), null, listener); });
+            indexAnomalyDetectorJob(job, () -> { adTaskManager.startDetector(detector, null, job.getUser(), null, listener); });
         }
     }
 

@@ -27,6 +27,7 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -215,11 +216,12 @@ public class GetAnomalyDetectorTransportAction extends HandledTransportAction<Ge
                             detectorID,
                             null,
                             ADTaskType.getAllDetectorTaskTypes(),
-                            (adTasks) -> {
+                            (adTasksOptional) -> {
                                 Optional<ADTask> realtimeAdTask = Optional.empty();
                                 Optional<ADTask> historicalAdTask = Optional.empty();
 
-                                if (adTasks.size() > 0) {
+                                if (adTasksOptional.isPresent()) {
+                                    Map<String, ADTask> adTasks = adTasksOptional.get();
                                     if (adTasks.containsKey(ADTaskType.REALTIME_HC_DETECTOR.name())
                                         && adTasks.containsKey(ADTaskType.REALTIME_SINGLE_ENTITY.name())) {
                                         throw new AnomalyDetectionException("Two latest realtime tasks");
