@@ -941,6 +941,7 @@ public class AnomalyDetectorRestApiIT extends AnomalyDetectorRestTestCase {
             );
     }
 
+    @Ignore
     public void testStartDisabledAdjob() throws IOException {
         AnomalyDetector detector = createRandomAnomalyDetector(true, false, client());
         Response startAdJobResponse = TestHelpers

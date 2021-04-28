@@ -17,5 +17,9 @@ package com.amazon.opendistroforelasticsearch.ad.model;
 
 public enum ADTaskAction {
     START,
-    STOP
+    FINISHED, // TODO: replace with cancel?
+    CANCEL,
+    NEXT_ENTITY,
+    PUSH_BACK_ENTITY,
+    CLEAN_RUNNING_ENTITY
 }

@@ -324,6 +324,9 @@ List<String> jacocoExclusions = [
         'com.amazon.opendistroforelasticsearch.ad.task.ADTaskManager',
         'com.amazon.opendistroforelasticsearch.ad.task.ADTaskCacheManager',
         'com.amazon.opendistroforelasticsearch.ad.transport.ForwardADTaskTransportAction',
+        'com.amazon.opendistroforelasticsearch.ad.transport.ForwardADTaskRequest',
+        'com.amazon.opendistroforelasticsearch.ad.task.ADHCTaskCache',
+        'com.amazon.opendistroforelasticsearch.ad.task.ADBatchTaskRunner'
 ]
 
 jacocoTestCoverageVerification {

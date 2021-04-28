@@ -20,6 +20,7 @@ import static com.amazon.opendistroforelasticsearch.ad.constant.CommonName.EPOCH
 import static com.amazon.opendistroforelasticsearch.ad.constant.CommonName.FEATURE_AGGS;
 import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector.QUERY_PARAM_PERIOD_END;
 import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector.QUERY_PARAM_PERIOD_START;
+import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.MAX_BATCH_TASK_PIECE_SIZE;
 import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
 import static org.elasticsearch.search.aggregations.AggregationBuilders.dateRange;
 import static org.elasticsearch.search.aggregations.AggregatorFactories.VALID_AGG_NAME;
@@ -71,6 +72,7 @@ import org.elasticsearch.search.builder.SearchSourceBuilder;
 import com.amazon.opendistroforelasticsearch.ad.common.exception.AnomalyDetectionException;
 import com.amazon.opendistroforelasticsearch.ad.constant.CommonName;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
+import com.amazon.opendistroforelasticsearch.ad.model.Entity;
 import com.amazon.opendistroforelasticsearch.ad.model.Feature;
 import com.amazon.opendistroforelasticsearch.ad.model.FeatureData;
 import com.amazon.opendistroforelasticsearch.ad.model.IntervalTimeConfiguration;
@@ -597,6 +599,7 @@ public final class ParseUtils {
      * Generate batch query request for feature aggregation on given date range.
      *
      * @param detector anomaly detector
+     * @param entity entity
      * @param startTime start time
      * @param endTime end time
      * @param xContentRegistry content registry
@@ -606,6 +609,7 @@ public final class ParseUtils {
      */
     public static SearchSourceBuilder batchFeatureQuery(
         AnomalyDetector detector,
+        List<Entity> entity,
         long startTime,
         long endTime,
         NamedXContentRegistry xContentRegistry
@@ -619,6 +623,12 @@ public final class ParseUtils {
 
         BoolQueryBuilder internalFilterQuery = QueryBuilders.boolQuery().must(rangeQuery).must(detector.getFilterQuery());
 
+        if (detector.isMultientityDetector() && entity != null && entity.size() > 0) {
+            for (Entity e : entity) {
+                internalFilterQuery.must(new TermQueryBuilder(e.getName(), e.getValue()));
+            }
+        }
+
         long intervalSeconds = ((IntervalTimeConfiguration) detector.getDetectionInterval()).toDuration().getSeconds();
 
         List<CompositeValuesSourceBuilder<?>> sources = new ArrayList<>();
@@ -629,7 +639,8 @@ public final class ParseUtils {
                     .fixedInterval(DateHistogramInterval.seconds((int) intervalSeconds))
             );
 
-        CompositeAggregationBuilder aggregationBuilder = new CompositeAggregationBuilder(FEATURE_AGGS, sources).size(1000);
+        CompositeAggregationBuilder aggregationBuilder = new CompositeAggregationBuilder(FEATURE_AGGS, sources)
+            .size(MAX_BATCH_TASK_PIECE_SIZE);
 
         if (detector.getEnabledFeatureIds().size() == 0) {
             throw new AnomalyDetectionException("No enabled feature configured").countedInStats(false);
@@ -651,6 +662,9 @@ public final class ParseUtils {
         searchSourceBuilder.query(internalFilterQuery);
         searchSourceBuilder.size(0);
 
+        // System.out.println("++++++++++----------");
+        // System.out.println(searchSourceBuilder.toString());
+        // System.out.println("++++++++++----------");
         return searchSourceBuilder;
     }
 

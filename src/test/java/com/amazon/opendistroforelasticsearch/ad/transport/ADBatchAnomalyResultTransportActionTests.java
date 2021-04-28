@@ -155,11 +155,7 @@ public class ADBatchAnomalyResultTransportActionTests extends HistoricalAnalysis
             ImmutableList.of(LimitExceededException.class, NotSerializableExceptionWrapper.class),
             () -> client().execute(ADBatchAnomalyResultAction.INSTANCE, request).actionGet(5000)
         );
-        assertTrue(
-            exception
-                .getMessage()
-                .contains("All nodes' executing historical detector count exceeds limitation. No eligible node to run detector")
-        );
+        assertTrue(exception.getMessage().contains("No eligible node to run detector"));
     }
 
     public void testDisableADPlugin() throws IOException {

@@ -126,8 +126,7 @@ public class ADTaskManagerTests extends ADUnitTestCase {
         }).when(anomalyDetectionIndices).initDetectionStateIndex(any());
         AnomalyDetector detector = randomDetector(ImmutableList.of(randomFeature(true)), randomAlphaOfLength(5), 1, randomAlphaOfLength(5));
 
-        adTaskManager
-            .startHistoricalAnalysisTask(detector, new DetectionDateRange(startTime, endTime), randomUser(), transportService, listener);
+        adTaskManager.startDetector(detector, new DetectionDateRange(startTime, endTime), randomUser(), transportService, listener);
         verify(listener, times(1)).onFailure(exceptionCaptor.capture());
         assertEquals(
             "Create index .opendistro-anomaly-detection-state with mappings not acknowledged",
@@ -143,8 +142,7 @@ public class ADTaskManagerTests extends ADUnitTestCase {
         }).when(anomalyDetectionIndices).initDetectionStateIndex(any());
         AnomalyDetector detector = randomDetector(ImmutableList.of(randomFeature(true)), randomAlphaOfLength(5), 1, randomAlphaOfLength(5));
 
-        adTaskManager
-            .startHistoricalAnalysisTask(detector, new DetectionDateRange(startTime, endTime), randomUser(), transportService, listener);
+        adTaskManager.startDetector(detector, new DetectionDateRange(startTime, endTime), randomUser(), transportService, listener);
         verify(listener, never()).onFailure(any());
     }
 
@@ -157,8 +155,7 @@ public class ADTaskManagerTests extends ADUnitTestCase {
         }).when(anomalyDetectionIndices).initDetectionStateIndex(any());
         AnomalyDetector detector = randomDetector(ImmutableList.of(randomFeature(true)), randomAlphaOfLength(5), 1, randomAlphaOfLength(5));
 
-        adTaskManager
-            .startHistoricalAnalysisTask(detector, new DetectionDateRange(startTime, endTime), randomUser(), transportService, listener);
+        adTaskManager.startDetector(detector, new DetectionDateRange(startTime, endTime), randomUser(), transportService, listener);
         verify(listener, times(1)).onFailure(exceptionCaptor.capture());
         assertEquals(error, exceptionCaptor.getValue().getMessage());
     }

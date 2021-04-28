@@ -43,8 +43,11 @@ import com.amazon.opendistroforelasticsearch.ad.common.exception.DuplicateTaskEx
 import com.amazon.opendistroforelasticsearch.ad.common.exception.LimitExceededException;
 import com.amazon.opendistroforelasticsearch.ad.ml.ThresholdingModel;
 import com.amazon.opendistroforelasticsearch.ad.model.ADTask;
+import com.amazon.opendistroforelasticsearch.ad.model.ADTaskType;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.randomcutforest.RandomCutForest;
+import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.RateLimiter;
 
 public class ADTaskCacheManager {
     private final Logger logger = LogManager.getLogger(ADTaskCacheManager.class);
@@ -62,6 +65,9 @@ public class ADTaskCacheManager {
     // so we will reject the task.
     private Set<String> detectors;
 
+    private Map<String, ADHCTaskCache> hcTaskCaches;
+    private final int taskRetryLimit = 3;
+
     /**
      * Constructor to create AD task cache manager.
      *
@@ -75,6 +81,7 @@ public class ADTaskCacheManager {
         taskCaches = new ConcurrentHashMap<>();
         this.memoryTracker = memoryTracker;
         this.detectors = Sets.newConcurrentHashSet();
+        this.hcTaskCaches = new ConcurrentHashMap<>();
     }
 
     /**
@@ -108,15 +115,19 @@ public class ADTaskCacheManager {
      * Put detector id in running detector cache.
      *
      * @param detectorId detector id
-     * @throws LimitExceededException throw limit exceed exception when the detector id already in cache
+     * @param taskType task type
+     * @throws DuplicateTaskException throw DuplicateTaskException when the detector id already in cache
      */
-    public synchronized void add(String detectorId) {
+    public synchronized void add(String detectorId, String taskType) {
         if (detectors.contains(detectorId)) {
             logger.debug("detector is already in running detector cache, detectorId: " + detectorId);
             throw new DuplicateTaskException(DETECTOR_IS_RUNNING);
         }
         logger.debug("add detector in running detector cache, detectorId: " + detectorId);
         this.detectors.add(detectorId);
+        if (ADTaskType.HISTORICAL_HC_DETECTOR.name().equals(taskType)) {
+            this.hcTaskCaches.put(detectorId, new ADHCTaskCache());
+        }
     }
 
     /**
@@ -460,4 +471,145 @@ public class ADTaskCacheManager {
         return (80 + numberSize * enabledFeatureSize) * shingleSize;
     }
 
+    public synchronized boolean topEntityInited(String detectorId) {
+        return hcTaskCaches.containsKey(detectorId) ? hcTaskCaches.get(detectorId).getTopEntitiesInited() : false;
+    }
+
+    public void setTopEntityInited(String detectorId) {
+        hcTaskCaches.get(detectorId).setTopEntitiesInited(true);
+    }
+
+    public void setTopEntityCount(String detectorId, int count) {
+        ADHCTaskCache hcTaskCache = getHCTaskCache(detectorId);
+        hcTaskCache.setTopEntityCount(count);
+    }
+
+    public int getPendingEntityCount(String detectorId) {
+        return hcTaskCaches.containsKey(detectorId) ? hcTaskCaches.get(detectorId).getPendingEntityCount() : 0;
+    }
+
+    private ADHCTaskCache getExistingHCTaskCache(String detectorId) {
+        if (hcTaskCaches.containsKey(detectorId)) {
+            return hcTaskCaches.get(detectorId);
+        } else {
+            throw new IllegalArgumentException("Can't find HC detector in cache");
+        }
+    }
+
+    private ADHCTaskCache getHCTaskCache(String detectorId) {
+        return hcTaskCaches.computeIfAbsent(detectorId, id -> new ADHCTaskCache());
+    }
+
+    /**
+     * Poll one entity from HC detector entities cache.
+     * Will return null if no entities in cache.
+     *
+     * @param detectorId detector id
+     * @return one entity
+     */
+    public synchronized String pollEntity(String detectorId) { // TODO add syncronize?
+        if (this.hcTaskCaches.containsKey(detectorId)) {
+            ADHCTaskCache hcTaskCache = this.hcTaskCaches.get(detectorId);
+            String entity = hcTaskCache.pollEntity();
+            return entity;
+        } else {
+            return null;
+        }
+    }
+
+    public void addPendingEntity(String detectorId, String newEntity) {
+        addPendingEntities(detectorId, ImmutableList.of(newEntity));
+    }
+
+    public void addPendingEntities(String detectorId, List<String> entities) {
+        getHCTaskCache(detectorId).addEntities(entities);
+    }
+
+    public synchronized void moveToRunningEntity(String detectorId, String entity) {
+        if (this.hcTaskCaches.containsKey(detectorId)) {
+            ADHCTaskCache hcTaskCache = this.hcTaskCaches.get(detectorId);
+            hcTaskCache.moveToRunningEntity(entity);
+        }
+    }
+
+    public synchronized boolean hasEntity(String detectorId) {
+        // ADHCTaskCache hcTaskCache = getExistingHCTaskCache(detectorId);
+        // logger.info("ylwudebug: pending entities contains detector: {}, not empty pending entity: {} ",
+        // hcTaskCache.getPendingEntityCount());
+        // logger.info("ylwudebug: running entities contains detector: {}, not empty running entity: {} ",
+        // runningEntities.containsKey(detectorId), runningEntities.containsKey(detectorId) && !runningEntities.get(detectorId).isEmpty());
+        // return (hcTaskCaches.containsKey(detectorId) && hcTaskCaches.get(detectorId).getPendingEntityCount() > 0) ||
+        // (hcTaskCaches.containsKey(detectorId) && hcTaskCaches.get(detectorId).getRunningEntityCount() > 0);
+        return hcTaskCaches.containsKey(detectorId) && hcTaskCaches.get(detectorId).hasEntity();
+    }
+
+    public void setAllowedRunningEntities(String detectorId, int allowedRunningEntities) {
+        getExistingHCTaskCache(detectorId).setEntityTaskLanes(allowedRunningEntities);
+    }
+
+    public synchronized int getAndDecreaseEntityTaskLanes(String detectorId) {
+        return getExistingHCTaskCache(detectorId).getAndDecreaseEntityTaskLanes();
+    }
+
+    public RateLimiter getRateLimiter(String detectorId, String taskId) {
+        ADHCTaskCache hcTaskCache = getHCTaskCache(detectorId);
+        return hcTaskCache.getRateLimiter(taskId);
+    }
+
+    public boolean exceedRetryLimit(String detectorId, String taskId) {
+        return getExistingHCTaskCache(detectorId).getTaskRetryTimes(taskId) > taskRetryLimit;
+    }
+
+    public int increaseEntityTaskRetry(String detectorId, String taskId) {
+        return getExistingHCTaskCache(detectorId).increaseTaskRetry(taskId);
+    }
+
+    public void removeEntity(String detectorId, String entity) {
+        if (hcTaskCaches.containsKey(detectorId)) {
+            hcTaskCaches.get(detectorId).removeEntity(entity);
+        }
+    }
+
+    public boolean removeRunningEntity(String detectorId, String entity) {
+        logger.debug("Remove entity from running entities cache: {}", entity);
+        if (hcTaskCaches.containsKey(detectorId)) {
+            ADHCTaskCache hcTaskCache = hcTaskCaches.get(detectorId);
+            logger
+                .debug(
+                    "Pending entity count: {}, Running entity count: {}",
+                    hcTaskCache.getPendingEntityCount(),
+                    hcTaskCache.getRunningEntityCount()
+                );
+            return hcTaskCache.removeRunningEntity(entity);
+        }
+        return false;
+    }
+
+    public Boolean isDetectorTaskUpdating(String detectorId) {
+        if (hcTaskCaches.containsKey(detectorId)) {
+            return getExistingHCTaskCache(detectorId).getDetectorTaskUpdating();
+        } else {
+            return null;
+        }
+    }
+
+    public void setDetectorTaskUpdating(String detectorId, boolean updating) {
+        if (hcTaskCaches.containsKey(detectorId)) {
+            getExistingHCTaskCache(detectorId).setDetectorTaskUpdating(updating);
+        }
+    }
+
+    public Integer getTopEntityCount(String detectorId) {
+        return hcTaskCaches.containsKey(detectorId) ? hcTaskCaches.get(detectorId).getTopEntityCount() : 0;
+    }
+
+    public int getRunningEntityCount(String detectorId) {
+        return hcTaskCaches.containsKey(detectorId) ? hcTaskCaches.get(detectorId).getRunningEntityCount() : 0;
+    }
+
+    public void clearPendingEntities(String detectorId) {
+        if (hcTaskCaches.containsKey(detectorId)) {
+            hcTaskCaches.get(detectorId).clearPendingEntities();
+        }
+    }
 }
