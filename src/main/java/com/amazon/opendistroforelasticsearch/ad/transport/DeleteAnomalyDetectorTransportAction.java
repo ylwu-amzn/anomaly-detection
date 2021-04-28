@@ -15,6 +15,7 @@
 
 package com.amazon.opendistroforelasticsearch.ad.transport;
 
+import static com.amazon.opendistroforelasticsearch.ad.model.ADTaskType.HISTORICAL_DETECTOR_TASK_TYPES;
 import static com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetectorJob.ANOMALY_DETECTOR_JOB_INDEX;
 import static com.amazon.opendistroforelasticsearch.ad.settings.AnomalyDetectorSettings.FILTER_BY_BACKEND_ROLES;
 import static com.amazon.opendistroforelasticsearch.ad.util.ParseUtils.getUserContext;
@@ -98,23 +99,15 @@ public class DeleteAnomalyDetectorTransportAction extends HandledTransportAction
                 detectorId,
                 filterByEnabled,
                 listener,
-                () -> adTaskManager
-                    .getDetector(
-                        detectorId,
-                        // TODO: fix this later
-                        // realtime detector
-                        detector -> getDetectorJob(detectorId, listener, () -> deleteAnomalyDetectorJobDoc(detectorId, listener)),
-                        // historical detector
-                        detector -> adTaskManager.getLatestADTask(detectorId, adTask -> {
-                            if (adTask.isPresent() && !adTaskManager.isADTaskEnded(adTask.get())) {
-                                listener
-                                    .onFailure(new ElasticsearchStatusException("Detector is running", RestStatus.INTERNAL_SERVER_ERROR));
-                            } else {
-                                adTaskManager.deleteADTasks(detectorId, () -> deleteDetectorStateDoc(detectorId, listener), listener);
-                            }
-                        }, transportService, listener),
-                        listener
-                    ),
+                () -> adTaskManager.getDetector(detectorId, detector -> getDetectorJob(detectorId, listener, () -> {
+                    adTaskManager.getLatestADTask(detectorId, HISTORICAL_DETECTOR_TASK_TYPES, adTask -> {
+                        if (adTask.isPresent() && !adTaskManager.isADTaskEnded(adTask.get())) {
+                            listener.onFailure(new ElasticsearchStatusException("Detector is running", RestStatus.INTERNAL_SERVER_ERROR));
+                        } else {
+                            adTaskManager.deleteADTasks(detectorId, () -> deleteAnomalyDetectorJobDoc(detectorId, listener), listener);
+                        }
+                    }, transportService, listener);
+                }), listener),
                 client,
                 clusterService,
                 xContentRegistry

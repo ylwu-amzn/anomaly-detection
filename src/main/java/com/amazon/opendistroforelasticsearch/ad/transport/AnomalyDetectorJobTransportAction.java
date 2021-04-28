@@ -135,7 +135,8 @@ public class AnomalyDetectorJobTransportAction extends HandledTransportAction<An
             seqNo,
             primaryTerm,
             requestTimeout,
-            xContentRegistry
+            xContentRegistry,
+            adTaskManager
         );
         if (rawPath.endsWith(RestHandlerUtils.START_JOB)) {
             // TODO: refactor with detector manager

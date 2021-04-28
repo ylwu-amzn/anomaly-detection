@@ -336,13 +336,14 @@ public final class AnomalyDetectorSettings {
 
     public static int THRESHOLD_MODEL_TRAINING_SIZE = 1000;
 
+    public static int MAX_OLD_AD_TASK_DOCS = 1000;
     public static final Setting<Integer> MAX_OLD_AD_TASK_DOCS_PER_DETECTOR = Setting
         .intSetting(
             "opendistro.anomaly_detection.max_old_ad_task_docs_per_detector",
             // One AD task is roughly 1.5KB for normal case. Suppose task's size
             // is 2KB conservatively. If we store 1000 AD tasks for one detector,
             // that will be 2GB.
-            10,
+            2,
             1, // keep at least 1 old AD task per detector
             1000,
             Setting.Property.NodeScope,
