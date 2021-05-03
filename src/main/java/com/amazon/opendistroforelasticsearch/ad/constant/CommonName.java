@@ -27,6 +27,7 @@ public class CommonName {
 
     // The alias of the index in which to write AD result history
     public static final String ANOMALY_RESULT_INDEX_ALIAS = ".opendistro-anomaly-results";
+    public static final String ANOMALY_RESULT_INDEX_PATTERN = ".opendistro-anomaly-results*";
 
     // ======================================
     // Format name
@@ -68,6 +69,7 @@ public class CommonName {
     public static final String ENTITY_INFO = "entity_info";
     public static final String TOTAL_UPDATES = "total_updates";
     public static final String AD_TASK = "ad_task";
+    public static final String HISTORICAL_ANALYSIS = "historical_analysis";
     public static final String AD_TASK_REMOTE = "ad_task_remote";
     public static final String CANCEL_TASK = "cancel_task";
 

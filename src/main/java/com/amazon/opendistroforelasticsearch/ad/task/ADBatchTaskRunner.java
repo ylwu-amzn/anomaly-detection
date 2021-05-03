@@ -388,17 +388,12 @@ public class ADBatchTaskRunner {
                 adTaskCacheManager.addPendingEntity(detectorId, entity);
             });
             adTaskManager.getLatestADTask(detectorId, entity, ImmutableList.of(ADTaskType.HISTORICAL_HC_ENTITY), existingEntityTask -> {
-                if (existingEntityTask.isPresent()) { // retry failed entity
-                    // TODO: if task failed due to limit exceed exception in half way, resume from the break point or just clear the
-                    // old AD tasks and rerun it? Currently we just support rerunning task failed due to limit exceed exception
-                    // before starting.
+                if (existingEntityTask.isPresent()) { // retry failed entity caused by limit exceed exception
+                    // TODO: if task failed due to limit exceed exception in half way, resume from the break
+                    // point or just clear the old AD tasks and rerun it? Currently we just support rerunning
+                    // task failed due to limit exceed exception before starting.
                     ADTask adEntityTask = existingEntityTask.get();
-                    logger
-                        .info(
-                            "Rerun entity task for entity:{}, task id: {}",
-                            existingEntityTask.get().getEntity().get(0).getValue(),
-                            adEntityTask.getTaskId()
-                        );
+                    logger.info("Rerun entity task: {}", adEntityTask.getTaskId());
                     ActionListener<ADBatchAnomalyResultResponse> delegatedListener = getDelegatedListener(
                         adEntityTask,
                         transportService,
