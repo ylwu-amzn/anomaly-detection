@@ -569,7 +569,7 @@ public class AnomalyDetectorJobRunner implements ScheduledJobRunner {
                 indexUtil.getSchemaVersion(ADIndex.RESULT)
             );
             anomalyResultHandler.index(anomalyResult, detectorId);
-            detectionStateHandler.saveError(errorMessage, detectorId);
+//            detectionStateHandler.saveError(errorMessage, detectorId);//TODO: remove this
             adTaskManager.updateLatestADTask(detectorId, REALTIME_TASK_TYPES, ImmutableMap.of(ADTask.ERROR_FIELD, errorMessage));
         } catch (Exception e) {
             log.error("Failed to index anomaly result for " + detectorId, e);

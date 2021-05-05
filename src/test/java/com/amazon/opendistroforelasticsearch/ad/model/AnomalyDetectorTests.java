@@ -73,13 +73,14 @@ public class AnomalyDetectorTests extends AbstractADTest {
         assertEquals("Parsing anomaly detector doesn't work", detector, parsedDetector);
     }
 
-    public void testParseSingleEntityAnomalyDetector() throws IOException {
+    public void testParseHistoricalAnomalyDetector() throws IOException {
         AnomalyDetector detector = TestHelpers
             .randomAnomalyDetector(
                 ImmutableList.of(TestHelpers.randomFeature()),
                 TestHelpers.randomUiMetadata(),
                 Instant.now(),
-                AnomalyDetectorType.SINGLE_ENTITY.name()
+                AnomalyDetectorType.SINGLE_ENTITY.name(),
+                TestHelpers.randomDetectionDateRange()
             );
         String detectorString = TestHelpers.xContentBuilderToString(detector.toXContent(TestHelpers.builder(), ToXContent.EMPTY_PARAMS));
         LOG.info(detectorString);
@@ -95,7 +96,8 @@ public class AnomalyDetectorTests extends AbstractADTest {
                 ImmutableList.of(TestHelpers.randomFeature()),
                 TestHelpers.randomUiMetadata(),
                 Instant.now(),
-                AnomalyDetectorType.HISTORICAL_SINGLE_ENTITY.name(),
+                AnomalyDetectorType.SINGLE_ENTITY.name(),
+                TestHelpers.randomDetectionDateRange(),
                 false
             );
         String detectorString = TestHelpers.xContentBuilderToString(detector.toXContent(TestHelpers.builder(), ToXContent.EMPTY_PARAMS));
@@ -494,4 +496,28 @@ public class AnomalyDetectorTests extends AbstractADTest {
         assertEquals(0, anomalyDetector.getFeatureAttributes().size());
     }
 
+    // public void testHistoricalHCDetector() {
+    // expectThrows(
+    // IllegalArgumentException.class,
+    // () -> new AnomalyDetector(
+    // randomAlphaOfLength(5),
+    // randomLong(),
+    // randomAlphaOfLength(5),
+    // randomAlphaOfLength(5),
+    // randomAlphaOfLength(5),
+    // ImmutableList.of(randomAlphaOfLength(5)),
+    // null,
+    // TestHelpers.randomQuery(),
+    // TestHelpers.randomIntervalTimeConfiguration(),
+    // TestHelpers.randomIntervalTimeConfiguration(),
+    // null,
+    // null,
+    // 1,
+    // Instant.now(),
+    // ImmutableList.of(randomAlphaOfLength(5)),
+    // TestHelpers.randomUser(),
+    // null
+    // )
+    // );
+    // }
 }

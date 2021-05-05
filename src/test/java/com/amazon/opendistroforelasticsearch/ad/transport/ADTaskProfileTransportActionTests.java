@@ -24,9 +24,9 @@ import java.time.temporal.ChronoUnit;
 import org.elasticsearch.common.settings.Settings;
 import org.junit.Before;
 
-import com.amazon.opendistroforelasticsearch.ad.HistoricalAnalysisIntegTestCase;
+import com.amazon.opendistroforelasticsearch.ad.HistoricalDetectorIntegTestCase;
 
-public class ADTaskProfileTransportActionTests extends HistoricalAnalysisIntegTestCase {
+public class ADTaskProfileTransportActionTests extends HistoricalDetectorIntegTestCase {
 
     private Instant startTime;
 
@@ -49,4 +49,7 @@ public class ADTaskProfileTransportActionTests extends HistoricalAnalysisIntegTe
             .build();
     }
 
+    public void testProfile() {
+
+    }
 }

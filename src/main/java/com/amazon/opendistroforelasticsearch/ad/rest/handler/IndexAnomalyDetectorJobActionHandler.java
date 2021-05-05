@@ -321,12 +321,44 @@ public class IndexAnomalyDetectorJobActionHandler {
                         RestStatus.OK
                     );
                     listener.onResponse(anomalyDetectorJobResponse);
+                    adTaskManager
+                        .updateLatestADTask(
+                            detectorId,
+                            REALTIME_TASK_TYPES,
+                            ImmutableMap.of(ADTask.STATE_FIELD, ADTaskState.STOPPED.name())
+                        );
+                    // adTaskManager.updateLatestADTask(detectorId, ImmutableList.of(ADTaskType.REALTIME_HC_DETECTOR,
+                    // ADTaskType.REALTIME_SINGLE_ENTITY),
+                    // ImmutableMap.of(ADTask.STATE_FIELD, ADTaskState.STOPPED.name()),
+                    // ActionListener.wrap(r -> {
+                    // AnomalyDetectorJobResponse anomalyDetectorJobResponse = new AnomalyDetectorJobResponse(
+                    // detectorId,
+                    // 0,
+                    // 0,
+                    // 0,
+                    // RestStatus.OK
+                    // );
+                    // listener.onResponse(anomalyDetectorJobResponse);
+                    // }, e -> listener.onFailure(new ElasticsearchStatusException("Failed to delete AD model",
+                    // RestStatus.INTERNAL_SERVER_ERROR))));
                 } else {
                     logger.error("Failed to delete AD model for detector {}", detectorId);
+                    // adTaskManager.updateLatestADTask(detectorId, ImmutableList.of(ADTaskType.REALTIME_HC_DETECTOR,
+                    // ADTaskType.REALTIME_SINGLE_ENTITY),
+                    // ImmutableMap.of(ADTask.STATE_FIELD, ADTaskState.FAILED.name(),
+                    // ADTask.ERROR_FIELD, "Failed to delete AD model"),
+                    // ActionListener.wrap(r -> {listener.onFailure(new ElasticsearchStatusException("Failed to delete AD model",
+                    // RestStatus.INTERNAL_SERVER_ERROR));},
+                    // e -> {listener.onFailure(new ElasticsearchStatusException("Failed to delete AD model",
+                    // RestStatus.INTERNAL_SERVER_ERROR));}));
                     listener.onFailure(new ElasticsearchStatusException("Failed to delete AD model", RestStatus.INTERNAL_SERVER_ERROR));
+                    adTaskManager
+                        .updateLatestADTask(
+                            detectorId,
+                            REALTIME_TASK_TYPES,
+                            ImmutableMap.of(ADTask.STATE_FIELD, ADTaskState.STOPPED.name())
+                        );
                 }
-                adTaskManager
-                    .updateLatestADTask(detectorId, REALTIME_TASK_TYPES, ImmutableMap.of(ADTask.STATE_FIELD, ADTaskState.STOPPED.name()));
             }
 
             @Override

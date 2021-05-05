@@ -23,14 +23,14 @@ import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.junit.Before;
 
-import com.amazon.opendistroforelasticsearch.ad.HistoricalAnalysisIntegTestCase;
+import com.amazon.opendistroforelasticsearch.ad.HistoricalDetectorIntegTestCase;
 import com.amazon.opendistroforelasticsearch.ad.TestHelpers;
 import com.amazon.opendistroforelasticsearch.ad.model.AnomalyDetector;
 import com.amazon.opendistroforelasticsearch.ad.model.Feature;
 import com.google.common.collect.ImmutableList;
 
 @ESIntegTestCase.ClusterScope(scope = ESIntegTestCase.Scope.TEST, numDataNodes = 2)
-public class DeleteAnomalyDetectorTransportActionTests extends HistoricalAnalysisIntegTestCase {
+public class DeleteAnomalyDetectorTransportActionTests extends HistoricalDetectorIntegTestCase {
     private Instant startTime;
     private Instant endTime;
     private String type = "error";
@@ -66,7 +66,6 @@ public class DeleteAnomalyDetectorTransportActionTests extends HistoricalAnalysi
         String detectorId = createDetector(detector);
         DeleteAnomalyDetectorRequest request = new DeleteAnomalyDetectorRequest(detectorId);
         DeleteResponse deleteResponse = client().execute(DeleteAnomalyDetectorAction.INSTANCE, request).actionGet(10000);
-        System.out.println(deleteResponse);
         assertEquals("deleted", deleteResponse.getResult().getLowercase());
     }
 }

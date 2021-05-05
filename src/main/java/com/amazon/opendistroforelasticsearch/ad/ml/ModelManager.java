@@ -291,7 +291,7 @@ public class ModelManager implements DetectorModelSize {
         int forestSize = rcf.getNumberOfTrees();
         double[] attribution = getAnomalyAttribution(rcf, point);
         rcf.update(point);
-        listener.onResponse(new RcfResult(score, confidence, forestSize, attribution));
+        listener.onResponse(new RcfResult(score, confidence, forestSize, attribution, rcf.getTotalUpdates()));
     }
 
     private double[] getAnomalyAttribution(RandomCutForest rcf, double[] point) {
@@ -725,6 +725,7 @@ public class ModelManager implements DetectorModelSize {
             // Persist thresholding model
             String modelId = modelPartitioner.getThresholdModelId(detector.getDetectorId());
             String checkpoint = AccessController.doPrivileged((PrivilegedAction<String>) () -> gson.toJson(threshold));
+            // TODO: update realtime task's init progress
             checkpointDao.putModelCheckpoint(modelId, checkpoint, ActionListener.wrap(r -> listener.onResponse(null), listener::onFailure));
         }
     }

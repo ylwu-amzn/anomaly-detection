@@ -334,7 +334,7 @@ public final class AnomalyDetectorSettings {
             Setting.Property.Dynamic
         );
 
-    public static int THRESHOLD_MODEL_TRAINING_SIZE = 1000;
+    public static int THRESHOLD_MODEL_TRAINING_SIZE = 128; // 128 data points rcf with shingle size 8
 
     public static int MAX_OLD_AD_TASK_DOCS = 1000;
     public static final Setting<Integer> MAX_OLD_AD_TASK_DOCS_PER_DETECTOR = Setting
@@ -343,19 +343,20 @@ public final class AnomalyDetectorSettings {
             // One AD task is roughly 1.5KB for normal case. Suppose task's size
             // is 2KB conservatively. If we store 1000 AD tasks for one detector,
             // that will be 2GB.
-            2,
-            1, // keep at least 1 old AD task per detector
-            1000,
+            1,
+            0, // keep at least 1 old AD task per detector
+            MAX_OLD_AD_TASK_DOCS,
             Setting.Property.NodeScope,
             Setting.Property.Dynamic
         );
+
     public static final int MAX_BATCH_TASK_PIECE_SIZE = 10_000;
     public static final Setting<Integer> BATCH_TASK_PIECE_SIZE = Setting
         .intSetting(
             "opendistro.anomaly_detection.batch_task_piece_size",
             1000,
             1,
-            10_000,
+            MAX_BATCH_TASK_PIECE_SIZE,
             Setting.Property.NodeScope,
             Setting.Property.Dynamic
         );
@@ -363,7 +364,7 @@ public final class AnomalyDetectorSettings {
     public static final Setting<Integer> BATCH_TASK_PIECE_INTERVAL_SECONDS = Setting
         .intSetting(
             "opendistro.anomaly_detection.batch_task_piece_interval_seconds",
-            5,
+            1,
             1,
             600,
             Setting.Property.NodeScope,
