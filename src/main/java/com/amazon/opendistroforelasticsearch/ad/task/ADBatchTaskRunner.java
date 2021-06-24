@@ -198,7 +198,7 @@ public class ADBatchTaskRunner {
      * @param transportService transport service
      * @param listener action listener
      */
-    public void initTopEntities(ADTask adTask, TransportService transportService, ActionListener<ADBatchAnomalyResultResponse> listener) {
+    public void run(ADTask adTask, TransportService transportService, ActionListener<ADBatchAnomalyResultResponse> listener) {
         boolean isHCDetector = adTask.getDetector().isMultientityDetector();
         if (isHCDetector && !adTaskCacheManager.topEntityInited(adTask.getDetectorId())) {
             // HC detector top entities no initialized
@@ -233,7 +233,7 @@ public class ADBatchTaskRunner {
                     adTaskCacheManager.getPendingEntityCount(adTask.getDetectorId())
                 );
             // single entity detector or HC detector which top entities initialized
-            run(adTask, transportService, listener);
+            executeADTask(adTask, transportService, listener);
         }
     }
 
@@ -274,7 +274,7 @@ public class ADBatchTaskRunner {
             // adTaskCacheManager.getRateLimiter(adTask.getDetectorId(), adTask.getTaskId()).acquire(1);
             //// adTaskCacheManager.getRateLimiter(adTask.getDetectorId(), adTask.getTaskId()).acquire(rand.nextInt(5) + 1);
             // }
-            run(adTask, transportService, listener);
+            executeADTask(adTask, transportService, listener);
         }, e -> {
             logger.error("HC error 111", e);
             logger.info("HC task type {}, {}", adTask.getTaskType(), adTask.getTaskType().equals(ADTaskType.HISTORICAL_HC_DETECTOR.name()));
@@ -421,7 +421,7 @@ public class ADBatchTaskRunner {
      * @param transportService transport service
      * @param listener action listener
      */
-    public void run(ADTask adTask, TransportService transportService, ActionListener<ADBatchAnomalyResultResponse> listener) {
+    public void executeADTask(ADTask adTask, TransportService transportService, ActionListener<ADBatchAnomalyResultResponse> listener) {
         Map<String, Object> updatedFields = new HashMap<>();
         updatedFields.put(STATE_FIELD, ADTaskState.INIT.name());
         updatedFields.put(INIT_PROGRESS_FIELD, 0.0f);
@@ -708,7 +708,7 @@ public class ADBatchTaskRunner {
                     adTask.getTaskId(),
                     adTask.getTaskType()
                 );
-            run(adTask, transportService, getInternalHCDelegatedListener());
+            executeADTask(adTask, transportService, getInternalHCDelegatedListener());
         }
     }
 
